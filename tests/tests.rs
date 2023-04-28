@@ -62,3 +62,32 @@ fn test_read_write_map() {
     }
     remove_file("tests/test_files/temp.map").expect("Unable to delete file");
 }
+
+#[test]
+fn identical_file_comparison() {
+    let file1 = File::open(Path::new("tests/test_files/test.map"))
+        .expect("test file not found");
+    let file2 = File::open(Path::new("tests/test_files/test.map"))
+        .expect("test file not found");
+    let contents1 = dmap::read_records(file1).expect("unable to read test file contents");
+    let contents2 = dmap::read_records(file2).expect("unable to read test file contents");
+    for (rec1, rec2) in izip!(contents1, contents2) {
+        let differences = rec1.find_differences(&rec2);
+        assert!(differences.is_empty())
+    }
+}
+
+#[test]
+fn different_file_comparison() {
+    let file1 = File::open(Path::new("tests/test_files/test.rawacf"))
+        .expect("test file not found");
+    let file2 = File::open(Path::new("tests/test_files/test.map"))
+        .expect("test file not found");
+    let contents1 = dmap::read_records(file1).expect("unable to read test file contents");
+    let contents2 = dmap::read_records(file2).expect("unable to read test file contents");
+    for (rec1, rec2) in izip!(contents1, contents2) {
+        let differences = rec1.find_differences(&rec2);
+        println!("{:?}", differences);
+        assert_eq!(true, differences.is_empty())
+    }
+}

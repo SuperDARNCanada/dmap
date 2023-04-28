@@ -1,10 +1,10 @@
 pub mod formats;
 
 use bytemuck::PodCastError;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::{Cursor, Read, Write};
 use std::path::Path;
@@ -17,9 +17,7 @@ pub enum DmapError {
     Message(String),
     CastError(String, PodCastError),
 }
-
 impl Error for DmapError {}
-
 impl Display for DmapError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -46,7 +44,6 @@ pub enum DmapType {
     UINT(u32),
     ULONG(u64),
 }
-
 impl DmapType {
     fn all_keys() -> Vec<i8> {
         vec![0, 1, 2, 3, 4, 8, 9, 10, 16, 17, 18, 19]
@@ -132,7 +129,6 @@ impl DmapType {
         }
     }
 }
-
 impl Display for DmapType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -157,7 +153,6 @@ pub struct RawDmapScalar {
     pub data: DmapType,
     mode: i8,
 }
-
 impl RawDmapScalar {
     /// Converts into raw bytes
     fn to_bytes(&self) -> Vec<u8> {
@@ -174,7 +169,6 @@ pub struct RawDmapVector {
     pub dimensions: Vec<i32>,
     pub data: Vec<DmapType>,
 }
-
 impl PartialEq for RawDmapVector {
     fn eq(&self, other: &Self) -> bool {
         let mut equal = self.mode == other.mode;
@@ -187,7 +181,6 @@ impl PartialEq for RawDmapVector {
         equal
     }
 }
-
 impl RawDmapVector {
     /// Converts into raw bytes
     fn to_bytes(&self) -> Vec<u8> {
@@ -213,7 +206,6 @@ pub struct RawDmapRecord {
     pub scalars: HashMap<String, RawDmapScalar>,
     pub vectors: HashMap<String, RawDmapVector>,
 }
-
 impl PartialEq for RawDmapRecord {
     fn eq(&self, other: &Self) -> bool {
         if !(self.num_scalars == other.num_scalars && self.num_vectors == other.num_vectors) {
@@ -242,7 +234,6 @@ impl PartialEq for RawDmapRecord {
         true
     }
 }
-
 impl RawDmapRecord {
     /// Converts into raw bytes
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -277,6 +268,114 @@ impl RawDmapRecord {
         container.extend(DmapType::INT(self.num_vectors).to_bytes());
         container.extend(data_bytes);
         container
+    }
+
+    pub fn find_differences(&self, other: &RawDmapRecord) -> DmapDifference {
+        let self_scalars = self.scalar_list.iter().map(|s| s.clone()).collect::<HashSet<String>>();
+        let other_scalars = other.scalar_list.iter().map(|s| s.clone()).collect::<HashSet<String>>();
+        let self_unique_scalars = self_scalars.difference(&other_scalars).map(|s| s.clone()).collect();
+        let other_unique_scalars = other_scalars.difference(&self_scalars).map(|s| s.clone()).collect();
+
+        let self_vectors = self.vector_list.iter().map(|v| v.clone()).collect::<HashSet<String>>();
+        let other_vectors = other.vector_list.iter().map(|v| v.clone()).collect::<HashSet<String>>();
+        let self_unique_vectors: Vec<String> = self_vectors.difference(&other_vectors).map(|v| v.clone()).collect();
+        let other_unique_vectors: Vec<String> = other_vectors.difference(&self_vectors).map(|v| v.clone()).collect();
+
+        let intersecting_scalars = self_scalars.intersection(&other_scalars);
+        let intersecting_vectors = self_vectors.intersection(&other_vectors);
+        let mut different_scalars = HashMap::new();
+        let mut different_vectors = HashMap::new();
+
+        for scalar in intersecting_scalars {
+            let val_1 = self.scalars.get(scalar).unwrap();
+            let val_2 = other.scalars.get(scalar).unwrap();
+            if val_1 != val_2 {
+                different_scalars.insert(scalar.clone(), (val_1.clone(), val_2.clone()));
+            }
+        }
+        for vector in intersecting_vectors {
+            let val_1 = self.vectors.get(vector).unwrap();
+            let val_2 = other.vectors.get(vector).unwrap();
+            if val_1 != val_2 {
+                different_vectors.insert(vector.clone(), (val_1.clone(), val_2.clone()));
+            }
+        }
+        DmapDifference {
+            unique_scalars_1: self_unique_scalars,
+            unique_scalars_2: other_unique_scalars,
+            unique_vectors_1: self_unique_vectors,
+            unique_vectors_2: other_unique_vectors,
+            different_scalars,
+            different_vectors,
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct DmapDifference {
+    pub unique_scalars_1: Vec<String>,
+    pub unique_scalars_2: Vec<String>,
+    pub unique_vectors_1: Vec<String>,
+    pub unique_vectors_2: Vec<String>,
+    pub different_scalars: HashMap<String, (RawDmapScalar, RawDmapScalar)>,
+    pub different_vectors: HashMap<String, (RawDmapVector, RawDmapVector)>
+}
+impl Display for DmapDifference {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut repr: String = format!("");
+        if self.is_empty() {
+            return write!(f, "No differences{}", repr)
+        }
+        if self.unique_scalars_1.len() != 0 {
+            repr.push_str("Unique scalar fields in left record: ");
+            repr.push_str(&format!("{:?}\n", self.unique_scalars_1));
+        }
+        if self.unique_scalars_2.len() != 0 {
+            repr.push_str("Unique scalar fields in right record: ");
+            repr.push_str(&format!("{:?}\n", self.unique_scalars_2));
+        }
+        if self.unique_vectors_1.len() != 0 {
+            repr.push_str("Unique vector fields in left record: ");
+            repr.push_str(&format!("{:?}\n", self.unique_vectors_1));
+        }
+        if self.unique_vectors_2.len() != 0 {
+            repr.push_str("Unique vector fields in right record: ");
+            repr.push_str(&format!("{:?}\n", self.unique_vectors_2));
+        }
+        if !self.different_scalars.is_empty() {
+            repr.push_str("Different scalar values\n=======================\n");
+            for (key, (left_scal, right_scal)) in self.different_scalars.iter() {
+                repr.push_str(&format!("{}:\n\t{:?}\n\t{:?}\n", key, left_scal, right_scal));
+            }
+        }
+        if !self.different_vectors.is_empty() {
+            repr.push_str("Different vector values\n=======================\n");
+            for (key, (left_vec, right_vec)) in self.different_vectors.iter() {
+                repr.push_str(&format!("{}:\n\t", key));
+                if left_vec.data.len() > 10 {
+                    repr.push_str(&format!("RawDmapVector {{ mode: {}, dimensions: {:?}, data: ... }}", left_vec.mode, left_vec.dimensions));
+                } else {
+                    repr.push_str(&format!("{:?}\n\t", left_vec));
+                }
+                if right_vec.data.len() > 10 {
+                    repr.push_str(&format!("RawDmapVector {{ mode: {}, dimensions: {:?}, data: ... }}", right_vec.mode, right_vec.dimensions));
+                } else {
+                    repr.push_str(&format!("{:?}\n", right_vec));
+                }
+            }
+        }
+        write!(f, "{}", repr)
+    }
+}
+impl DmapDifference {
+    /// Returns if the DmapDifference is empty, i.e. there were no differences
+    pub fn is_empty(&self) -> bool {
+        self.unique_scalars_1.len() == 0 &&
+            self.unique_scalars_2.len() == 0 &&
+            self.unique_vectors_1.len() == 0 &&
+            self.unique_vectors_2.len() == 0 &&
+            self.different_scalars.is_empty() &&
+            self.different_vectors.is_empty()
     }
 }
 
@@ -888,5 +987,79 @@ mod tests {
             vec![0, 1, 2],
             get_vector_val::<i8>(&rec, "arr").expect("Unable to recover vector")
         );
+    }
+
+    #[test]
+    fn same_record_no_differences() {
+        let scalar = RawDmapScalar::new(DmapType::CHAR(10));
+        let mut scalars = HashMap::new();
+        scalars.insert("scal".to_string(), scalar);
+
+        let dimensions = vec![3];
+        let data = vec![DmapType::CHAR(0), DmapType::CHAR(1), DmapType::CHAR(2)];
+        let vector = RawDmapVector::new(dimensions, data);
+        let mut vectors = HashMap::new();
+        vectors.insert("arr".to_string(), vector);
+
+        let rec1 = RawDmapRecord {
+            num_scalars: 1,
+            num_vectors: 1,
+            scalar_list: vec!["scal".to_string()],
+            vector_list: vec!["arr".to_string()],
+            scalars: scalars.clone(),
+            vectors: vectors.clone(),
+        };
+
+        let rec2 = RawDmapRecord {
+            num_scalars: 1,
+            num_vectors: 1,
+            scalar_list: vec!["scal".to_string()],
+            vector_list: vec!["arr".to_string()],
+            scalars,
+            vectors,
+        };
+
+        let differences = rec1.find_differences(&rec2);
+        assert!(differences.is_empty());
+    }
+
+    #[test]
+    fn record_differences() {
+        let scalar = RawDmapScalar::new(DmapType::CHAR(10));
+        let mut scalars = HashMap::new();
+        scalars.insert("scal".to_string(), scalar);
+
+        let dimensions = vec![3];
+        let data = vec![DmapType::CHAR(0), DmapType::CHAR(1), DmapType::CHAR(2)];
+        let vector = RawDmapVector::new(dimensions, data);
+        let mut vectors = HashMap::new();
+        vectors.insert("arr".to_string(), vector);
+
+        let rec1 = RawDmapRecord {
+            num_scalars: 1,
+            num_vectors: 1,
+            scalar_list: vec!["scal".to_string()],
+            vector_list: vec!["arr".to_string()],
+            scalars: scalars.clone(),
+            vectors: vectors.clone(),
+        };
+
+        let dimensions = vec![12];
+        let data = vec![DmapType::INT(0), DmapType::INT(1), DmapType::INT(2), DmapType::INT(0), DmapType::INT(1), DmapType::INT(2), DmapType::INT(0), DmapType::INT(1), DmapType::INT(2), DmapType::INT(0), DmapType::INT(1), DmapType::INT(2)];
+        let vector = RawDmapVector::new(dimensions, data);
+        scalars.insert("scal".to_string(), RawDmapScalar::new(DmapType::ULONG(123456)));
+        vectors.insert("arr".to_string(), vector);
+        let rec2 = RawDmapRecord {
+            num_scalars: 1,
+            num_vectors: 1,
+            scalar_list: vec!["scal".to_string()],
+            vector_list: vec!["arr".to_string()],
+            scalars,
+            vectors,
+        };
+
+        let differences = rec1.find_differences(&rec2);
+        println!("{}", differences);
+        assert_eq!(false, differences.is_empty());
     }
 }
