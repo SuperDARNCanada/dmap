@@ -302,7 +302,7 @@ impl DmapRecord for RawacfRecord {
         let lag_zero_power = get_vector_val::<f32>(vectors, "pwr0")?;
         let range_list = get_vector_val::<i16>(vectors, "slist")?;
         let acfs = get_vector_val::<f32>(vectors, "acfd")?;
-        let xcfs = get_vector_val::<f32>(vectors, "xcfs").ok();
+        let xcfs = get_vector_val::<f32>(vectors, "xcfd").ok();
 
         Ok(RawacfRecord {
             radar_revision_major,
