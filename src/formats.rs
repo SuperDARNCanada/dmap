@@ -51,7 +51,7 @@ pub trait DmapRecord {
 
         dmap_data
             .read_to_end(&mut buffer)
-            .map_err(|_| DmapError::Message("Could not read data".to_string()))?;
+            .map_err(|_| DmapError::new("Could not read data"))?;
 
         let mut cursor = Cursor::new(buffer);
         let mut dmap_records: Vec<Self> = vec![];
@@ -70,11 +70,11 @@ pub trait DmapRecord {
         let bytes_already_read = cursor.position();
         let _code = match read_data(cursor, DmapType::INT(0))? {
             DmapType::INT(i) => Ok(i),
-            _ => Err(DmapError::Message("PARSE RECORD: Invalid code".to_string())),
+            _ => Err(DmapError::new("PARSE RECORD: Invalid code")),
         }?;
         let size = match read_data(cursor, DmapType::INT(0))? {
             DmapType::INT(i) => Ok(i),
-            _ => Err(DmapError::Message("PARSE RECORD: Invalid size".to_string())),
+            _ => Err(DmapError::new("PARSE RECORD: Invalid size")),
         }?;
 
         // adding 8 bytes because code and size are part of the record.
@@ -82,44 +82,37 @@ pub trait DmapRecord {
             > cursor.get_ref().len() as u64 - cursor.position()
                 + 2 * DmapType::INT(0).get_num_bytes()
         {
-            return Err(DmapError::Message(
+            return Err(DmapError::new(
                 "PARSE RECORD: Integrity check shows record size bigger than \
-                remaining buffer. Data is likely corrupted"
-                    .to_string(),
+                remaining buffer. Data is likely corrupted",
             ));
         } else if size <= 0 {
-            return Err(DmapError::Message(
+            return Err(DmapError::new(
                 "PARSE RECORD: Integrity check shows record size <= 0. \
-                Data is likely corrupted"
-                    .to_string(),
+                Data is likely corrupted",
             ));
         }
 
         let num_scalars = match read_data(cursor, DmapType::INT(0))? {
             DmapType::INT(i) => Ok(i),
-            _ => Err(DmapError::Message(
-                "PARSE RECORD: Invalid number of scalars".to_string(),
-            )),
+            _ => Err(DmapError::new("PARSE RECORD: Invalid number of scalars")),
         }?;
         let num_vectors = match read_data(cursor, DmapType::INT(0))? {
             DmapType::INT(i) => Ok(i),
-            _ => Err(DmapError::Message(
-                "PARSE RECORD: Invalid number of vectors".to_string(),
-            )),
+            _ => Err(DmapError::new("PARSE RECORD: Invalid number of vectors")),
         }?;
         if num_scalars <= 0 {
-            return Err(DmapError::Message(
-                "PARSE RECORD: Number of scalars is 0 or negative.".to_string(),
+            return Err(DmapError::new(
+                "PARSE RECORD: Number of scalars is 0 or negative.",
             ));
         } else if num_vectors <= 0 {
-            return Err(DmapError::Message(
-                "PARSE RECORD: Number of vectors is 0 or negative.".to_string(),
+            return Err(DmapError::new(
+                "PARSE RECORD: Number of vectors is 0 or negative.",
             ));
         } else if num_scalars + num_vectors > size {
-            return Err(DmapError::Message(
+            return Err(DmapError::new(
                 "PARSE RECORD: Invalid number of record elements. \
-                Vector or scalar field is likely corrupted."
-                    .to_string(),
+                Vector or scalar field is likely corrupted.",
             ));
         }
 
@@ -136,19 +129,17 @@ pub trait DmapRecord {
         }
 
         if cursor.position() - bytes_already_read != size as u64 {
-            return Err(DmapError::Message(format!(
-                "PARSE RECORD: Bytes read {} does not match the records size field {}",
-                cursor.position() - bytes_already_read,
-                size
-            )));
+            return Err(DmapError::new(
+                format!(
+                    "PARSE RECORD: Bytes read {} does not match the records size field {}",
+                    cursor.position() - bytes_already_read,
+                    size
+                )
+                .as_str(),
+            ));
         }
 
-        Ok(Self::new(
-            num_scalars,
-            &mut scalars,
-            num_vectors,
-            &mut vectors,
-        )?)
+        Self::new(num_scalars, &mut scalars, num_vectors, &mut vectors)
     }
 
     /// Creates a new object from the parsed scalars and vectors
@@ -165,7 +156,7 @@ pub trait DmapRecord {
     fn to_dmap(&self) -> Vec<u8> {
         let (num_scalars, num_vectors, mut data_bytes) = self.to_bytes();
         let mut bytes: Vec<u8> = vec![];
-        bytes.extend((65537 as i32).data_to_bytes()); // No idea why this is what it is, copied from backscatter
+        bytes.extend((65537_i32).data_to_bytes()); // No idea why this is what it is, copied from backscatter
         bytes.extend((data_bytes.len() as i32 + 16).data_to_bytes()); // +16 for code, length, num_scalars, num_vectors
         bytes.extend(num_scalars.data_to_bytes());
         bytes.extend(num_vectors.data_to_bytes());
@@ -543,7 +534,7 @@ pub struct FitacfRecord {
 impl DmapRecord for FitacfRecord {
     fn new(
         num_scalars: i32,
-        mut scalars: &mut HashMap<String, RawDmapScalar>,
+        scalars: &mut HashMap<String, RawDmapScalar>,
         num_vectors: i32,
         vectors: &mut HashMap<String, RawDmapVector>,
     ) -> Result<FitacfRecord, DmapError> {

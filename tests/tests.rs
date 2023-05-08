@@ -1,7 +1,5 @@
 use dmap;
-use dmap::formats::{
-    to_file, DmapRecord, FileFormatError, FitacfRecord, IqdatRecord, MapRecord, RawacfRecord,
-};
+use dmap::formats::{to_file, DmapRecord, FitacfRecord, IqdatRecord, MapRecord, RawacfRecord};
 use itertools::izip;
 use std::fs::{remove_file, File};
 use std::path::Path;
@@ -40,6 +38,8 @@ fn test_read_write_iqdat() {
 fn test_read_write_rawacf() {
     let file = File::open(Path::new("tests/test_files/test.rawacf")).expect("test file not found");
     let contents = RawacfRecord::read_records(file).expect("unable to read test file contents");
+    println!("{:?}", contents[0].xcfs);
+    println!("{:?}", contents[0].xcf_flag);
 
     to_file("tests/test_files/temp.rawacf", &contents).expect("unable to write to file");
     let test_file = File::open("tests/test_files/temp.rawacf").expect("test file unwritten");

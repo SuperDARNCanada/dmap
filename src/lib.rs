@@ -1,30 +1,27 @@
 pub mod formats;
 
-use crate::formats::DmapRecord;
-use bytemuck::PodCastError;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Display, Formatter};
-use std::fs::File;
-use std::io::{Cursor, Read, Write};
-use std::path::Path;
+use std::io::Cursor;
 
 type Result<T> = std::result::Result<T, DmapError>;
 
 #[derive(Debug, Clone)]
-pub enum DmapError {
-    BadVal(String, DmapType),
-    Message(String),
-    CastError(String, PodCastError),
+pub struct DmapError {
+    pub details: String,
 }
 impl Error for DmapError {}
 impl Display for DmapError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            DmapError::Message(msg) => write!(f, "{}", msg),
-            DmapError::BadVal(msg, val) => write!(f, "{}: {:?}", msg, val),
-            DmapError::CastError(msg, err) => write!(f, "{}: {}", msg, err.to_string()),
+        write!(f, "{}", self.details)
+    }
+}
+impl DmapError {
+    pub fn new(details: &str) -> DmapError {
+        DmapError {
+            details: details.to_string(),
         }
     }
 }
@@ -82,10 +79,9 @@ impl DmapType {
             17 => Ok(DmapType::USHORT(0)),
             18 => Ok(DmapType::UINT(0)),
             19 => Ok(DmapType::ULONG(0)),
-            _ => Err(DmapError::Message(format!(
-                "Invalid key for DMAP type: {}",
-                key
-            ))),
+            _ => Err(DmapError::new(
+                format!("Invalid key for DMAP type: {}", key).as_str(),
+            )),
         }
     }
 
@@ -198,147 +194,147 @@ impl RawDmapVector {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct RawDmapRecord {
-    pub num_scalars: i32,
-    pub num_vectors: i32,
-    pub scalar_list: Vec<String>,
-    pub vector_list: Vec<String>,
-    pub scalars: HashMap<String, RawDmapScalar>,
-    pub vectors: HashMap<String, RawDmapVector>,
-}
-impl PartialEq for RawDmapRecord {
-    fn eq(&self, other: &Self) -> bool {
-        if !(self.num_scalars == other.num_scalars && self.num_vectors == other.num_vectors) {
-            return false;
-        }
-        for (s1, s2) in self.scalar_list.iter().zip(other.scalar_list.iter()) {
-            if !(s1 == s2) {
-                return false;
-            }
-            let scal1 = self.scalars.get(s1);
-            let scal2 = other.scalars.get(s2);
-            if !(scal1 == scal2) {
-                return false;
-            }
-        }
-        for (a1, a2) in self.vector_list.iter().zip(other.vector_list.iter()) {
-            if !(a1 == a2) {
-                return false;
-            }
-            let arr1 = self.vectors.get(a1);
-            let arr2 = self.vectors.get(a2);
-            if !(arr1 == arr2) {
-                return false;
-            }
-        }
-        true
-    }
-}
-impl RawDmapRecord {
-    /// Converts into raw bytes
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut container: Vec<u8> = vec![];
-        let code = 65537; // No idea why this is what it is, copied from backscatter
-
-        let mut data_bytes: Vec<u8> = vec![];
-        for scalar in &self.scalar_list {
-            data_bytes.extend(scalar.as_bytes());
-            data_bytes.push(0); // null-terminate string
-            data_bytes.extend(
-                self.scalars
-                    .get(scalar)
-                    .expect(&*format!("{scalar} missing from record"))
-                    .to_bytes(),
-            );
-        }
-        for vector in &self.vector_list {
-            data_bytes.extend(vector.as_bytes());
-            data_bytes.push(0); // null-terminate string
-            data_bytes.extend(
-                self.vectors
-                    .get(vector)
-                    .expect(&*format!("{vector} missing from record"))
-                    .to_bytes(),
-            );
-        }
-
-        container.extend(DmapType::INT(code).to_bytes());
-        container.extend(DmapType::INT(data_bytes.len() as i32 + 16).to_bytes()); // +16 for code, length, num_scalars, num_vectors
-        container.extend(DmapType::INT(self.num_scalars).to_bytes());
-        container.extend(DmapType::INT(self.num_vectors).to_bytes());
-        container.extend(data_bytes);
-        container
-    }
-
-    pub fn find_differences(&self, other: &RawDmapRecord) -> DmapDifference {
-        let self_scalars = self
-            .scalar_list
-            .iter()
-            .map(|s| s.clone())
-            .collect::<HashSet<String>>();
-        let other_scalars = other
-            .scalar_list
-            .iter()
-            .map(|s| s.clone())
-            .collect::<HashSet<String>>();
-        let self_unique_scalars = self_scalars
-            .difference(&other_scalars)
-            .map(|s| s.clone())
-            .collect();
-        let other_unique_scalars = other_scalars
-            .difference(&self_scalars)
-            .map(|s| s.clone())
-            .collect();
-
-        let self_vectors = self
-            .vector_list
-            .iter()
-            .map(|v| v.clone())
-            .collect::<HashSet<String>>();
-        let other_vectors = other
-            .vector_list
-            .iter()
-            .map(|v| v.clone())
-            .collect::<HashSet<String>>();
-        let self_unique_vectors: Vec<String> = self_vectors
-            .difference(&other_vectors)
-            .map(|v| v.clone())
-            .collect();
-        let other_unique_vectors: Vec<String> = other_vectors
-            .difference(&self_vectors)
-            .map(|v| v.clone())
-            .collect();
-
-        let intersecting_scalars = self_scalars.intersection(&other_scalars);
-        let intersecting_vectors = self_vectors.intersection(&other_vectors);
-        let mut different_scalars = HashMap::new();
-        let mut different_vectors = HashMap::new();
-
-        for scalar in intersecting_scalars {
-            let val_1 = self.scalars.get(scalar).unwrap();
-            let val_2 = other.scalars.get(scalar).unwrap();
-            if val_1 != val_2 {
-                different_scalars.insert(scalar.clone(), (val_1.clone(), val_2.clone()));
-            }
-        }
-        for vector in intersecting_vectors {
-            let val_1 = self.vectors.get(vector).unwrap();
-            let val_2 = other.vectors.get(vector).unwrap();
-            if val_1 != val_2 {
-                different_vectors.insert(vector.clone(), (val_1.clone(), val_2.clone()));
-            }
-        }
-        DmapDifference {
-            unique_scalars_1: self_unique_scalars,
-            unique_scalars_2: other_unique_scalars,
-            unique_vectors_1: self_unique_vectors,
-            unique_vectors_2: other_unique_vectors,
-            different_scalars,
-            different_vectors,
-        }
-    }
-}
+// #[derive(Debug, Clone)]
+// pub struct RawDmapRecord {
+//     pub num_scalars: i32,
+//     pub num_vectors: i32,
+//     pub scalar_list: Vec<String>,
+//     pub vector_list: Vec<String>,
+//     pub scalars: HashMap<String, RawDmapScalar>,
+//     pub vectors: HashMap<String, RawDmapVector>,
+// }
+// impl PartialEq for RawDmapRecord {
+//     fn eq(&self, other: &Self) -> bool {
+//         if !(self.num_scalars == other.num_scalars && self.num_vectors == other.num_vectors) {
+//             return false;
+//         }
+//         for (s1, s2) in self.scalar_list.iter().zip(other.scalar_list.iter()) {
+//             if !(s1 == s2) {
+//                 return false;
+//             }
+//             let scal1 = self.scalars.get(s1);
+//             let scal2 = other.scalars.get(s2);
+//             if !(scal1 == scal2) {
+//                 return false;
+//             }
+//         }
+//         for (a1, a2) in self.vector_list.iter().zip(other.vector_list.iter()) {
+//             if !(a1 == a2) {
+//                 return false;
+//             }
+//             let arr1 = self.vectors.get(a1);
+//             let arr2 = self.vectors.get(a2);
+//             if !(arr1 == arr2) {
+//                 return false;
+//             }
+//         }
+//         true
+//     }
+// }
+// impl RawDmapRecord {
+//     /// Converts into raw bytes
+//     pub fn to_bytes(&self) -> Vec<u8> {
+//         let mut container: Vec<u8> = vec![];
+//         let code = 65537; // No idea why this is what it is, copied from backscatter
+//
+//         let mut data_bytes: Vec<u8> = vec![];
+//         for scalar in &self.scalar_list {
+//             data_bytes.extend(scalar.as_bytes());
+//             data_bytes.push(0); // null-terminate string
+//             data_bytes.extend(
+//                 self.scalars
+//                     .get(scalar)
+//                     .expect(&*format!("{scalar} missing from record"))
+//                     .to_bytes(),
+//             );
+//         }
+//         for vector in &self.vector_list {
+//             data_bytes.extend(vector.as_bytes());
+//             data_bytes.push(0); // null-terminate string
+//             data_bytes.extend(
+//                 self.vectors
+//                     .get(vector)
+//                     .expect(&*format!("{vector} missing from record"))
+//                     .to_bytes(),
+//             );
+//         }
+//
+//         container.extend(DmapType::INT(code).to_bytes());
+//         container.extend(DmapType::INT(data_bytes.len() as i32 + 16).to_bytes()); // +16 for code, length, num_scalars, num_vectors
+//         container.extend(DmapType::INT(self.num_scalars).to_bytes());
+//         container.extend(DmapType::INT(self.num_vectors).to_bytes());
+//         container.extend(data_bytes);
+//         container
+//     }
+//
+//     pub fn find_differences(&self, other: &RawDmapRecord) -> DmapDifference {
+//         let self_scalars = self
+//             .scalar_list
+//             .iter()
+//             .map(|s| s.clone())
+//             .collect::<HashSet<String>>();
+//         let other_scalars = other
+//             .scalar_list
+//             .iter()
+//             .map(|s| s.clone())
+//             .collect::<HashSet<String>>();
+//         let self_unique_scalars = self_scalars
+//             .difference(&other_scalars)
+//             .map(|s| s.clone())
+//             .collect();
+//         let other_unique_scalars = other_scalars
+//             .difference(&self_scalars)
+//             .map(|s| s.clone())
+//             .collect();
+//
+//         let self_vectors = self
+//             .vector_list
+//             .iter()
+//             .map(|v| v.clone())
+//             .collect::<HashSet<String>>();
+//         let other_vectors = other
+//             .vector_list
+//             .iter()
+//             .map(|v| v.clone())
+//             .collect::<HashSet<String>>();
+//         let self_unique_vectors: Vec<String> = self_vectors
+//             .difference(&other_vectors)
+//             .map(|v| v.clone())
+//             .collect();
+//         let other_unique_vectors: Vec<String> = other_vectors
+//             .difference(&self_vectors)
+//             .map(|v| v.clone())
+//             .collect();
+//
+//         let intersecting_scalars = self_scalars.intersection(&other_scalars);
+//         let intersecting_vectors = self_vectors.intersection(&other_vectors);
+//         let mut different_scalars = HashMap::new();
+//         let mut different_vectors = HashMap::new();
+//
+//         for scalar in intersecting_scalars {
+//             let val_1 = self.scalars.get(scalar).unwrap();
+//             let val_2 = other.scalars.get(scalar).unwrap();
+//             if val_1 != val_2 {
+//                 different_scalars.insert(scalar.clone(), (val_1.clone(), val_2.clone()));
+//             }
+//         }
+//         for vector in intersecting_vectors {
+//             let val_1 = self.vectors.get(vector).unwrap();
+//             let val_2 = other.vectors.get(vector).unwrap();
+//             if val_1 != val_2 {
+//                 different_vectors.insert(vector.clone(), (val_1.clone(), val_2.clone()));
+//             }
+//         }
+//         DmapDifference {
+//             unique_scalars_1: self_unique_scalars,
+//             unique_scalars_2: other_unique_scalars,
+//             unique_vectors_1: self_unique_vectors,
+//             unique_vectors_2: other_unique_vectors,
+//             different_scalars,
+//             different_vectors,
+//         }
+//     }
+// }
 
 #[derive(Debug, Default)]
 pub struct DmapDifference {
@@ -351,23 +347,23 @@ pub struct DmapDifference {
 }
 impl Display for DmapDifference {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let mut repr: String = format!("");
+        let mut repr = String::new();
         if self.is_empty() {
             return write!(f, "No differences{}", repr);
         }
-        if self.unique_scalars_1.len() != 0 {
+        if !self.unique_scalars_1.is_empty() {
             repr.push_str("Unique scalar fields in left record: ");
             repr.push_str(&format!("{:?}\n", self.unique_scalars_1));
         }
-        if self.unique_scalars_2.len() != 0 {
+        if !self.unique_scalars_2.is_empty() {
             repr.push_str("Unique scalar fields in right record: ");
             repr.push_str(&format!("{:?}\n", self.unique_scalars_2));
         }
-        if self.unique_vectors_1.len() != 0 {
+        if !self.unique_vectors_1.is_empty() {
             repr.push_str("Unique vector fields in left record: ");
             repr.push_str(&format!("{:?}\n", self.unique_vectors_1));
         }
-        if self.unique_vectors_2.len() != 0 {
+        if !self.unique_vectors_2.is_empty() {
             repr.push_str("Unique vector fields in right record: ");
             repr.push_str(&format!("{:?}\n", self.unique_vectors_2));
         }
@@ -436,9 +432,11 @@ pub trait InDmap {
 impl InDmap for i8 {
     fn get_inner_value(data: DmapType) -> Result<Self> {
         if let DmapType::CHAR(x) = data {
-            return Ok(x);
+            Ok(x)
         } else {
-            return Err(DmapError::Message(format!("cannot interpret {data} as i8")));
+            Err(DmapError::new(
+                format!("cannot interpret {data} as i8").as_str(),
+            ))
         }
     }
     fn get_dmap_key() -> u8 {
@@ -451,11 +449,11 @@ impl InDmap for i8 {
 impl InDmap for i16 {
     fn get_inner_value(data: DmapType) -> Result<Self> {
         if let DmapType::SHORT(x) = data {
-            return Ok(x);
+            Ok(x)
         } else {
-            return Err(DmapError::Message(format!(
-                "cannot interpret {data} as i16"
-            )));
+            Err(DmapError::new(
+                format!("cannot interpret {data} as i16").as_str(),
+            ))
         }
     }
     fn get_dmap_key() -> u8 {
@@ -468,11 +466,11 @@ impl InDmap for i16 {
 impl InDmap for i32 {
     fn get_inner_value(data: DmapType) -> Result<Self> {
         if let DmapType::INT(x) = data {
-            return Ok(x);
+            Ok(x)
         } else {
-            return Err(DmapError::Message(format!(
-                "cannot interpret {data} as i32"
-            )));
+            Err(DmapError::new(
+                format!("cannot interpret {data} as i32").as_str(),
+            ))
         }
     }
     fn get_dmap_key() -> u8 {
@@ -485,11 +483,11 @@ impl InDmap for i32 {
 impl InDmap for f32 {
     fn get_inner_value(data: DmapType) -> Result<Self> {
         if let DmapType::FLOAT(x) = data {
-            return Ok(x);
+            Ok(x)
         } else {
-            return Err(DmapError::Message(format!(
-                "cannot interpret {data} as f32"
-            )));
+            Err(DmapError::new(
+                format!("cannot interpret {data} as f32").as_str(),
+            ))
         }
     }
     fn get_dmap_key() -> u8 {
@@ -502,11 +500,11 @@ impl InDmap for f32 {
 impl InDmap for f64 {
     fn get_inner_value(data: DmapType) -> Result<Self> {
         if let DmapType::DOUBLE(x) = data {
-            return Ok(x);
+            Ok(x)
         } else {
-            return Err(DmapError::Message(format!(
-                "cannot interpret {data} as f64"
-            )));
+            Err(DmapError::new(
+                format!("cannot interpret {data} as f64").as_str(),
+            ))
         }
     }
     fn get_dmap_key() -> u8 {
@@ -519,11 +517,11 @@ impl InDmap for f64 {
 impl InDmap for String {
     fn get_inner_value(data: DmapType) -> Result<Self> {
         if let DmapType::STRING(x) = data {
-            return Ok(x);
+            Ok(x)
         } else {
-            return Err(DmapError::Message(format!(
-                "cannot interpret {data} as String"
-            )));
+            Err(DmapError::new(
+                format!("cannot interpret {data} as String").as_str(),
+            ))
         }
     }
     fn get_dmap_key() -> u8 {
@@ -538,9 +536,11 @@ impl InDmap for String {
 impl InDmap for u8 {
     fn get_inner_value(data: DmapType) -> Result<Self> {
         if let DmapType::UCHAR(x) = data {
-            return Ok(x);
+            Ok(x)
         } else {
-            return Err(DmapError::Message(format!("cannot interpret {data} as u8")));
+            Err(DmapError::new(
+                format!("cannot interpret {data} as u8").as_str(),
+            ))
         }
     }
     fn get_dmap_key() -> u8 {
@@ -553,11 +553,11 @@ impl InDmap for u8 {
 impl InDmap for u16 {
     fn get_inner_value(data: DmapType) -> Result<Self> {
         if let DmapType::USHORT(x) = data {
-            return Ok(x);
+            Ok(x)
         } else {
-            return Err(DmapError::Message(format!(
-                "cannot interpret {data} as u16"
-            )));
+            Err(DmapError::new(
+                format!("cannot interpret {data} as u16").as_str(),
+            ))
         }
     }
     fn get_dmap_key() -> u8 {
@@ -570,11 +570,11 @@ impl InDmap for u16 {
 impl InDmap for u32 {
     fn get_inner_value(data: DmapType) -> Result<Self> {
         if let DmapType::UINT(x) = data {
-            return Ok(x);
+            Ok(x)
         } else {
-            return Err(DmapError::Message(format!(
-                "cannot interpret {data} as u32"
-            )));
+            Err(DmapError::new(
+                format!("cannot interpret {data} as u32").as_str(),
+            ))
         }
     }
     fn get_dmap_key() -> u8 {
@@ -587,11 +587,11 @@ impl InDmap for u32 {
 impl InDmap for i64 {
     fn get_inner_value(data: DmapType) -> Result<Self> {
         if let DmapType::LONG(x) = data {
-            return Ok(x);
+            Ok(x)
         } else {
-            return Err(DmapError::Message(format!(
-                "cannot interpret {data} as i64"
-            )));
+            Err(DmapError::new(
+                format!("cannot interpret {data} as i64").as_str(),
+            ))
         }
     }
     fn get_dmap_key() -> u8 {
@@ -604,11 +604,11 @@ impl InDmap for i64 {
 impl InDmap for u64 {
     fn get_inner_value(data: DmapType) -> Result<Self> {
         if let DmapType::ULONG(x) = data {
-            return Ok(x);
+            Ok(x)
         } else {
-            return Err(DmapError::Message(format!(
-                "cannot interpret {data} as u64"
-            )));
+            Err(DmapError::new(
+                format!("cannot interpret {data} as u64").as_str(),
+            ))
         }
     }
     fn get_dmap_key() -> u8 {
@@ -619,7 +619,7 @@ impl InDmap for u64 {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct DmapVec<T>
 where
     T: InDmap,
@@ -655,7 +655,7 @@ pub fn get_scalar_val<T: InDmap>(
     if let Some(RawDmapScalar { data, mode: _ }) = scalars.remove(name) {
         Ok(T::get_inner_value(data)?)
     } else {
-        Err(DmapError::Message(format!("{} not found", name)))
+        Err(DmapError::new(format!("{} not found", name).as_str()))
     }
 }
 
@@ -672,14 +672,16 @@ pub fn get_vector_val<T: InDmap>(
     {
         let arr = data
             .into_iter()
-            .map(|x| T::get_inner_value(x).expect(&format!("error getting vector {name}")))
+            .map(|x| {
+                T::get_inner_value(x).unwrap_or_else(|_| panic!("error getting vector {name}"))
+            })
             .collect();
         Ok(DmapVec {
             data: arr,
-            dimensions: dimensions.clone(),
+            dimensions,
         })
     } else {
-        Err(DmapError::Message(format!("{} not found", name)))
+        Err(DmapError::new(format!("{} not found", name).as_str()))
     }
 }
 
@@ -688,31 +690,29 @@ fn parse_scalar(cursor: &mut Cursor<Vec<u8>>) -> Result<(String, RawDmapScalar)>
     let mode = 6;
     let name = match read_data(cursor, DmapType::STRING("".to_string()))? {
         DmapType::STRING(s) => Ok(s),
-        _ => Err(DmapError::Message(
-            "PARSE SCALAR: Invalid scalar name".to_string(),
-        )),
+        _ => Err(DmapError::new("PARSE SCALAR: Invalid scalar name")),
     }?;
     let data_type_key = match read_data(cursor, DmapType::CHAR(0))? {
         DmapType::CHAR(c) => Ok(c),
-        _ => Err(DmapError::Message(
-            "PARSE SCALAR: Invalid data type".to_string(),
-        )),
+        _ => Err(DmapError::new("PARSE SCALAR: Invalid data type")),
     }?;
 
     if !DmapType::all_keys().contains(&data_type_key) {
-        return Err(DmapError::BadVal(
-            "PARSE SCALAR: Data type is corrupted. Record is likely \
-            corrupted"
-                .to_string(),
-            DmapType::CHAR(data_type_key),
+        return Err(DmapError::new(
+            format!(
+                "PARSE SCALAR: Data type is corrupted. Record is likely \
+            corrupted. Key {}",
+                DmapType::CHAR(data_type_key)
+            )
+            .as_str(),
         ));
     }
 
     let data_type = DmapType::get_type_from_key(data_type_key)?;
 
     let data = match data_type {
-        DmapType::DMAP => Err(DmapError::Message(
-            "PARSE SCALAR: Trying to read DMAP data type for a scalar".to_string(),
+        DmapType::DMAP => Err(DmapError::new(
+            "PARSE SCALAR: Trying to read DMAP data type for a scalar",
         ))?,
         _ => read_data(cursor, data_type)?,
     };
@@ -725,50 +725,41 @@ fn parse_vector(cursor: &mut Cursor<Vec<u8>>, record_size: i32) -> Result<(Strin
     let mode = 7;
     let name = match read_data(cursor, DmapType::STRING("".to_string()))? {
         DmapType::STRING(s) => Ok(s),
-        _ => Err(DmapError::Message(
-            "PARSE VECTOR: Invalid vector name".to_string(),
-        )),
+        _ => Err(DmapError::new("PARSE VECTOR: Invalid vector name")),
     }?;
     let data_type_key = match read_data(cursor, DmapType::CHAR(0))? {
         DmapType::CHAR(c) => Ok(c),
-        _ => Err(DmapError::Message(
-            "PARSE VECTOR: Invalid data type".to_string(),
-        )),
+        _ => Err(DmapError::new("PARSE VECTOR: Invalid data type")),
     }?;
 
     if !DmapType::all_keys().contains(&data_type_key) {
-        return Err(DmapError::Message(
+        return Err(DmapError::new(
             "PARSE VECTOR: Data type is corrupted. Record is likely \
-            corrupted"
-                .to_string(),
+            corrupted",
         ));
     }
 
     let data_type = DmapType::get_type_from_key(data_type_key)?;
     if let DmapType::DMAP = data_type {
-        Err(DmapError::Message(
-            "PARSE VECTOR: Trying to read DMAP data type for a vector".to_string(),
+        Err(DmapError::new(
+            "PARSE VECTOR: Trying to read DMAP data type for a vector",
         ))?
     }
 
     let vector_dimension = match read_data(cursor, DmapType::INT(0))? {
         DmapType::INT(i) => Ok(i),
-        _ => Err(DmapError::Message(
-            "PARSE VECTOR: Invalid vector dimension".to_string(),
-        )),
+        _ => Err(DmapError::new("PARSE VECTOR: Invalid vector dimension")),
     }?;
 
     if vector_dimension > record_size {
-        return Err(DmapError::Message(
+        return Err(DmapError::new(
             "PARSE VECTOR: Parsed # of vector dimensions are larger \
-            than record size. Record is likely corrupted"
-                .to_string(),
+            than record size. Record is likely corrupted",
         ));
     } else if vector_dimension <= 0 {
-        return Err(DmapError::Message(
+        return Err(DmapError::new(
             "PARSE VECTOR: Parsed # of vector dimensions are zero or \
-            negative. Record is likely corrupted"
-                .to_string(),
+            negative. Record is likely corrupted",
         ));
     }
 
@@ -777,31 +768,29 @@ fn parse_vector(cursor: &mut Cursor<Vec<u8>>, record_size: i32) -> Result<(Strin
     for _ in 0..vector_dimension {
         let dim = match read_data(cursor, DmapType::INT(0))? {
             DmapType::INT(val) => Ok(val),
-            _ => Err(DmapError::Message(
-                "PARSE VECTOR: Vector dimensions could not be parsed".to_string(),
+            _ => Err(DmapError::new(
+                "PARSE VECTOR: Vector dimensions could not be parsed",
             )),
         }?;
         if dim <= 0 && name != "slist" {
-            return Err(DmapError::Message(
+            return Err(DmapError::new(
                 "PARSE VECTOR: Vector dimension is zero or negative. \
-                Record is likely corrupted"
-                    .to_string(),
+                Record is likely corrupted",
             ));
         } else if dim > record_size {
-            return Err(DmapError::Message(
-                "PARSE VECTOR: Vector dimension exceeds record size".to_string(),
+            return Err(DmapError::new(
+                "PARSE VECTOR: Vector dimension exceeds record size",
             ));
         }
         dimensions.push(dim);
-        total_elements = total_elements * dim;
+        total_elements *= dim;
     }
     dimensions = dimensions.into_iter().rev().collect(); // reverse the dimensions, stored in column-major order
 
     if total_elements * data_type.get_num_bytes() as i32 > record_size {
-        return Err(DmapError::Message(
+        return Err(DmapError::new(
             "PARSE VECTOR: Vector size exceeds record size. Data is \
-            likely corrupted"
-                .to_string(),
+            likely corrupted",
         ));
     }
 
@@ -825,68 +814,65 @@ fn read_data(cursor: &mut Cursor<Vec<u8>>, data_type: DmapType) -> Result<DmapTy
     let stream = cursor.get_mut();
 
     if position > stream.len() {
-        return Err(DmapError::Message(
-            "READ DATA: Cursor extends out of buffer. Data is likely corrupted".to_string(),
+        return Err(DmapError::new(
+            "READ DATA: Cursor extends out of buffer. Data is likely corrupted",
         ));
     }
     if stream.len() - position < data_type.get_num_bytes() as usize {
-        return Err(DmapError::Message(
+        return Err(DmapError::new(
             "READ DATA: Byte offsets into buffer are not properly aligned. \
-        Data is likely corrupted"
-                .to_string(),
+        Data is likely corrupted",
         ));
     }
 
     let mut data_size = data_type.get_num_bytes() as usize;
     let data: &[u8] = &stream[position..position + data_size];
     let parsed_data = match data_type {
-        DmapType::DMAP => Err(DmapError::Message(
-            "READ DATA: Data type DMAP unreadable".to_string(),
-        ))?,
+        DmapType::DMAP => Err(DmapError::new("READ DATA: Data type DMAP unreadable"))?,
         DmapType::UCHAR { .. } => DmapType::UCHAR(data[0]),
         DmapType::CHAR { .. } => {
             DmapType::CHAR(bytemuck::try_pod_read_unaligned::<i8>(data).map_err(|e| {
-                DmapError::CastError("READ DATA: Unable to interpret char".to_string(), e)
+                DmapError::new(format!("READ DATA: Unable to interpret char. {}", e).as_str())
             })?)
         }
         DmapType::SHORT { .. } => {
             DmapType::SHORT(bytemuck::try_pod_read_unaligned::<i16>(data).map_err(|e| {
-                DmapError::CastError("READ DATA: Unable to interpret short".to_string(), e)
+                DmapError::new(format!("READ DATA: Unable to interpret short. {}", e).as_str())
             })?)
         }
         DmapType::USHORT { .. } => {
             DmapType::USHORT(bytemuck::try_pod_read_unaligned::<u16>(data).map_err(|e| {
-                DmapError::CastError("READ DATA: Unable to interpret ushort".to_string(), e)
+                DmapError::new(format!("READ DATA: Unable to interpret ushort. {}", e).as_str())
             })?)
         }
         DmapType::INT { .. } => {
             DmapType::INT(bytemuck::try_pod_read_unaligned::<i32>(data).map_err(|e| {
-                DmapError::CastError("READ DATA: Unable to interpret int".to_string(), e)
+                DmapError::new(format!("READ DATA: Unable to interpret int. {}", e).as_str())
             })?)
         }
         DmapType::UINT { .. } => {
             DmapType::UINT(bytemuck::try_pod_read_unaligned::<u32>(data).map_err(|e| {
-                DmapError::CastError("READ DATA: Unable to interpret uint".to_string(), e)
+                DmapError::new(format!("READ DATA: Unable to interpret uint. {}", e).as_str())
             })?)
         }
         DmapType::LONG { .. } => {
             DmapType::LONG(bytemuck::try_pod_read_unaligned::<i64>(data).map_err(|e| {
-                DmapError::CastError("READ DATA: Unable to interpret long".to_string(), e)
+                DmapError::new(format!("READ DATA: Unable to interpret long. {}", e).as_str())
             })?)
         }
         DmapType::ULONG { .. } => {
             DmapType::ULONG(bytemuck::try_pod_read_unaligned::<u64>(data).map_err(|e| {
-                DmapError::CastError("READ DATA: Unable to interpret ulong".to_string(), e)
+                DmapError::new(format!("READ DATA: Unable to interpret ulong. {}", e).as_str())
             })?)
         }
         DmapType::FLOAT { .. } => {
             DmapType::FLOAT(bytemuck::try_pod_read_unaligned::<f32>(data).map_err(|e| {
-                DmapError::CastError("READ DATA: Unable to interpret float".to_string(), e)
+                DmapError::new(format!("READ DATA: Unable to interpret float. {}", e).as_str())
             })?)
         }
         DmapType::DOUBLE { .. } => {
             DmapType::DOUBLE(bytemuck::try_pod_read_unaligned::<f64>(data).map_err(|e| {
-                DmapError::CastError("READ DATA: Unable to interpret double".to_string(), e)
+                DmapError::new(format!("READ DATA: Unable to interpret double. {}", e).as_str())
             })?)
         }
         DmapType::STRING { .. } => {
@@ -894,17 +880,14 @@ fn read_data(cursor: &mut Cursor<Vec<u8>>, data_type: DmapType) -> Result<DmapTy
             while stream[position + byte_counter] != 0 {
                 byte_counter += 1;
                 if position + byte_counter >= stream.len() {
-                    return Err(DmapError::Message(
+                    return Err(DmapError::new(
                         "READ DATA: String is improperly terminated. \
-                    Dmap record is corrupted"
-                            .to_string(),
+                    Dmap record is corrupted",
                     ));
                 }
             }
             let data = String::from_utf8(stream[position..position + byte_counter].to_owned())
-                .map_err(|_| {
-                    DmapError::Message("READ DATA: Unable to interpret string".to_string())
-                })?;
+                .map_err(|_| DmapError::new("READ DATA: Unable to interpret string"))?;
             data_size = byte_counter + 1;
             DmapType::STRING(data)
         }
@@ -960,155 +943,155 @@ mod tests {
         assert_eq!(vector.to_bytes(), vec![1, 1, 0, 0, 0, 3, 0, 0, 0, 0, 1, 2])
     }
 
-    #[test]
-    fn record_to_bytes() {
-        let scalar = RawDmapScalar::new(DmapType::CHAR(10));
-        let mut scalars = HashMap::new();
-        scalars.insert("scal".to_string(), scalar);
+    // #[test]
+    // fn record_to_bytes() {
+    //     let scalar = RawDmapScalar::new(DmapType::CHAR(10));
+    //     let mut scalars = HashMap::new();
+    //     scalars.insert("scal".to_string(), scalar);
+    //
+    //     let dimensions = vec![3];
+    //     let data = vec![DmapType::CHAR(0), DmapType::CHAR(1), DmapType::CHAR(2)];
+    //     let vector = RawDmapVector::new(dimensions, data);
+    //     let mut vectors = HashMap::new();
+    //     vectors.insert("arr".to_string(), vector);
+    //
+    //     let rec = RawDmapRecord {
+    //         num_scalars: 1,
+    //         num_vectors: 1,
+    //         scalar_list: vec!["scal".to_string()],
+    //         vector_list: vec!["arr".to_string()],
+    //         scalars,
+    //         vectors,
+    //     };
+    //
+    //     assert_eq!(
+    //         rec.to_bytes(),
+    //         vec![
+    //             1, 0, 1, 0, 39, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 115, 99, 97, 108, 0, 1, 10, 97,
+    //             114, 114, 0, 1, 1, 0, 0, 0, 3, 0, 0, 0, 0, 1, 2
+    //         ]
+    //     )
+    // }
 
-        let dimensions = vec![3];
-        let data = vec![DmapType::CHAR(0), DmapType::CHAR(1), DmapType::CHAR(2)];
-        let vector = RawDmapVector::new(dimensions, data);
-        let mut vectors = HashMap::new();
-        vectors.insert("arr".to_string(), vector);
+    // #[test]
+    // fn record_get_values() {
+    //     let scalar = RawDmapScalar::new(DmapType::CHAR(10));
+    //     let mut scalars = HashMap::new();
+    //     scalars.insert("scal".to_string(), scalar);
+    //
+    //     let dimensions = vec![3];
+    //     let data = vec![DmapType::CHAR(0), DmapType::CHAR(1), DmapType::CHAR(2)];
+    //     let vector = RawDmapVector::new(dimensions, data);
+    //     let mut vectors = HashMap::new();
+    //     vectors.insert("arr".to_string(), vector);
+    //
+    //     let rec = RawDmapRecord {
+    //         num_scalars: 1,
+    //         num_vectors: 1,
+    //         scalar_list: vec!["scal".to_string()],
+    //         vector_list: vec!["arr".to_string()],
+    //         scalars,
+    //         vectors,
+    //     };
+    //
+    //     assert_eq!(
+    //         10,
+    //         get_scalar_val::<i8>(&mut rec.scalars.clone(), "scal")
+    //             .expect("Unable to recover scalar")
+    //     );
+    //     // assert_eq!(
+    //     //     vec![0, 1, 2],
+    //     //     get_vector_val::<i8>(&rec.vectors, "arr").expect("Unable to recover vector")
+    //     // );
+    // }
 
-        let rec = RawDmapRecord {
-            num_scalars: 1,
-            num_vectors: 1,
-            scalar_list: vec!["scal".to_string()],
-            vector_list: vec!["arr".to_string()],
-            scalars,
-            vectors,
-        };
+    // #[test]
+    // fn same_record_no_differences() {
+    //     let scalar = RawDmapScalar::new(DmapType::CHAR(10));
+    //     let mut scalars = HashMap::new();
+    //     scalars.insert("scal".to_string(), scalar);
+    //
+    //     let dimensions = vec![3];
+    //     let data = vec![DmapType::CHAR(0), DmapType::CHAR(1), DmapType::CHAR(2)];
+    //     let vector = RawDmapVector::new(dimensions, data);
+    //     let mut vectors = HashMap::new();
+    //     vectors.insert("arr".to_string(), vector);
+    //
+    //     let rec1 = RawDmapRecord {
+    //         num_scalars: 1,
+    //         num_vectors: 1,
+    //         scalar_list: vec!["scal".to_string()],
+    //         vector_list: vec!["arr".to_string()],
+    //         scalars: scalars.clone(),
+    //         vectors: vectors.clone(),
+    //     };
+    //
+    //     let rec2 = RawDmapRecord {
+    //         num_scalars: 1,
+    //         num_vectors: 1,
+    //         scalar_list: vec!["scal".to_string()],
+    //         vector_list: vec!["arr".to_string()],
+    //         scalars,
+    //         vectors,
+    //     };
+    //
+    //     let differences = rec1.find_differences(&rec2);
+    //     assert!(differences.is_empty());
+    // }
 
-        assert_eq!(
-            rec.to_bytes(),
-            vec![
-                1, 0, 1, 0, 39, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 115, 99, 97, 108, 0, 1, 10, 97,
-                114, 114, 0, 1, 1, 0, 0, 0, 3, 0, 0, 0, 0, 1, 2
-            ]
-        )
-    }
-
-    #[test]
-    fn record_get_values() {
-        let scalar = RawDmapScalar::new(DmapType::CHAR(10));
-        let mut scalars = HashMap::new();
-        scalars.insert("scal".to_string(), scalar);
-
-        let dimensions = vec![3];
-        let data = vec![DmapType::CHAR(0), DmapType::CHAR(1), DmapType::CHAR(2)];
-        let vector = RawDmapVector::new(dimensions, data);
-        let mut vectors = HashMap::new();
-        vectors.insert("arr".to_string(), vector);
-
-        let rec = RawDmapRecord {
-            num_scalars: 1,
-            num_vectors: 1,
-            scalar_list: vec!["scal".to_string()],
-            vector_list: vec!["arr".to_string()],
-            scalars,
-            vectors,
-        };
-
-        assert_eq!(
-            10,
-            get_scalar_val::<i8>(&mut rec.scalars.clone(), "scal")
-                .expect("Unable to recover scalar")
-        );
-        // assert_eq!(
-        //     vec![0, 1, 2],
-        //     get_vector_val::<i8>(&rec.vectors, "arr").expect("Unable to recover vector")
-        // );
-    }
-
-    #[test]
-    fn same_record_no_differences() {
-        let scalar = RawDmapScalar::new(DmapType::CHAR(10));
-        let mut scalars = HashMap::new();
-        scalars.insert("scal".to_string(), scalar);
-
-        let dimensions = vec![3];
-        let data = vec![DmapType::CHAR(0), DmapType::CHAR(1), DmapType::CHAR(2)];
-        let vector = RawDmapVector::new(dimensions, data);
-        let mut vectors = HashMap::new();
-        vectors.insert("arr".to_string(), vector);
-
-        let rec1 = RawDmapRecord {
-            num_scalars: 1,
-            num_vectors: 1,
-            scalar_list: vec!["scal".to_string()],
-            vector_list: vec!["arr".to_string()],
-            scalars: scalars.clone(),
-            vectors: vectors.clone(),
-        };
-
-        let rec2 = RawDmapRecord {
-            num_scalars: 1,
-            num_vectors: 1,
-            scalar_list: vec!["scal".to_string()],
-            vector_list: vec!["arr".to_string()],
-            scalars,
-            vectors,
-        };
-
-        let differences = rec1.find_differences(&rec2);
-        assert!(differences.is_empty());
-    }
-
-    #[test]
-    fn record_differences() {
-        let scalar = RawDmapScalar::new(DmapType::CHAR(10));
-        let mut scalars = HashMap::new();
-        scalars.insert("scal".to_string(), scalar);
-
-        let dimensions = vec![3];
-        let data = vec![DmapType::CHAR(0), DmapType::CHAR(1), DmapType::CHAR(2)];
-        let vector = RawDmapVector::new(dimensions, data);
-        let mut vectors = HashMap::new();
-        vectors.insert("arr".to_string(), vector);
-
-        let rec1 = RawDmapRecord {
-            num_scalars: 1,
-            num_vectors: 1,
-            scalar_list: vec!["scal".to_string()],
-            vector_list: vec!["arr".to_string()],
-            scalars: scalars.clone(),
-            vectors: vectors.clone(),
-        };
-
-        let dimensions = vec![12];
-        let data = vec![
-            DmapType::INT(0),
-            DmapType::INT(1),
-            DmapType::INT(2),
-            DmapType::INT(0),
-            DmapType::INT(1),
-            DmapType::INT(2),
-            DmapType::INT(0),
-            DmapType::INT(1),
-            DmapType::INT(2),
-            DmapType::INT(0),
-            DmapType::INT(1),
-            DmapType::INT(2),
-        ];
-        let vector = RawDmapVector::new(dimensions, data);
-        scalars.insert(
-            "scal".to_string(),
-            RawDmapScalar::new(DmapType::ULONG(123456)),
-        );
-        vectors.insert("arr".to_string(), vector);
-        let rec2 = RawDmapRecord {
-            num_scalars: 1,
-            num_vectors: 1,
-            scalar_list: vec!["scal".to_string()],
-            vector_list: vec!["arr".to_string()],
-            scalars,
-            vectors,
-        };
-
-        let differences = rec1.find_differences(&rec2);
-        // println!("{}", differences);
-        assert_eq!(false, differences.is_empty());
-    }
+    // #[test]
+    // fn record_differences() {
+    //     let scalar = RawDmapScalar::new(DmapType::CHAR(10));
+    //     let mut scalars = HashMap::new();
+    //     scalars.insert("scal".to_string(), scalar);
+    //
+    //     let dimensions = vec![3];
+    //     let data = vec![DmapType::CHAR(0), DmapType::CHAR(1), DmapType::CHAR(2)];
+    //     let vector = RawDmapVector::new(dimensions, data);
+    //     let mut vectors = HashMap::new();
+    //     vectors.insert("arr".to_string(), vector);
+    //
+    //     let rec1 = RawDmapRecord {
+    //         num_scalars: 1,
+    //         num_vectors: 1,
+    //         scalar_list: vec!["scal".to_string()],
+    //         vector_list: vec!["arr".to_string()],
+    //         scalars: scalars.clone(),
+    //         vectors: vectors.clone(),
+    //     };
+    //
+    //     let dimensions = vec![12];
+    //     let data = vec![
+    //         DmapType::INT(0),
+    //         DmapType::INT(1),
+    //         DmapType::INT(2),
+    //         DmapType::INT(0),
+    //         DmapType::INT(1),
+    //         DmapType::INT(2),
+    //         DmapType::INT(0),
+    //         DmapType::INT(1),
+    //         DmapType::INT(2),
+    //         DmapType::INT(0),
+    //         DmapType::INT(1),
+    //         DmapType::INT(2),
+    //     ];
+    //     let vector = RawDmapVector::new(dimensions, data);
+    //     scalars.insert(
+    //         "scal".to_string(),
+    //         RawDmapScalar::new(DmapType::ULONG(123456)),
+    //     );
+    //     vectors.insert("arr".to_string(), vector);
+    //     let rec2 = RawDmapRecord {
+    //         num_scalars: 1,
+    //         num_vectors: 1,
+    //         scalar_list: vec!["scal".to_string()],
+    //         vector_list: vec!["arr".to_string()],
+    //         scalars,
+    //         vectors,
+    //     };
+    //
+    //     let differences = rec1.find_differences(&rec2);
+    //     // println!("{}", differences);
+    //     assert_eq!(false, differences.is_empty());
+    // }
 }
