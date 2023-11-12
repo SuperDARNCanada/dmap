@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use dmap::formats::{DmapRecord, FitacfRecord, IqdatRecord, MapRecord, RawacfRecord};
-use dmap::RawDmapRecord;
+// use dmap::RawDmapRecord;
 use std::fs::File;
 
 fn criterion_benchmark(c: &mut Criterion) {

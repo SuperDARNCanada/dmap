@@ -1350,53 +1350,54 @@ impl DmapRecord for GridRecord {
     }
     fn to_bytes(&self) -> (i32, i32, Vec<u8>) {
         let mut data_bytes: Vec<u8> = vec![];
-        let mut num_scalars: i32 = 12; // number of required scalar fields
+        let num_scalars: i32 = 12; // number of required scalar fields
 
         // scalar fields
-        data_bytes.extend(self.start_year.to_bytes("start.year"))?;
-        data_bytes.extend(self.start_month.to_bytes("start.month"))?;
-        data_bytes.extend(self.start_day.to_bytes("start.day"))?;
-        data_bytes.extend(self.start_hour.to_bytes("start.hour"))?;
-        data_bytes.extend(self.start_minute.to_bytes("start.minute"))?;
-        data_bytes.extend(self.start_second.to_bytes("start.second"))?;
-        data_bytes.extend(self.end_year.to_bytes("end.year"))?;
-        data_bytes.extend(self.end_month.to_bytes("end.month"))?;
-        data_bytes.extend(self.end_day.to_bytes("end.day"))?;
-        data_bytes.extend(self.end_hour.to_bytes("end.hour"))?;
-        data_bytes.extend(self.end_minute.to_bytes("end.minute"))?;
-        data_bytes.extend(self.end_second.to_bytes("end.second"))?;
+        data_bytes.extend(self.start_year.to_bytes("start.year"));
+        data_bytes.extend(self.start_month.to_bytes("start.month"));
+        data_bytes.extend(self.start_day.to_bytes("start.day"));
+        data_bytes.extend(self.start_hour.to_bytes("start.hour"));
+        data_bytes.extend(self.start_minute.to_bytes("start.minute"));
+        data_bytes.extend(self.start_second.to_bytes("start.second"));
+        data_bytes.extend(self.end_year.to_bytes("end.year"));
+        data_bytes.extend(self.end_month.to_bytes("end.month"));
+        data_bytes.extend(self.end_day.to_bytes("end.day"));
+        data_bytes.extend(self.end_hour.to_bytes("end.hour"));
+        data_bytes.extend(self.end_minute.to_bytes("end.minute"));
+        data_bytes.extend(self.end_second.to_bytes("end.second"));
 
         // vector fields
-        data_bytes.extend(self.station_ids.to_bytes("stid"))?;
-        data_bytes.extend(self.channels.to_bytes("channel"))?;
-        data_bytes.extend(self.num_vectors.to_bytes("nvec"))?;
-        data_bytes.extend(self.freq.to_bytes("freq"))?;
-        data_bytes.extend(self.grid_major_revision.to_bytes("major.revision"))?;
-        data_bytes.extend(self.grid_minor_revision.to_bytes("minor.revision"))?;
-        data_bytes.extend(self.program_ids.to_bytes("program.id"))?;
-        data_bytes.extend(self.noise_mean.to_bytes("noise.mean"))?;
-        data_bytes.extend(self.noise_stddev.to_bytes("noise.sd"))?;
-        data_bytes.extend(self.groundscatter.to_bytes("gsct"))?;
-        data_bytes.extend(self.velocity_min.to_bytes("v.min"))?;
-        data_bytes.extend(self.velocity_max.to_bytes("v.max"))?;
-        data_bytes.extend(self.power_min.to_bytes("p.min"))?;
-        data_bytes.extend(self.power_max.to_bytes("p.max"))?;
-        data_bytes.extend(self.spectral_width_min.to_bytes("w.min"))?;
-        data_bytes.extend(self.spectral_width_max.to_bytes("w.max"))?;
-        data_bytes.extend(self.velocity_error_min.to_bytes("ve.min"))?;
-        data_bytes.extend(self.velocity_error_max.to_bytes("ve.max"))?;
-        data_bytes.extend(self.magnetic_lat.to_bytes("vector.mlat"))?;
-        data_bytes.extend(self.magnetic_lon.to_bytes("vector.mlon"))?;
-        data_bytes.extend(self.magnetic_azi.to_bytes("vector.kvect"))?;
-        data_bytes.extend(self.station_id_vector.to_bytes("vector.stid"))?;
-        data_bytes.extend(self.channel_vector.to_bytes("vector.channel"))?;
-        data_bytes.extend(self.grid_cell_index.to_bytes("vector.index"))?;
-        data_bytes.extend(self.velocity_median.to_bytes("vector.vel.median"))?;
-        data_bytes.extend(self.velocity_stddev.to_bytes("vector.vel.sd"))?;
-        data_bytes.extend(self.power_median.to_bytes("vector.pwr.median"))?;
-        data_bytes.extend(self.power_stddev.to_bytes("vector.pwr.sd"))?;
-        data_bytes.extend(self.spectral_width_median.to_bytes("vector.wdt.median"))?;
-        data_bytes.extend(self.spectral_width_stddev.to_bytes("vector.wdt.sd"))?;
+        let num_vectors: i32 = 30;
+        data_bytes.extend(self.station_ids.to_bytes("stid"));
+        data_bytes.extend(self.channels.to_bytes("channel"));
+        data_bytes.extend(self.num_vectors.to_bytes("nvec"));
+        data_bytes.extend(self.freq.to_bytes("freq"));
+        data_bytes.extend(self.grid_major_revision.to_bytes("major.revision"));
+        data_bytes.extend(self.grid_minor_revision.to_bytes("minor.revision"));
+        data_bytes.extend(self.program_ids.to_bytes("program.id"));
+        data_bytes.extend(self.noise_mean.to_bytes("noise.mean"));
+        data_bytes.extend(self.noise_stddev.to_bytes("noise.sd"));
+        data_bytes.extend(self.groundscatter.to_bytes("gsct"));
+        data_bytes.extend(self.velocity_min.to_bytes("v.min"));
+        data_bytes.extend(self.velocity_max.to_bytes("v.max"));
+        data_bytes.extend(self.power_min.to_bytes("p.min"));
+        data_bytes.extend(self.power_max.to_bytes("p.max"));
+        data_bytes.extend(self.spectral_width_min.to_bytes("w.min"));
+        data_bytes.extend(self.spectral_width_max.to_bytes("w.max"));
+        data_bytes.extend(self.velocity_error_min.to_bytes("ve.min"));
+        data_bytes.extend(self.velocity_error_max.to_bytes("ve.max"));
+        data_bytes.extend(self.magnetic_lat.to_bytes("vector.mlat"));
+        data_bytes.extend(self.magnetic_lon.to_bytes("vector.mlon"));
+        data_bytes.extend(self.magnetic_azi.to_bytes("vector.kvect"));
+        data_bytes.extend(self.station_id_vector.to_bytes("vector.stid"));
+        data_bytes.extend(self.channel_vector.to_bytes("vector.channel"));
+        data_bytes.extend(self.grid_cell_index.to_bytes("vector.index"));
+        data_bytes.extend(self.velocity_median.to_bytes("vector.vel.median"));
+        data_bytes.extend(self.velocity_stddev.to_bytes("vector.vel.sd"));
+        data_bytes.extend(self.power_median.to_bytes("vector.pwr.median"));
+        data_bytes.extend(self.power_stddev.to_bytes("vector.pwr.sd"));
+        data_bytes.extend(self.spectral_width_median.to_bytes("vector.wdt.median"));
+        data_bytes.extend(self.spectral_width_stddev.to_bytes("vector.wdt.sd"));
 
         (num_scalars, num_vectors, data_bytes)
     }
