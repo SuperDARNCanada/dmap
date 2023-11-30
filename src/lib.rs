@@ -144,11 +144,61 @@ impl Display for DmapType {
         }
     }
 }
+impl From<u8> for DmapType {
+    fn from(value: u8) -> Self {
+        DmapType::UCHAR(value)
+    }
+}
+impl From<u16> for DmapType {
+    fn from(value: u16) -> Self {
+        DmapType::USHORT(value)
+    }
+}
+impl From<u32> for DmapType {
+    fn from(value: u32) -> Self {
+        DmapType::UINT(value)
+    }
+}
+impl From<u64> for DmapType {
+    fn from(value: u64) -> Self {
+        DmapType::ULONG(value)
+    }
+}
+impl From<i8> for DmapType {
+    fn from(value: i8) -> Self {
+        DmapType::CHAR(value)
+    }
+}
+impl From<i16> for DmapType {
+    fn from(value: i16) -> Self {
+        DmapType::SHORT(value)
+    }
+}
+impl From<i32> for DmapType {
+    fn from(value: i32) -> Self {
+        DmapType::INT(value)
+    }
+}
+impl From<i64> for DmapType {
+    fn from(value: i64) -> Self {
+        DmapType::LONG(value)
+    }
+}
+impl From<f32> for DmapType {
+    fn from(value: f32) -> Self {
+        DmapType::FLOAT(value)
+    }
+}
+impl From<f64> for DmapType {
+    fn from(value: f64) -> Self {
+        DmapType::DOUBLE(value)
+    }
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct RawDmapScalar {
     pub data: DmapType,
-    mode: i8,
+    pub mode: i8,
 }
 impl RawDmapScalar {
     /// Converts into raw bytes
@@ -162,7 +212,7 @@ impl RawDmapScalar {
 
 #[derive(Debug, Clone)]
 pub struct RawDmapVector {
-    mode: i8,
+    pub mode: i8,
     pub dimensions: Vec<i32>,
     pub data: Vec<DmapType>,
 }
