@@ -711,7 +711,7 @@ pub fn get_scalar_val<T: InDmap>(
 
 /// Gets vector value from vectors HashMap and unwraps into the built-in type
 pub fn get_vector_val<T: InDmap>(
-    vectors: &mut std::collections::HashMap<String, RawDmapVector>,
+    vectors: &mut HashMap<String, RawDmapVector>,
     name: &str,
 ) -> Result<DmapVec<T>> {
     if let Some(RawDmapVector {

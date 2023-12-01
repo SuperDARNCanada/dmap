@@ -1212,13 +1212,13 @@ pub struct GridRecord {
     pub start_day: i16,
     pub start_hour: i16,
     pub start_minute: i16,
-    pub start_second: i16,
+    pub start_second: f64,
     pub end_year: i16,
     pub end_month: i16,
     pub end_day: i16,
     pub end_hour: i16,
     pub end_minute: i16,
-    pub end_second: i16,
+    pub end_second: f64,
 
     // vector fields
     pub station_ids: DmapVec<i16>,
@@ -1263,13 +1263,13 @@ impl DmapRecord for GridRecord {
         let start_day = get_scalar_val::<i16>(scalars, "start.day")?;
         let start_hour = get_scalar_val::<i16>(scalars, "start.hour")?;
         let start_minute = get_scalar_val::<i16>(scalars, "start.minute")?;
-        let start_second = get_scalar_val::<i16>(scalars, "start.second")?;
+        let start_second = get_scalar_val::<f64>(scalars, "start.second")?;
         let end_year = get_scalar_val::<i16>(scalars, "end.year")?;
         let end_month = get_scalar_val::<i16>(scalars, "end.month")?;
         let end_day = get_scalar_val::<i16>(scalars, "end.day")?;
         let end_hour = get_scalar_val::<i16>(scalars, "end.hour")?;
         let end_minute = get_scalar_val::<i16>(scalars, "end.minute")?;
-        let end_second = get_scalar_val::<i16>(scalars, "end.second")?;
+        let end_second = get_scalar_val::<f64>(scalars, "end.second")?;
 
         // vector fields
         let station_ids = get_vector_val::<i16>(vectors, "stid")?;
