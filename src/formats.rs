@@ -3,7 +3,6 @@ use crate::{
     DmapVec, InDmap, RawDmapScalar, RawDmapVector,
 };
 use std::collections::HashMap;
-use std::fmt::Display;
 use std::fs::File;
 use std::io::{Cursor, Read, Write};
 use std::path::Path;
@@ -36,9 +35,7 @@ pub trait DmapRecord {
     {
         let mut buffer: Vec<u8> = vec![];
 
-        dmap_data
-            .read_to_end(&mut buffer)
-            .map_err(|_| DmapError::new("Could not read data"))?;
+        dmap_data.read_to_end(&mut buffer)?;
 
         let mut cursor = Cursor::new(buffer);
         let mut dmap_records: Vec<Self> = vec![];
@@ -57,11 +54,11 @@ pub trait DmapRecord {
         let bytes_already_read = cursor.position();
         let _code = match read_data(cursor, DmapType::INT(0))? {
             DmapType::INT(i) => Ok(i),
-            _ => Err(DmapError::CodeError(i)),
+            _ => Err(DmapError::RecordError(format!("Cannot interpret code"))),
         }?;
         let size = match read_data(cursor, DmapType::INT(0))? {
             DmapType::INT(i) => Ok(i),
-            _ => Err(DmapError::new("PARSE RECORD: Invalid size")),
+            _ => Err(DmapError::RecordError(format!("Cannot interpret size"))),
         }?;
 
         // adding 8 bytes because code and size are part of the record.
@@ -69,38 +66,35 @@ pub trait DmapRecord {
             > cursor.get_ref().len() as u64 - cursor.position()
                 + 2 * DmapType::INT(0).get_num_bytes()
         {
-            return Err(DmapError::new(
-                "PARSE RECORD: Integrity check shows record size bigger than \
-                remaining buffer. Data is likely corrupted",
-            ));
+            return Err(DmapError::RecordError(format!(
+                "Record size {size} bigger than remaining buffer"
+            )));
         } else if size <= 0 {
-            return Err(DmapError::new(
-                "PARSE RECORD: Integrity check shows record size <= 0. \
-                Data is likely corrupted",
-            ));
+            return Err(DmapError::RecordError(format!("Record size {size} <= 0")));
         }
 
         let num_scalars = match read_data(cursor, DmapType::INT(0))? {
             DmapType::INT(i) => Ok(i),
-            _ => Err(DmapError::new("PARSE RECORD: Invalid number of scalars")),
+            _ => Err(DmapError::RecordError(format!(
+                "Cannot interpret number of scalars"
+            ))),
         }?;
         let num_vectors = match read_data(cursor, DmapType::INT(0))? {
             DmapType::INT(i) => Ok(i),
-            _ => Err(DmapError::new("PARSE RECORD: Invalid number of vectors")),
+            _ => Err(DmapError::RecordError(format!(
+                "Cannot interpret number of vectors"
+            ))),
         }?;
         if num_scalars <= 0 {
-            return Err(DmapError::new(
-                "PARSE RECORD: Number of scalars is 0 or negative.",
-            ));
+            return Err(DmapError::RecordError(format!(
+                "Number of scalars {num_scalars} <= 0"
+            )));
         } else if num_vectors <= 0 {
-            return Err(DmapError::new(
-                "PARSE RECORD: Number of vectors is 0 or negative.",
-            ));
+            return Err(DmapError::RecordError(format!(
+                "Number of vectors {num_vectors} <= 0"
+            )));
         } else if num_scalars + num_vectors > size {
-            return Err(DmapError::new(
-                "PARSE RECORD: Invalid number of record elements. \
-                Vector or scalar field is likely corrupted.",
-            ));
+            return Err(DmapError::RecordError(format!("Number of scalars {num_scalars} plus vectors {num_vectors} greater than size '{size}'")));
         }
 
         let mut scalars = HashMap::new();
@@ -116,14 +110,11 @@ pub trait DmapRecord {
         }
 
         if cursor.position() - bytes_already_read != size as u64 {
-            return Err(DmapError::new(
-                format!(
-                    "PARSE RECORD: Bytes read {} does not match the records size field {}",
-                    cursor.position() - bytes_already_read,
-                    size
-                )
-                .as_str(),
-            ));
+            return Err(DmapError::RecordError(format!(
+                "Bytes read {} does not match the records size field {}",
+                cursor.position() - bytes_already_read,
+                size
+            )));
         }
 
         Self::new(&mut scalars, &mut vectors)

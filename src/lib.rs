@@ -5,7 +5,7 @@ use std::io::Cursor;
 
 type Result<T> = std::result::Result<T, DmapError>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum DmapError {
     /// Represents an empty source.
     EmptySource,
@@ -17,7 +17,7 @@ pub enum DmapError {
     CorruptDmapError(&'static str),
 
     /// Represents a failure to intepret data from input.
-    CastError { source: dyn std::error::Error, position: usize, kind: &'static str },
+    CastError { position: usize, kind: &'static str },
 
     /// Represents all other cases of `std::io::Error`.
     IOError(std::io::Error),
@@ -28,25 +28,20 @@ pub enum DmapError {
     /// Represents an invalid key for a DMAP type.
     KeyError(i8),
 
-    /// Represents an invalid code for a DMAP record.
-    CodeError(i32),
-
-    /// Represents an invalid size for a DMAP record.
-    SizeError(i32),
+    /// Represents a failure to read a DMAP record.
+    RecordError(String),
 
     /// Represents an invalid scalar field.
-    ScalarError,
+    ScalarError(String),
 
     /// Represents an invalid vector field.
+    VectorError(String),
 }
 impl std::error::Error for DmapError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match *self {
-            DmapError::EmptySource => None,
             DmapError::ReadError { ref source } => Some(source),
-            DmapError::IOError(_) => None,
-            DmapError::ExtractionError => None,
-            DmapError::KeyError(_) => None,
+            _ => None,
         }
     }
 }
@@ -60,14 +55,30 @@ impl std::fmt::Display for DmapError {
             DmapError::ReadError { .. } => {
                 write!(f, "Read error")
             }
-            DmapError::IOError(ref err) => {
-                err.fmt(f)
+            DmapError::CorruptDmapError(s) => {
+                write!(f, "{s}")
             }
+            DmapError::CastError {
+                ref position,
+                ref kind,
+            } => {
+                write!(f, "Unable to interpet value at {position:?} as {kind:?}")
+            }
+            DmapError::IOError(ref err) => err.fmt(f),
             DmapError::ExtractionError => {
                 write!(f, "Extraction error")
             }
             DmapError::KeyError(ref key) => {
                 write!(f, "Invalid key '{:?}'", key)
+            }
+            DmapError::RecordError(ref s) => {
+                write!(f, "{s:?}")
+            }
+            DmapError::ScalarError(ref s) => {
+                write!(f, "{s:?}")
+            }
+            DmapError::VectorError(ref s) => {
+                write!(f, "{s:?}")
             }
         }
     }
@@ -76,13 +87,6 @@ impl std::fmt::Display for DmapError {
 impl From<std::io::Error> for DmapError {
     fn from(err: std::io::Error) -> Self {
         DmapError::IOError(err)
-    }
-}
-impl DmapError {
-    pub fn new(details: &str) -> DmapError {
-        DmapError {
-            details: details.to_string(),
-        }
     }
 }
 
@@ -103,10 +107,6 @@ pub enum DmapType {
     ULONG(u64),
 }
 impl DmapType {
-    fn all_keys() -> Vec<i8> {
-        vec![0, 1, 2, 3, 4, 8, 9, 10, 16, 17, 18, 19]
-    }
-
     /// Gets the number of bytes needed to represent the data.
     fn get_num_bytes(&self) -> u64 {
         match self {
@@ -140,47 +140,6 @@ impl DmapType {
             18 => Ok(DmapType::UINT(0)),
             19 => Ok(DmapType::ULONG(0)),
             _ => Err(DmapError::KeyError(key)),
-        }
-    }
-
-    /// Gets the numeric key for the data type.
-    fn get_key(&self) -> i8 {
-        match self {
-            DmapType::DMAP => 0,
-            DmapType::CHAR(..) => 1,
-            DmapType::SHORT(..) => 2,
-            DmapType::INT(..) => 3,
-            DmapType::FLOAT(..) => 4,
-            DmapType::DOUBLE(..) => 8,
-            DmapType::STRING(..) => 9,
-            DmapType::LONG(..) => 10,
-            DmapType::UCHAR(..) => 16,
-            DmapType::USHORT(..) => 17,
-            DmapType::UINT(..) => 18,
-            DmapType::ULONG(..) => 19,
-        }
-    }
-
-    /// Converts into raw bytes
-    fn to_bytes(&self) -> Vec<u8> {
-        match self {
-            DmapType::DMAP => vec![],
-            DmapType::CHAR(x) => bytemuck::bytes_of(x).to_vec(),
-            DmapType::UCHAR(x) => bytemuck::bytes_of(x).to_vec(),
-            DmapType::SHORT(x) => bytemuck::bytes_of(x).to_vec(),
-            DmapType::USHORT(x) => bytemuck::bytes_of(x).to_vec(),
-            DmapType::INT(x) => bytemuck::bytes_of(x).to_vec(),
-            DmapType::UINT(x) => bytemuck::bytes_of(x).to_vec(),
-            DmapType::LONG(x) => bytemuck::bytes_of(x).to_vec(),
-            DmapType::ULONG(x) => bytemuck::bytes_of(x).to_vec(),
-            DmapType::FLOAT(x) => bytemuck::bytes_of(x).to_vec(),
-            DmapType::DOUBLE(x) => bytemuck::bytes_of(x).to_vec(),
-            DmapType::STRING(x) => {
-                let mut bytes = vec![];
-                bytes.append(&mut x.as_bytes().to_vec());
-                bytes.push(0); // Rust String not null-terminated
-                bytes
-            }
         }
     }
 }
@@ -258,15 +217,6 @@ pub struct RawDmapScalar {
     pub data: DmapType,
     pub mode: i8,
 }
-impl RawDmapScalar {
-    /// Converts into raw bytes
-    fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes: Vec<u8> = vec![];
-        bytes.append(&mut DmapType::CHAR(self.data.get_key()).to_bytes());
-        bytes.append(&mut self.data.to_bytes());
-        bytes
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct RawDmapVector {
@@ -286,163 +236,6 @@ impl PartialEq for RawDmapVector {
         equal
     }
 }
-impl RawDmapVector {
-    /// Converts into raw bytes
-    fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes: Vec<u8> = vec![];
-        bytes.append(&mut DmapType::CHAR(self.data[0].get_key()).to_bytes());
-        bytes.append(&mut DmapType::INT(self.dimensions.len() as i32).to_bytes());
-        for dim in self.dimensions.clone() {
-            bytes.append(&mut DmapType::INT(dim).to_bytes());
-        }
-        for val in self.data.clone() {
-            bytes.append(&mut val.to_bytes());
-        }
-        bytes
-    }
-}
-
-// #[derive(Debug, Clone)]
-// pub struct RawDmapRecord {
-//     pub num_scalars: i32,
-//     pub num_vectors: i32,
-//     pub scalar_list: Vec<String>,
-//     pub vector_list: Vec<String>,
-//     pub scalars: HashMap<String, RawDmapScalar>,
-//     pub vectors: HashMap<String, RawDmapVector>,
-// }
-// impl PartialEq for RawDmapRecord {
-//     fn eq(&self, other: &Self) -> bool {
-//         if !(self.num_scalars == other.num_scalars && self.num_vectors == other.num_vectors) {
-//             return false;
-//         }
-//         for (s1, s2) in self.scalar_list.iter().zip(other.scalar_list.iter()) {
-//             if !(s1 == s2) {
-//                 return false;
-//             }
-//             let scal1 = self.scalars.get(s1);
-//             let scal2 = other.scalars.get(s2);
-//             if !(scal1 == scal2) {
-//                 return false;
-//             }
-//         }
-//         for (a1, a2) in self.vector_list.iter().zip(other.vector_list.iter()) {
-//             if !(a1 == a2) {
-//                 return false;
-//             }
-//             let arr1 = self.vectors.get(a1);
-//             let arr2 = self.vectors.get(a2);
-//             if !(arr1 == arr2) {
-//                 return false;
-//             }
-//         }
-//         true
-//     }
-// }
-// impl RawDmapRecord {
-//     /// Converts into raw bytes
-//     pub fn to_bytes(&self) -> Vec<u8> {
-//         let mut container: Vec<u8> = vec![];
-//         let code = 65537; // No idea why this is what it is, copied from backscatter
-//
-//         let mut data_bytes: Vec<u8> = vec![];
-//         for scalar in &self.scalar_list {
-//             data_bytes.extend(scalar.as_bytes());
-//             data_bytes.push(0); // null-terminate string
-//             data_bytes.extend(
-//                 self.scalars
-//                     .get(scalar)
-//                     .expect(&*format!("{scalar} missing from record"))
-//                     .to_bytes(),
-//             );
-//         }
-//         for vector in &self.vector_list {
-//             data_bytes.extend(vector.as_bytes());
-//             data_bytes.push(0); // null-terminate string
-//             data_bytes.extend(
-//                 self.vectors
-//                     .get(vector)
-//                     .expect(&*format!("{vector} missing from record"))
-//                     .to_bytes(),
-//             );
-//         }
-//
-//         container.extend(DmapType::INT(code).to_bytes());
-//         container.extend(DmapType::INT(data_bytes.len() as i32 + 16).to_bytes()); // +16 for code, length, num_scalars, num_vectors
-//         container.extend(DmapType::INT(self.num_scalars).to_bytes());
-//         container.extend(DmapType::INT(self.num_vectors).to_bytes());
-//         container.extend(data_bytes);
-//         container
-//     }
-//
-//     pub fn find_differences(&self, other: &RawDmapRecord) -> DmapDifference {
-//         let self_scalars = self
-//             .scalar_list
-//             .iter()
-//             .map(|s| s.clone())
-//             .collect::<HashSet<String>>();
-//         let other_scalars = other
-//             .scalar_list
-//             .iter()
-//             .map(|s| s.clone())
-//             .collect::<HashSet<String>>();
-//         let self_unique_scalars = self_scalars
-//             .difference(&other_scalars)
-//             .map(|s| s.clone())
-//             .collect();
-//         let other_unique_scalars = other_scalars
-//             .difference(&self_scalars)
-//             .map(|s| s.clone())
-//             .collect();
-//
-//         let self_vectors = self
-//             .vector_list
-//             .iter()
-//             .map(|v| v.clone())
-//             .collect::<HashSet<String>>();
-//         let other_vectors = other
-//             .vector_list
-//             .iter()
-//             .map(|v| v.clone())
-//             .collect::<HashSet<String>>();
-//         let self_unique_vectors: Vec<String> = self_vectors
-//             .difference(&other_vectors)
-//             .map(|v| v.clone())
-//             .collect();
-//         let other_unique_vectors: Vec<String> = other_vectors
-//             .difference(&self_vectors)
-//             .map(|v| v.clone())
-//             .collect();
-//
-//         let intersecting_scalars = self_scalars.intersection(&other_scalars);
-//         let intersecting_vectors = self_vectors.intersection(&other_vectors);
-//         let mut different_scalars = HashMap::new();
-//         let mut different_vectors = HashMap::new();
-//
-//         for scalar in intersecting_scalars {
-//             let val_1 = self.scalars.get(scalar).unwrap();
-//             let val_2 = other.scalars.get(scalar).unwrap();
-//             if val_1 != val_2 {
-//                 different_scalars.insert(scalar.clone(), (val_1.clone(), val_2.clone()));
-//             }
-//         }
-//         for vector in intersecting_vectors {
-//             let val_1 = self.vectors.get(vector).unwrap();
-//             let val_2 = other.vectors.get(vector).unwrap();
-//             if val_1 != val_2 {
-//                 different_vectors.insert(vector.clone(), (val_1.clone(), val_2.clone()));
-//             }
-//         }
-//         DmapDifference {
-//             unique_scalars_1: self_unique_scalars,
-//             unique_scalars_2: other_unique_scalars,
-//             unique_vectors_1: self_unique_vectors,
-//             unique_vectors_2: other_unique_vectors,
-//             different_scalars,
-//             different_vectors,
-//         }
-//     }
-// }
 
 #[derive(Debug, Default)]
 pub struct DmapDifference {
@@ -741,7 +534,7 @@ pub fn get_scalar_val<T: InDmap>(
     if let Some(RawDmapScalar { data, mode: _ }) = scalars.remove(name) {
         Ok(T::get_inner_value(data)?)
     } else {
-        Err(DmapError::new(format!("{} not found", name).as_str()))
+        Err(DmapError::ScalarError(format!("{} not found", name)))
     }
 }
 
@@ -767,7 +560,7 @@ pub fn get_vector_val<T: InDmap>(
             dimensions,
         })
     } else {
-        Err(DmapError::new(format!("{} not found", name).as_str()))
+        Err(DmapError::VectorError(format!("{} not found", name)))
     }
 }
 
@@ -776,30 +569,18 @@ fn parse_scalar(cursor: &mut Cursor<Vec<u8>>) -> Result<(String, RawDmapScalar)>
     let mode = 6;
     let name = match read_data(cursor, DmapType::STRING("".to_string()))? {
         DmapType::STRING(s) => Ok(s),
-        _ => Err(DmapError::new("PARSE SCALAR: Invalid scalar name")),
+        _ => Err(DmapError::ScalarError(format!("Invalid scalar name"))),
     }?;
     let data_type_key = match read_data(cursor, DmapType::CHAR(0))? {
         DmapType::CHAR(c) => Ok(c),
-        _ => Err(DmapError::new("PARSE SCALAR: Invalid data type")),
+        _ => Err(DmapError::ScalarError(format!("Invalid data type"))),
     }?;
 
-    if !DmapType::all_keys().contains(&data_type_key) {
-        return Err(DmapError::new(
-            format!(
-                "PARSE SCALAR: Data type is corrupted. Record is likely \
-            corrupted. Key {}",
-                DmapType::CHAR(data_type_key)
-            )
-            .as_str(),
-        ));
-    }
-
     let data_type = DmapType::get_type_from_key(data_type_key)?;
-
     let data = match data_type {
-        DmapType::DMAP => Err(DmapError::new(
-            "PARSE SCALAR: Trying to read DMAP data type for a scalar",
-        ))?,
+        DmapType::DMAP => Err(DmapError::ScalarError(format!(
+            "Scalar field cannot be DMAP data type"
+        )))?,
         _ => read_data(cursor, data_type)?,
     };
 
@@ -811,42 +592,35 @@ fn parse_vector(cursor: &mut Cursor<Vec<u8>>, record_size: i32) -> Result<(Strin
     let mode = 7;
     let name = match read_data(cursor, DmapType::STRING("".to_string()))? {
         DmapType::STRING(s) => Ok(s),
-        _ => Err(DmapError::new("PARSE VECTOR: Invalid vector name")),
+        _ => Err(DmapError::VectorError(format!("Invalid vector name"))),
     }?;
     let data_type_key = match read_data(cursor, DmapType::CHAR(0))? {
         DmapType::CHAR(c) => Ok(c),
-        _ => Err(DmapError::new("PARSE VECTOR: Invalid data type")),
+        _ => Err(DmapError::VectorError(format!("Invalid data type"))),
     }?;
-
-    if !DmapType::all_keys().contains(&data_type_key) {
-        return Err(DmapError::new(
-            "PARSE VECTOR: Data type is corrupted. Record is likely \
-            corrupted",
-        ));
-    }
 
     let data_type = DmapType::get_type_from_key(data_type_key)?;
     if let DmapType::DMAP = data_type {
-        Err(DmapError::new(
-            "PARSE VECTOR: Trying to read DMAP data type for a vector",
-        ))?
+        Err(DmapError::VectorError(format!(
+            "Vector field cannot be DMAP data type"
+        )))?
     }
 
     let vector_dimension = match read_data(cursor, DmapType::INT(0))? {
         DmapType::INT(i) => Ok(i),
-        _ => Err(DmapError::new("PARSE VECTOR: Invalid vector dimension")),
+        _ => Err(DmapError::VectorError(format!("Invalid vector dimension"))),
     }?;
 
     if vector_dimension > record_size {
-        return Err(DmapError::new(
-            "PARSE VECTOR: Parsed # of vector dimensions are larger \
-            than record size. Record is likely corrupted",
-        ));
+        return Err(DmapError::VectorError(format!(
+            "Parsed number of vector dimensions are larger \
+            than record size"
+        )));
     } else if vector_dimension <= 0 {
-        return Err(DmapError::new(
-            "PARSE VECTOR: Parsed # of vector dimensions are zero or \
-            negative. Record is likely corrupted",
-        ));
+        return Err(DmapError::VectorError(format!(
+            "Parsed number of vector dimensions are zero or \
+            negative"
+        )));
     }
 
     let mut dimensions: Vec<i32> = vec![];
@@ -854,19 +628,18 @@ fn parse_vector(cursor: &mut Cursor<Vec<u8>>, record_size: i32) -> Result<(Strin
     for _ in 0..vector_dimension {
         let dim = match read_data(cursor, DmapType::INT(0))? {
             DmapType::INT(val) => Ok(val),
-            _ => Err(DmapError::new(
-                "PARSE VECTOR: Vector dimensions could not be parsed",
-            )),
+            _ => Err(DmapError::VectorError(format!(
+                "Vector dimensions could not be parsed"
+            ))),
         }?;
         if dim <= 0 && name != "slist" {
-            return Err(DmapError::new(
-                "PARSE VECTOR: Vector dimension is zero or negative. \
-                Record is likely corrupted",
-            ));
+            return Err(DmapError::VectorError(format!(
+                "Vector dimension is zero or negative"
+            )));
         } else if dim > record_size {
-            return Err(DmapError::new(
-                "PARSE VECTOR: Vector dimension exceeds record size",
-            ));
+            return Err(DmapError::VectorError(format!(
+                "Vector dimension exceeds record size"
+            )));
         }
         dimensions.push(dim);
         total_elements *= dim;
@@ -874,10 +647,9 @@ fn parse_vector(cursor: &mut Cursor<Vec<u8>>, record_size: i32) -> Result<(Strin
     dimensions = dimensions.into_iter().rev().collect(); // reverse the dimensions, stored in column-major order
 
     if total_elements * data_type.get_num_bytes() as i32 > record_size {
-        return Err(DmapError::new(
-            "PARSE VECTOR: Vector size exceeds record size. Data is \
-            likely corrupted",
-        ));
+        return Err(DmapError::VectorError(format!(
+            "Vector size exceeds record size"
+        )));
     }
 
     let mut data = vec![];
@@ -900,9 +672,7 @@ fn read_data(cursor: &mut Cursor<Vec<u8>>, data_type: DmapType) -> Result<DmapTy
     let stream = cursor.get_mut();
 
     if position > stream.len() {
-        return Err(DmapError::CorruptDmapError(
-            "Cursor extends out of buffer",
-        ));
+        return Err(DmapError::CorruptDmapError("Cursor extends out of buffer"));
     }
     if stream.len() - position < data_type.get_num_bytes() as usize {
         return Err(DmapError::CorruptDmapError(
@@ -916,48 +686,75 @@ fn read_data(cursor: &mut Cursor<Vec<u8>>, data_type: DmapType) -> Result<DmapTy
         DmapType::DMAP => Err(DmapError::CorruptDmapError("Data type 'DMAP' unreadable"))?,
         DmapType::UCHAR { .. } => DmapType::UCHAR(data[0]),
         DmapType::CHAR { .. } => {
-            DmapType::CHAR(bytemuck::try_pod_read_unaligned::<i8>(data).map_err(|e| {
-                DmapError::CastError { source: e, position, kind: "i8" }
+            DmapType::CHAR(bytemuck::try_pod_read_unaligned::<i8>(data).map_err(|_| {
+                DmapError::CastError {
+                    position,
+                    kind: "i8",
+                }
             })?)
         }
         DmapType::SHORT { .. } => {
-            DmapType::SHORT(bytemuck::try_pod_read_unaligned::<i16>(data).map_err(|e| {
-                DmapError::CastError { source: e, position, kind: "i16" }
+            DmapType::SHORT(bytemuck::try_pod_read_unaligned::<i16>(data).map_err(|_| {
+                DmapError::CastError {
+                    position,
+                    kind: "i16",
+                }
             })?)
         }
         DmapType::USHORT { .. } => {
-            DmapType::USHORT(bytemuck::try_pod_read_unaligned::<u16>(data).map_err(|e| {
-                DmapError::CastError { source: e, position, kind: "u16" }
+            DmapType::USHORT(bytemuck::try_pod_read_unaligned::<u16>(data).map_err(|_| {
+                DmapError::CastError {
+                    position,
+                    kind: "u16",
+                }
             })?)
         }
         DmapType::INT { .. } => {
-            DmapType::INT(bytemuck::try_pod_read_unaligned::<i32>(data).map_err(|e| {
-                DmapError::CastError { source: e, position, kind: "i32" }
+            DmapType::INT(bytemuck::try_pod_read_unaligned::<i32>(data).map_err(|_| {
+                DmapError::CastError {
+                    position,
+                    kind: "i32",
+                }
             })?)
         }
         DmapType::UINT { .. } => {
-            DmapType::UINT(bytemuck::try_pod_read_unaligned::<u32>(data).map_err(|e| {
-                DmapError::CastError { source: e, position, kind: "u32" }
+            DmapType::UINT(bytemuck::try_pod_read_unaligned::<u32>(data).map_err(|_| {
+                DmapError::CastError {
+                    position,
+                    kind: "u32",
+                }
             })?)
         }
         DmapType::LONG { .. } => {
-            DmapType::LONG(bytemuck::try_pod_read_unaligned::<i64>(data).map_err(|e| {
-                DmapError::CastError { source: e, position, kind: "i64" }
+            DmapType::LONG(bytemuck::try_pod_read_unaligned::<i64>(data).map_err(|_| {
+                DmapError::CastError {
+                    position,
+                    kind: "i64",
+                }
             })?)
         }
         DmapType::ULONG { .. } => {
-            DmapType::ULONG(bytemuck::try_pod_read_unaligned::<u64>(data).map_err(|e| {
-                DmapError::CastError { source: e, position, kind: "u64" }
+            DmapType::ULONG(bytemuck::try_pod_read_unaligned::<u64>(data).map_err(|_| {
+                DmapError::CastError {
+                    position,
+                    kind: "u64",
+                }
             })?)
         }
         DmapType::FLOAT { .. } => {
-            DmapType::FLOAT(bytemuck::try_pod_read_unaligned::<f32>(data).map_err(|e| {
-                DmapError::CastError { source: e, position, kind: "f32" }
+            DmapType::FLOAT(bytemuck::try_pod_read_unaligned::<f32>(data).map_err(|_| {
+                DmapError::CastError {
+                    position,
+                    kind: "f32",
+                }
             })?)
         }
         DmapType::DOUBLE { .. } => {
-            DmapType::DOUBLE(bytemuck::try_pod_read_unaligned::<f64>(data).map_err(|e| {
-                DmapError::CastError { source: e, position, kind: "f64" }
+            DmapType::DOUBLE(bytemuck::try_pod_read_unaligned::<f64>(data).map_err(|_| {
+                DmapError::CastError {
+                    position,
+                    kind: "f64",
+                }
             })?)
         }
         DmapType::STRING { .. } => {
@@ -965,11 +762,16 @@ fn read_data(cursor: &mut Cursor<Vec<u8>>, data_type: DmapType) -> Result<DmapTy
             while stream[position + byte_counter] != 0 {
                 byte_counter += 1;
                 if position + byte_counter >= stream.len() {
-                    return Err(DmapError::CorruptDmapError("String is improperly terminated"));
+                    return Err(DmapError::CorruptDmapError(
+                        "String is improperly terminated",
+                    ));
                 }
             }
             let data = String::from_utf8(stream[position..position + byte_counter].to_owned())
-                .map_err(|e| DmapError::CastError { source: e, position, kind: "String" })?;
+                .map_err(|_| DmapError::CastError {
+                    position,
+                    kind: "String",
+                })?;
             data_size = byte_counter + 1;
             DmapType::STRING(data)
         }
@@ -981,49 +783,7 @@ fn read_data(cursor: &mut Cursor<Vec<u8>>, data_type: DmapType) -> Result<DmapTy
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    impl RawDmapVector {
-        fn new(dimensions: Vec<i32>, data: Vec<DmapType>) -> RawDmapVector {
-            RawDmapVector {
-                dimensions,
-                mode: 7,
-                data,
-            }
-        }
-    }
-
-    impl RawDmapScalar {
-        fn new(data: DmapType) -> RawDmapScalar {
-            RawDmapScalar { data, mode: 6 }
-        }
-    }
-
-    #[test]
-    fn string_to_bytes() {
-        let s = DmapType::STRING("Test".to_string());
-        assert_eq!(s.to_bytes(), vec![84, 101, 115, 116, 0])
-    }
-
-    #[test]
-    fn int_to_bytes() {
-        let i = DmapType::INT(10);
-        assert_eq!(i.to_bytes(), vec![10, 0, 0, 0]) // little-endian
-    }
-
-    #[test]
-    fn scalar_to_bytes() {
-        let scalar = RawDmapScalar::new(DmapType::CHAR(10));
-        assert_eq!(scalar.to_bytes(), vec![1, 10])
-    }
-
-    #[test]
-    fn vector_to_bytes() {
-        let dimensions = vec![3];
-        let data = vec![DmapType::CHAR(0), DmapType::CHAR(1), DmapType::CHAR(2)];
-        let vector = RawDmapVector::new(dimensions, data);
-        assert_eq!(vector.to_bytes(), vec![1, 1, 0, 0, 0, 3, 0, 0, 0, 0, 1, 2])
-    }
+    // use super::*;
 
     // #[test]
     // fn record_to_bytes() {
