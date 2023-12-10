@@ -1,21 +1,81 @@
 pub mod formats;
 
 use std::collections::HashMap;
-use std::error::Error;
-use std::fmt;
-use std::fmt::{Display, Formatter};
 use std::io::Cursor;
 
 type Result<T> = std::result::Result<T, DmapError>;
 
 #[derive(Debug, Clone)]
-pub struct DmapError {
-    pub details: String,
+pub enum DmapError {
+    /// Represents an empty source.
+    EmptySource,
+
+    /// Represents a failure to read from input.
+    ReadError { source: std::io::Error },
+
+    /// Represents invalid conditions when reading from input.
+    CorruptDmapError(&'static str),
+
+    /// Represents a failure to intepret data from input.
+    CastError { source: dyn std::error::Error, position: usize, kind: &'static str },
+
+    /// Represents all other cases of `std::io::Error`.
+    IOError(std::io::Error),
+
+    /// Represents an attempt to extract the wrong type of data.
+    ExtractionError,
+
+    /// Represents an invalid key for a DMAP type.
+    KeyError(i8),
+
+    /// Represents an invalid code for a DMAP record.
+    CodeError(i32),
+
+    /// Represents an invalid size for a DMAP record.
+    SizeError(i32),
+
+    /// Represents an invalid scalar field.
+    ScalarError,
+
+    /// Represents an invalid vector field.
 }
-impl Error for DmapError {}
-impl Display for DmapError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.details)
+impl std::error::Error for DmapError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match *self {
+            DmapError::EmptySource => None,
+            DmapError::ReadError { ref source } => Some(source),
+            DmapError::IOError(_) => None,
+            DmapError::ExtractionError => None,
+            DmapError::KeyError(_) => None,
+        }
+    }
+}
+
+impl std::fmt::Display for DmapError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match *self {
+            DmapError::EmptySource => {
+                write!(f, "Source contains no data")
+            }
+            DmapError::ReadError { .. } => {
+                write!(f, "Read error")
+            }
+            DmapError::IOError(ref err) => {
+                err.fmt(f)
+            }
+            DmapError::ExtractionError => {
+                write!(f, "Extraction error")
+            }
+            DmapError::KeyError(ref key) => {
+                write!(f, "Invalid key '{:?}'", key)
+            }
+        }
+    }
+}
+
+impl From<std::io::Error> for DmapError {
+    fn from(err: std::io::Error) -> Self {
+        DmapError::IOError(err)
     }
 }
 impl DmapError {
@@ -79,9 +139,7 @@ impl DmapType {
             17 => Ok(DmapType::USHORT(0)),
             18 => Ok(DmapType::UINT(0)),
             19 => Ok(DmapType::ULONG(0)),
-            _ => Err(DmapError::new(
-                format!("Invalid key for DMAP type: {}", key).as_str(),
-            )),
+            _ => Err(DmapError::KeyError(key)),
         }
     }
 
@@ -126,8 +184,8 @@ impl DmapType {
         }
     }
 }
-impl Display for DmapType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for DmapType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             DmapType::DMAP => write!(f, "DMAP"),
             DmapType::CHAR(x) => write!(f, "{}", x),
@@ -395,8 +453,8 @@ pub struct DmapDifference {
     pub different_scalars: HashMap<String, (RawDmapScalar, RawDmapScalar)>,
     pub different_vectors: HashMap<String, (RawDmapVector, RawDmapVector)>,
 }
-impl Display for DmapDifference {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for DmapDifference {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut repr = String::new();
         if self.is_empty() {
             return write!(f, "No differences{}", repr);
@@ -484,9 +542,7 @@ impl InDmap for i8 {
         if let DmapType::CHAR(x) = data {
             Ok(x)
         } else {
-            Err(DmapError::new(
-                format!("cannot interpret {data} as i8").as_str(),
-            ))
+            Err(DmapError::ExtractionError)
         }
     }
     fn get_dmap_key() -> u8 {
@@ -501,9 +557,7 @@ impl InDmap for i16 {
         if let DmapType::SHORT(x) = data {
             Ok(x)
         } else {
-            Err(DmapError::new(
-                format!("cannot interpret {data} as i16").as_str(),
-            ))
+            Err(DmapError::ExtractionError)
         }
     }
     fn get_dmap_key() -> u8 {
@@ -518,9 +572,7 @@ impl InDmap for i32 {
         if let DmapType::INT(x) = data {
             Ok(x)
         } else {
-            Err(DmapError::new(
-                format!("cannot interpret {data} as i32").as_str(),
-            ))
+            Err(DmapError::ExtractionError)
         }
     }
     fn get_dmap_key() -> u8 {
@@ -535,9 +587,7 @@ impl InDmap for f32 {
         if let DmapType::FLOAT(x) = data {
             Ok(x)
         } else {
-            Err(DmapError::new(
-                format!("cannot interpret {data} as f32").as_str(),
-            ))
+            Err(DmapError::ExtractionError)
         }
     }
     fn get_dmap_key() -> u8 {
@@ -552,9 +602,7 @@ impl InDmap for f64 {
         if let DmapType::DOUBLE(x) = data {
             Ok(x)
         } else {
-            Err(DmapError::new(
-                format!("cannot interpret {data} as f64").as_str(),
-            ))
+            Err(DmapError::ExtractionError)
         }
     }
     fn get_dmap_key() -> u8 {
@@ -569,9 +617,7 @@ impl InDmap for String {
         if let DmapType::STRING(x) = data {
             Ok(x)
         } else {
-            Err(DmapError::new(
-                format!("cannot interpret {data} as String").as_str(),
-            ))
+            Err(DmapError::ExtractionError)
         }
     }
     fn get_dmap_key() -> u8 {
@@ -588,9 +634,7 @@ impl InDmap for u8 {
         if let DmapType::UCHAR(x) = data {
             Ok(x)
         } else {
-            Err(DmapError::new(
-                format!("cannot interpret {data} as u8").as_str(),
-            ))
+            Err(DmapError::ExtractionError)
         }
     }
     fn get_dmap_key() -> u8 {
@@ -605,9 +649,7 @@ impl InDmap for u16 {
         if let DmapType::USHORT(x) = data {
             Ok(x)
         } else {
-            Err(DmapError::new(
-                format!("cannot interpret {data} as u16").as_str(),
-            ))
+            Err(DmapError::ExtractionError)
         }
     }
     fn get_dmap_key() -> u8 {
@@ -622,9 +664,7 @@ impl InDmap for u32 {
         if let DmapType::UINT(x) = data {
             Ok(x)
         } else {
-            Err(DmapError::new(
-                format!("cannot interpret {data} as u32").as_str(),
-            ))
+            Err(DmapError::ExtractionError)
         }
     }
     fn get_dmap_key() -> u8 {
@@ -639,9 +679,7 @@ impl InDmap for i64 {
         if let DmapType::LONG(x) = data {
             Ok(x)
         } else {
-            Err(DmapError::new(
-                format!("cannot interpret {data} as i64").as_str(),
-            ))
+            Err(DmapError::ExtractionError)
         }
     }
     fn get_dmap_key() -> u8 {
@@ -656,9 +694,7 @@ impl InDmap for u64 {
         if let DmapType::ULONG(x) = data {
             Ok(x)
         } else {
-            Err(DmapError::new(
-                format!("cannot interpret {data} as u64").as_str(),
-            ))
+            Err(DmapError::ExtractionError)
         }
     }
     fn get_dmap_key() -> u8 {
@@ -864,65 +900,64 @@ fn read_data(cursor: &mut Cursor<Vec<u8>>, data_type: DmapType) -> Result<DmapTy
     let stream = cursor.get_mut();
 
     if position > stream.len() {
-        return Err(DmapError::new(
-            "READ DATA: Cursor extends out of buffer. Data is likely corrupted",
+        return Err(DmapError::CorruptDmapError(
+            "Cursor extends out of buffer",
         ));
     }
     if stream.len() - position < data_type.get_num_bytes() as usize {
-        return Err(DmapError::new(
-            "READ DATA: Byte offsets into buffer are not properly aligned. \
-        Data is likely corrupted",
+        return Err(DmapError::CorruptDmapError(
+            "Byte offsets into buffer are not properly aligned",
         ));
     }
 
     let mut data_size = data_type.get_num_bytes() as usize;
     let data: &[u8] = &stream[position..position + data_size];
     let parsed_data = match data_type {
-        DmapType::DMAP => Err(DmapError::new("READ DATA: Data type DMAP unreadable"))?,
+        DmapType::DMAP => Err(DmapError::CorruptDmapError("Data type 'DMAP' unreadable"))?,
         DmapType::UCHAR { .. } => DmapType::UCHAR(data[0]),
         DmapType::CHAR { .. } => {
             DmapType::CHAR(bytemuck::try_pod_read_unaligned::<i8>(data).map_err(|e| {
-                DmapError::new(format!("READ DATA: Unable to interpret char. {}", e).as_str())
+                DmapError::CastError { source: e, position, kind: "i8" }
             })?)
         }
         DmapType::SHORT { .. } => {
             DmapType::SHORT(bytemuck::try_pod_read_unaligned::<i16>(data).map_err(|e| {
-                DmapError::new(format!("READ DATA: Unable to interpret short. {}", e).as_str())
+                DmapError::CastError { source: e, position, kind: "i16" }
             })?)
         }
         DmapType::USHORT { .. } => {
             DmapType::USHORT(bytemuck::try_pod_read_unaligned::<u16>(data).map_err(|e| {
-                DmapError::new(format!("READ DATA: Unable to interpret ushort. {}", e).as_str())
+                DmapError::CastError { source: e, position, kind: "u16" }
             })?)
         }
         DmapType::INT { .. } => {
             DmapType::INT(bytemuck::try_pod_read_unaligned::<i32>(data).map_err(|e| {
-                DmapError::new(format!("READ DATA: Unable to interpret int. {}", e).as_str())
+                DmapError::CastError { source: e, position, kind: "i32" }
             })?)
         }
         DmapType::UINT { .. } => {
             DmapType::UINT(bytemuck::try_pod_read_unaligned::<u32>(data).map_err(|e| {
-                DmapError::new(format!("READ DATA: Unable to interpret uint. {}", e).as_str())
+                DmapError::CastError { source: e, position, kind: "u32" }
             })?)
         }
         DmapType::LONG { .. } => {
             DmapType::LONG(bytemuck::try_pod_read_unaligned::<i64>(data).map_err(|e| {
-                DmapError::new(format!("READ DATA: Unable to interpret long. {}", e).as_str())
+                DmapError::CastError { source: e, position, kind: "i64" }
             })?)
         }
         DmapType::ULONG { .. } => {
             DmapType::ULONG(bytemuck::try_pod_read_unaligned::<u64>(data).map_err(|e| {
-                DmapError::new(format!("READ DATA: Unable to interpret ulong. {}", e).as_str())
+                DmapError::CastError { source: e, position, kind: "u64" }
             })?)
         }
         DmapType::FLOAT { .. } => {
             DmapType::FLOAT(bytemuck::try_pod_read_unaligned::<f32>(data).map_err(|e| {
-                DmapError::new(format!("READ DATA: Unable to interpret float. {}", e).as_str())
+                DmapError::CastError { source: e, position, kind: "f32" }
             })?)
         }
         DmapType::DOUBLE { .. } => {
             DmapType::DOUBLE(bytemuck::try_pod_read_unaligned::<f64>(data).map_err(|e| {
-                DmapError::new(format!("READ DATA: Unable to interpret double. {}", e).as_str())
+                DmapError::CastError { source: e, position, kind: "f64" }
             })?)
         }
         DmapType::STRING { .. } => {
@@ -930,14 +965,11 @@ fn read_data(cursor: &mut Cursor<Vec<u8>>, data_type: DmapType) -> Result<DmapTy
             while stream[position + byte_counter] != 0 {
                 byte_counter += 1;
                 if position + byte_counter >= stream.len() {
-                    return Err(DmapError::new(
-                        "READ DATA: String is improperly terminated. \
-                    Dmap record is corrupted",
-                    ));
+                    return Err(DmapError::CorruptDmapError("String is improperly terminated"));
                 }
             }
             let data = String::from_utf8(stream[position..position + byte_counter].to_owned())
-                .map_err(|_| DmapError::new("READ DATA: Unable to interpret string"))?;
+                .map_err(|e| DmapError::CastError { source: e, position, kind: "String" })?;
             data_size = byte_counter + 1;
             DmapType::STRING(data)
         }

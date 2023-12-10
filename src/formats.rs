@@ -3,23 +3,10 @@ use crate::{
     DmapVec, InDmap, RawDmapScalar, RawDmapVector,
 };
 use std::collections::HashMap;
-use std::error::Error;
-use std::fmt;
 use std::fmt::Display;
 use std::fs::File;
 use std::io::{Cursor, Read, Write};
 use std::path::Path;
-
-#[derive(Debug, Clone)]
-pub struct FileFormatError {
-    details: String,
-}
-impl Error for FileFormatError {}
-impl Display for FileFormatError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.details)
-    }
-}
 
 /// Writes DmapRecords to path as a Vec<u8>
 ///
@@ -70,7 +57,7 @@ pub trait DmapRecord {
         let bytes_already_read = cursor.position();
         let _code = match read_data(cursor, DmapType::INT(0))? {
             DmapType::INT(i) => Ok(i),
-            _ => Err(DmapError::new("PARSE RECORD: Invalid code")),
+            _ => Err(DmapError::CodeError(i)),
         }?;
         let size = match read_data(cursor, DmapType::INT(0))? {
             DmapType::INT(i) => Ok(i),
