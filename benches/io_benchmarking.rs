@@ -4,15 +4,16 @@ use dmap::formats::{DmapRecord, FitacfRecord, IqdatRecord, MapRecord, RawacfReco
 use std::fs::File;
 
 fn criterion_benchmark(c: &mut Criterion) {
-    // c.bench_function("Read IQDAT", |b| b.iter(|| read_iqdat()));
-    // c.bench_function("Read MAP", |b| b.iter(|| read_map()));
+    c.bench_function("Read IQDAT", |b| b.iter(|| read_iqdat()));
     c.bench_function("Read RAWACF", |b| b.iter(|| read_rawacf()));
-    c.bench_function("Read Full-size RAWACF", |b| {
-        b.iter(|| read_fullsize_rawacf())
-    });
-    c.bench_function("Read Full-size FITACF", |b| {
-        b.iter(|| read_fullsize_fitacf())
-    });
+    c.bench_function("Read FITACF", |b| b.iter(|| read_fitacf()));
+    // c.bench_function("Read MAP", |b| b.iter(|| read_map()));
+    // c.bench_function("Read Full-size RAWACF", |b| {
+    //     b.iter(|| read_fullsize_rawacf())
+    // });
+    // c.bench_function("Read Full-size FITACF", |b| {
+    //     b.iter(|| read_fullsize_fitacf())
+    // });
 
     // let records = read_iqdat();
     // c.bench_with_input(

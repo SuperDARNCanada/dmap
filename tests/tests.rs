@@ -20,7 +20,7 @@ use std::path::Path;
 // }
 
 #[test]
-fn test_read_write_iqdat() {
+fn read_write_iqdat() {
     let file = File::open(Path::new("tests/test_files/test.iqdat")).expect("test file not found");
     let contents = IqdatRecord::read_records(file).expect("unable to read test file contents");
 
@@ -35,7 +35,7 @@ fn test_read_write_iqdat() {
 }
 
 #[test]
-fn test_read_write_rawacf() {
+fn read_write_rawacf() {
     let file = File::open(Path::new("tests/test_files/test.rawacf")).expect("test file not found");
     let contents = RawacfRecord::read_records(file).expect("unable to read test file contents");
     println!("{:?}", contents[0].xcfs);
@@ -52,7 +52,7 @@ fn test_read_write_rawacf() {
 }
 
 #[test]
-fn test_read_write_fitacf() {
+fn read_write_fitacf() {
     let file = File::open(Path::new("tests/test_files/test.fitacf")).expect("test file not found");
     let contents = FitacfRecord::read_records(file).expect("unable to read test file contents");
 
@@ -67,7 +67,7 @@ fn test_read_write_fitacf() {
 }
 
 #[test]
-fn test_read_write_map() {
+fn read_write_map() {
     let file = File::open(Path::new("tests/test_files/test.map")).expect("test file not found");
     let contents = MapRecord::read_records(file).expect("unable to read test file contents");
 
