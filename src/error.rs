@@ -9,7 +9,7 @@ pub enum DmapError {
     /// Represents invalid conditions when reading from input.
     CorruptDmapError(&'static str),
 
-    /// Represents a failure to intepret data from input.
+    /// Represents a failure to interpret data from input.
     CastError { position: usize, kind: &'static str },
 
     /// Represents all other cases of `std::io::Error`.
@@ -55,7 +55,7 @@ impl std::fmt::Display for DmapError {
                 ref position,
                 ref kind,
             } => {
-                write!(f, "Unable to interpet value at {position:?} as {kind:?}")
+                write!(f, "Unable to interpret value at {position:?} as {kind:?}")
             }
             DmapError::IOError(ref err) => err.fmt(f),
             DmapError::ExtractionError => {

@@ -486,17 +486,28 @@ fn parse_scalar(cursor: &mut Cursor<Vec<u8>>) -> Result<(String, RawDmapScalar)>
     let mode = 6;
     let name = match read_data(cursor, DmapType::STRING("".to_string()))? {
         DmapType::STRING(s) => Ok(s),
-        _ => Err(DmapError::ScalarError(format!("Invalid scalar name"))),
+        data => Err(DmapError::ScalarError(format!(
+            "Invalid scalar name '{}' starting at byte {}",
+            data,
+            cursor.position() - data.get_num_bytes()
+        ))),
     }?;
     let data_type_key = match read_data(cursor, DmapType::CHAR(0))? {
         DmapType::CHAR(c) => Ok(c),
-        _ => Err(DmapError::ScalarError(format!("Invalid data type"))),
+        data => Err(DmapError::ScalarError(format!(
+            "Invalid data type '{}' for field '{}', byte {}",
+            data,
+            name,
+            cursor.position() - data.get_num_bytes()
+        ))),
     }?;
 
     let data_type = DmapType::get_type_from_key(data_type_key)?;
     let data = match data_type {
         DmapType::DMAP => Err(DmapError::ScalarError(format!(
-            "Scalar field cannot be DMAP data type"
+            "Scalar field '{}' at byte {} cannot have DMAP data type",
+            name,
+            cursor.position() - 1
         )))?,
         _ => read_data(cursor, data_type)?,
     };
@@ -509,34 +520,56 @@ fn parse_vector(cursor: &mut Cursor<Vec<u8>>, record_size: i32) -> Result<(Strin
     let mode = 7;
     let name = match read_data(cursor, DmapType::STRING("".to_string()))? {
         DmapType::STRING(s) => Ok(s),
-        _ => Err(DmapError::VectorError(format!("Invalid vector name"))),
+        data => Err(DmapError::VectorError(format!(
+            "Invalid vector name '{}' starting at byte {}",
+            data,
+            cursor.position() - data.get_num_bytes()
+        ))),
     }?;
     let data_type_key = match read_data(cursor, DmapType::CHAR(0))? {
         DmapType::CHAR(c) => Ok(c),
-        _ => Err(DmapError::VectorError(format!("Invalid data type"))),
+        data => Err(DmapError::VectorError(format!(
+            "Invalid data type for '{}', byte {}",
+            name,
+            cursor.position() - data.get_num_bytes()
+        ))),
     }?;
 
     let data_type = DmapType::get_type_from_key(data_type_key)?;
     if let DmapType::DMAP = data_type {
         Err(DmapError::VectorError(format!(
-            "Vector field cannot be DMAP data type"
+            "Vector field '{}' at byte {} cannot have DMAP data type",
+            name,
+            cursor.position()
         )))?
     }
 
     let vector_dimension = match read_data(cursor, DmapType::INT(0))? {
         DmapType::INT(i) => Ok(i),
-        _ => Err(DmapError::VectorError(format!("Invalid vector dimension"))),
+        data => Err(DmapError::VectorError(format!(
+            "Invalid vector dimension {} for field '{}', byte {}",
+            data,
+            name,
+            cursor.position() - data.get_num_bytes()
+        ))),
     }?;
 
     if vector_dimension > record_size {
         return Err(DmapError::VectorError(format!(
-            "Parsed number of vector dimensions are larger \
-            than record size"
+            "Parsed number of vector dimensions {} for field '{}' at byte {} are larger \
+            than record size {}",
+            vector_dimension,
+            name,
+            cursor.position() - DmapType::INT(0).get_num_bytes(),
+            record_size
         )));
     } else if vector_dimension <= 0 {
         return Err(DmapError::VectorError(format!(
-            "Parsed number of vector dimensions are zero or \
-            negative"
+            "Parsed number of vector dimensions {} for field '{}' at byte {} are zero or \
+            negative",
+            vector_dimension,
+            name,
+            cursor.position() - DmapType::INT(0).get_num_bytes()
         )));
     }
 
@@ -545,17 +578,26 @@ fn parse_vector(cursor: &mut Cursor<Vec<u8>>, record_size: i32) -> Result<(Strin
     for _ in 0..vector_dimension {
         let dim = match read_data(cursor, DmapType::INT(0))? {
             DmapType::INT(val) => Ok(val),
-            _ => Err(DmapError::VectorError(format!(
-                "Vector dimensions could not be parsed"
+            data => Err(DmapError::VectorError(format!(
+                "Vector dimension at byte {} could not be parsed for field '{}'",
+                cursor.position() - data.get_num_bytes(),
+                name
             ))),
         }?;
         if dim <= 0 && name != "slist" {
             return Err(DmapError::VectorError(format!(
-                "Vector dimension is zero or negative"
+                "Vector dimension {} at byte {} is zero or negative for field '{}'",
+                dim,
+                cursor.position() - DmapType::INT(0).get_num_bytes(),
+                name
             )));
         } else if dim > record_size {
             return Err(DmapError::VectorError(format!(
-                "Vector dimension exceeds record size"
+                "Vector dimension {} at byte {} for field '{}' exceeds record size {} ",
+                dim,
+                cursor.position() - DmapType::INT(0).get_num_bytes(),
+                name,
+                record_size,
             )));
         }
         dimensions.push(dim);
@@ -565,7 +607,11 @@ fn parse_vector(cursor: &mut Cursor<Vec<u8>>, record_size: i32) -> Result<(Strin
 
     if total_elements * data_type.get_num_bytes() as i32 > record_size {
         return Err(DmapError::VectorError(format!(
-            "Vector size exceeds record size"
+            "Vector size {} starting at byte {} for field '{}' exceeds record size {}",
+            total_elements * data_type.get_num_bytes() as i32,
+            cursor.position() - vector_dimension as u64 * DmapType::INT(0).get_num_bytes(),
+            name,
+            record_size
         )));
     }
 
