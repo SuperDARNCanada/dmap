@@ -1403,19 +1403,19 @@ pub struct MapRecord {
     model_weight: i16,
     error_weight: i16,
     imf_flag: i16,
-    imf_delay: i16,
-    imf_bx: f64,
-    imf_by: f64,
-    imf_bz: f64,
-    imf_vx: f64,
-    imf_tilt: f64,
-    imf_kp: f64,
+    imf_delay: Option<i16>,      // map_addimf fields
+    imf_bx: Option<f64>,         // map_addimf fields
+    imf_by: Option<f64>,         // map_addimf fields
+    imf_bz: Option<f64>,         // map_addimf fields
+    imf_vx: Option<f64>,         // map_addimf fields
+    imf_tilt: Option<f64>,       // map_addimf fields
+    imf_kp: Option<f64>,         // map_addimf fields
     model_angle: Option<String>, // map_addmodel fields
     model_level: Option<String>, // map_addmodel fields
     model_tilt: Option<String>,  // map_addmodel fields
     model_name: Option<String>,  // map_addmodel fields
     hemisphere: i16,
-    igrf_flag: i16,
+    igrf_flag: Option<i16>,
     fit_order: i16,
     min_latitude: f32,
     chi_squared: f64,
@@ -1499,19 +1499,19 @@ impl DmapRecord for MapRecord {
         let model_weight = get_scalar_val::<i16>(scalars, "model.wt")?;
         let error_weight = get_scalar_val::<i16>(scalars, "error.wt")?;
         let imf_flag = get_scalar_val::<i16>(scalars, "IMF.flag")?;
-        let imf_delay = get_scalar_val::<i16>(scalars, "IMF.delay")?;
-        let imf_bx = get_scalar_val::<f64>(scalars, "IMF.Bx")?;
-        let imf_by = get_scalar_val::<f64>(scalars, "IMF.By")?;
-        let imf_bz = get_scalar_val::<f64>(scalars, "IMF.Bz")?;
-        let imf_vx = get_scalar_val::<f64>(scalars, "IMF.Vx")?;
-        let imf_tilt = get_scalar_val::<f64>(scalars, "IMF.tilt")?;
-        let imf_kp = get_scalar_val::<f64>(scalars, "IMT.Kp")?;
+        let imf_delay = get_scalar_val::<i16>(scalars, "IMF.delay").ok();
+        let imf_bx = get_scalar_val::<f64>(scalars, "IMF.Bx").ok();
+        let imf_by = get_scalar_val::<f64>(scalars, "IMF.By").ok();
+        let imf_bz = get_scalar_val::<f64>(scalars, "IMF.Bz").ok();
+        let imf_vx = get_scalar_val::<f64>(scalars, "IMF.Vx").ok();
+        let imf_tilt = get_scalar_val::<f64>(scalars, "IMF.tilt").ok();
+        let imf_kp = get_scalar_val::<f64>(scalars, "IMT.Kp").ok();
         let model_angle = get_scalar_val::<String>(scalars, "model.angle").ok();
         let model_level = get_scalar_val::<String>(scalars, "model.level").ok();
         let model_tilt = get_scalar_val::<String>(scalars, "model.tilt").ok();
         let model_name = get_scalar_val::<String>(scalars, "model.name").ok();
         let hemisphere = get_scalar_val::<i16>(scalars, "hemisphere")?;
-        let igrf_flag = get_scalar_val::<i16>(scalars, "noigrf")?;
+        let igrf_flag = get_scalar_val::<i16>(scalars, "noigrf").ok();
         let fit_order = get_scalar_val::<i16>(scalars, "fit.order")?;
         let min_latitude = get_scalar_val::<f32>(scalars, "latmin")?;
         let chi_squared = get_scalar_val::<f64>(scalars, "chi.sqr")?;
@@ -1689,13 +1689,34 @@ impl DmapRecord for MapRecord {
         data_bytes.extend(self.model_weight.to_bytes("model.wt"));
         data_bytes.extend(self.error_weight.to_bytes("error.wt"));
         data_bytes.extend(self.imf_flag.to_bytes("IMF.flag"));
-        data_bytes.extend(self.imf_delay.to_bytes("IMF.delay"));
-        data_bytes.extend(self.imf_bx.to_bytes("IMF.Bx"));
-        data_bytes.extend(self.imf_by.to_bytes("IMF.By"));
-        data_bytes.extend(self.imf_bz.to_bytes("IMF.Bz"));
-        data_bytes.extend(self.imf_vx.to_bytes("IMF.Vx"));
-        data_bytes.extend(self.imf_tilt.to_bytes("IMF.tilt"));
-        data_bytes.extend(self.imf_kp.to_bytes("IMF.Kp"));
+        if let Some(x) = &self.imf_delay {
+            data_bytes.extend(x.to_bytes("IMF.delay"));
+            num_scalars += 1;
+        } // map_addimf fields
+        if let Some(x) = &self.imf_bx {
+            data_bytes.extend(x.to_bytes("IMF.Bx"));
+            num_scalars += 1;
+        } // map_addimf fields
+        if let Some(x) = &self.imf_by {
+            data_bytes.extend(x.to_bytes("IMF.By"));
+            num_scalars += 1;
+        } // map_addimf fields
+        if let Some(x) = &self.imf_bz {
+            data_bytes.extend(x.to_bytes("IMF.Bz"));
+            num_scalars += 1;
+        } // map_addimf fields
+        if let Some(x) = &self.imf_vx {
+            data_bytes.extend(x.to_bytes("IMF.Vx"));
+            num_scalars += 1;
+        } // map_addimf fields
+        if let Some(x) = &self.imf_tilt {
+            data_bytes.extend(x.to_bytes("IMF.tilt"));
+            num_scalars += 1;
+        } // map_addimf fields
+        if let Some(x) = &self.imf_kp {
+            data_bytes.extend(x.to_bytes("IMF.Kp"));
+            num_scalars += 1;
+        } // map_addimf fields
         if let Some(x) = &self.model_angle {
             data_bytes.extend(x.to_bytes("model.angle"));
             num_scalars += 1;
@@ -1713,7 +1734,10 @@ impl DmapRecord for MapRecord {
             num_scalars += 1;
         } // map_addmodel fields
         data_bytes.extend(self.hemisphere.to_bytes("hemisphere"));
-        data_bytes.extend(self.igrf_flag.to_bytes("noigrf"));
+        if let Some(x) = &self.igrf_flag {
+            data_bytes.extend(x.to_bytes("noigrf"));
+            num_scalars += 1;
+        }
         data_bytes.extend(self.fit_order.to_bytes("fit.order"));
         data_bytes.extend(self.min_latitude.to_bytes("latmin"));
         data_bytes.extend(self.chi_squared.to_bytes("chi.sqr"));
