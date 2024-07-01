@@ -16,6 +16,7 @@ bytemuck = "1.13.1"
 itertools = "0.10.5"
 pyo3 = {  version = "0.21.0", features = ["extension-module"] }
 numpy = "0.21.0"
+serde = "1.0.160"
 
 [dev-dependencies]
 criterion = { version = "0.4", features = ["html_reports"] }

@@ -1,9 +1,12 @@
 use crate::error::DmapError;
+use numpy::ndarray::{Array, ArrayBase, ArrayD, Dim, IntoDimension, IxDynImpl};
+use numpy::IxDyn;
 use std::collections::HashMap;
 use std::io::Cursor;
 
 type Result<T> = std::result::Result<T, DmapError>;
 
+/// Enum of the different data types supported by the DMAP format.
 #[derive(Debug, Clone, PartialEq)]
 #[repr(C)]
 pub enum Atom {
@@ -131,6 +134,11 @@ impl From<String> for Atom {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Molecule {
+    data: ArrayD<Atom>,
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct DmapScalar {
     pub data: Atom,
@@ -156,89 +164,13 @@ impl PartialEq for DmapVector {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 #[repr(C)]
 pub enum GenericDmap {
     Scalar(Atom),
-    Vector(DmapVec<Atom>),
+    Vector(Molecule),
 }
 
-#[derive(Debug, Default)]
-pub struct DmapDifference {
-    pub unique_scalars_1: Vec<String>,
-    pub unique_scalars_2: Vec<String>,
-    pub unique_vectors_1: Vec<String>,
-    pub unique_vectors_2: Vec<String>,
-    pub different_scalars: HashMap<String, (DmapScalar, DmapScalar)>,
-    pub different_vectors: HashMap<String, (DmapVector, DmapVector)>,
-}
-impl std::fmt::Display for DmapDifference {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut repr = String::new();
-        if self.is_empty() {
-            return write!(f, "No differences{}", repr);
-        }
-        if !self.unique_scalars_1.is_empty() {
-            repr.push_str("Unique scalar fields in left record: ");
-            repr.push_str(&format!("{:?}\n", self.unique_scalars_1));
-        }
-        if !self.unique_scalars_2.is_empty() {
-            repr.push_str("Unique scalar fields in right record: ");
-            repr.push_str(&format!("{:?}\n", self.unique_scalars_2));
-        }
-        if !self.unique_vectors_1.is_empty() {
-            repr.push_str("Unique vector fields in left record: ");
-            repr.push_str(&format!("{:?}\n", self.unique_vectors_1));
-        }
-        if !self.unique_vectors_2.is_empty() {
-            repr.push_str("Unique vector fields in right record: ");
-            repr.push_str(&format!("{:?}\n", self.unique_vectors_2));
-        }
-        if !self.different_scalars.is_empty() {
-            repr.push_str("Different scalar values\n=======================\n");
-            for (key, (left_scal, right_scal)) in self.different_scalars.iter() {
-                repr.push_str(&format!(
-                    "{}:\n\t{:?}\n\t{:?}\n",
-                    key, left_scal, right_scal
-                ));
-            }
-        }
-        if !self.different_vectors.is_empty() {
-            repr.push_str("Different vector values\n=======================\n");
-            for (key, (left_vec, right_vec)) in self.different_vectors.iter() {
-                repr.push_str(&format!("{}:\n\t", key));
-                if left_vec.data.len() > 10 {
-                    repr.push_str(&format!(
-                        "RawDmapVector {{ mode: {}, dimensions: {:?}, data: ... }}",
-                        left_vec.mode, left_vec.dimensions
-                    ));
-                } else {
-                    repr.push_str(&format!("{:?}\n\t", left_vec));
-                }
-                if right_vec.data.len() > 10 {
-                    repr.push_str(&format!(
-                        "RawDmapVector {{ mode: {}, dimensions: {:?}, data: ... }}",
-                        right_vec.mode, right_vec.dimensions
-                    ));
-                } else {
-                    repr.push_str(&format!("{:?}\n", right_vec));
-                }
-            }
-        }
-        write!(f, "{}", repr)
-    }
-}
-impl DmapDifference {
-    /// Returns if the DmapDifference is empty, i.e. there were no differences
-    pub fn is_empty(&self) -> bool {
-        self.unique_scalars_1.len() == 0
-            && self.unique_scalars_2.len() == 0
-            && self.unique_vectors_1.len() == 0
-            && self.unique_vectors_2.len() == 0
-            && self.different_scalars.is_empty()
-            && self.different_vectors.is_empty()
-    }
-}
 
 /// Trait for types that can be stored in DMAP files
 pub trait InDmap {
@@ -465,26 +397,48 @@ pub fn get_scalar_val<T: InDmap>(
 }
 
 /// Gets vector value from vectors HashMap and unwraps into the built-in type
+// pub fn get_vector_val<T: InDmap>(
+//     vectors: &mut HashMap<String, DmapVector>,
+//     name: &str,
+// ) -> Result<DmapVec<T>> {
+//     if let Some(DmapVector {
+//         data,
+//         mode: _,
+//         dimensions,
+//     }) = vectors.remove(name)
+//     {
+//         let arr = data
+//             .into_iter()
+//             .map(|x| {
+//                 T::get_inner_value(x).unwrap_or_else(|_| panic!("error getting vector {name}"))
+//             })
+//             .collect();
+//         Ok(DmapVec {
+//             data: arr,
+//             dimensions,
+//         })
+//     } else {
+//         Err(DmapError::VectorError(format!("{} not found", name)))
+//     }
+// }
 pub fn get_vector_val<T: InDmap>(
     vectors: &mut HashMap<String, DmapVector>,
     name: &str,
-) -> Result<DmapVec<T>> {
+) -> Result<Array<T, IxDyn>> {
     if let Some(DmapVector {
         data,
         mode: _,
         dimensions,
     }) = vectors.remove(name)
     {
-        let arr = data
+        let raw_vec = data
             .into_iter()
             .map(|x| {
                 T::get_inner_value(x).unwrap_or_else(|_| panic!("error getting vector {name}"))
             })
             .collect();
-        Ok(DmapVec {
-            data: arr,
-            dimensions,
-        })
+        let arr = Array::from_shape_vec(<Vec<i32> as TryInto<Vec<usize>>>::try_into(dimensions)?.into_dimension(), raw_vec)?;
+        Ok(arr)
     } else {
         Err(DmapError::VectorError(format!("{} not found", name)))
     }
@@ -755,3 +709,81 @@ pub(crate) fn read_data(cursor: &mut Cursor<Vec<u8>>, data_type: Atom) -> Result
 
     Ok(parsed_data)
 }
+
+
+// #[derive(Debug, Default)]
+// pub struct DmapDifference {
+//     pub unique_scalars_1: Vec<String>,
+//     pub unique_scalars_2: Vec<String>,
+//     pub unique_vectors_1: Vec<String>,
+//     pub unique_vectors_2: Vec<String>,
+//     pub different_scalars: HashMap<String, (DmapScalar, DmapScalar)>,
+//     pub different_vectors: HashMap<String, (DmapVector, DmapVector)>,
+// }
+// impl std::fmt::Display for DmapDifference {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         let mut repr = String::new();
+//         if self.is_empty() {
+//             return write!(f, "No differences{}", repr);
+//         }
+//         if !self.unique_scalars_1.is_empty() {
+//             repr.push_str("Unique scalar fields in left record: ");
+//             repr.push_str(&format!("{:?}\n", self.unique_scalars_1));
+//         }
+//         if !self.unique_scalars_2.is_empty() {
+//             repr.push_str("Unique scalar fields in right record: ");
+//             repr.push_str(&format!("{:?}\n", self.unique_scalars_2));
+//         }
+//         if !self.unique_vectors_1.is_empty() {
+//             repr.push_str("Unique vector fields in left record: ");
+//             repr.push_str(&format!("{:?}\n", self.unique_vectors_1));
+//         }
+//         if !self.unique_vectors_2.is_empty() {
+//             repr.push_str("Unique vector fields in right record: ");
+//             repr.push_str(&format!("{:?}\n", self.unique_vectors_2));
+//         }
+//         if !self.different_scalars.is_empty() {
+//             repr.push_str("Different scalar values\n=======================\n");
+//             for (key, (left_scal, right_scal)) in self.different_scalars.iter() {
+//                 repr.push_str(&format!(
+//                     "{}:\n\t{:?}\n\t{:?}\n",
+//                     key, left_scal, right_scal
+//                 ));
+//             }
+//         }
+//         if !self.different_vectors.is_empty() {
+//             repr.push_str("Different vector values\n=======================\n");
+//             for (key, (left_vec, right_vec)) in self.different_vectors.iter() {
+//                 repr.push_str(&format!("{}:\n\t", key));
+//                 if left_vec.data.len() > 10 {
+//                     repr.push_str(&format!(
+//                         "RawDmapVector {{ mode: {}, dimensions: {:?}, data: ... }}",
+//                         left_vec.mode, left_vec.dimensions
+//                     ));
+//                 } else {
+//                     repr.push_str(&format!("{:?}\n\t", left_vec));
+//                 }
+//                 if right_vec.data.len() > 10 {
+//                     repr.push_str(&format!(
+//                         "RawDmapVector {{ mode: {}, dimensions: {:?}, data: ... }}",
+//                         right_vec.mode, right_vec.dimensions
+//                     ));
+//                 } else {
+//                     repr.push_str(&format!("{:?}\n", right_vec));
+//                 }
+//             }
+//         }
+//         write!(f, "{}", repr)
+//     }
+// }
+// impl DmapDifference {
+//     /// Returns if the DmapDifference is empty, i.e. there were no differences
+//     pub fn is_empty(&self) -> bool {
+//         self.unique_scalars_1.len() == 0
+//             && self.unique_scalars_2.len() == 0
+//             && self.unique_vectors_1.len() == 0
+//             && self.unique_vectors_2.len() == 0
+//             && self.different_scalars.is_empty()
+//             && self.different_vectors.is_empty()
+//     }
+// }
