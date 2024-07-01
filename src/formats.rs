@@ -1,6 +1,7 @@
-use crate::{
-    get_scalar_val, get_vector_val, parse_scalar, parse_vector, read_data, DmapError, DmapType,
-    DmapVec, InDmap, RawDmapScalar, RawDmapVector,
+use crate::error::DmapError;
+use crate::types::{
+    get_scalar_val, get_vector_val, parse_scalar, parse_vector, read_data, Atom, DmapScalar,
+    DmapVec, DmapVector, GenericDmap, InDmap,
 };
 use std::collections::HashMap;
 use std::fs::File;
@@ -52,49 +53,63 @@ pub trait DmapRecord {
         Self: Sized,
     {
         let bytes_already_read = cursor.position();
-        let _code = match read_data(cursor, DmapType::INT(0))? {
-            DmapType::INT(i) => Ok(i),
-            _ => Err(DmapError::RecordError(format!("Cannot interpret code"))),
+        let _code = match read_data(cursor, Atom::INT(0))? {
+            Atom::INT(i) => Ok(i),
+            data => Err(DmapError::RecordError(format!(
+                "Cannot interpret code '{}' at byte {}",
+                data, bytes_already_read
+            ))),
         }?;
-        let size = match read_data(cursor, DmapType::INT(0))? {
-            DmapType::INT(i) => Ok(i),
-            _ => Err(DmapError::RecordError(format!("Cannot interpret size"))),
+        let size = match read_data(cursor, Atom::INT(0))? {
+            Atom::INT(i) => Ok(i),
+            data => Err(DmapError::RecordError(format!(
+                "Cannot interpret size '{}' at byte {}",
+                data,
+                bytes_already_read + Atom::INT(0).get_num_bytes()
+            ))),
         }?;
 
         // adding 8 bytes because code and size are part of the record.
         if size as u64
-            > cursor.get_ref().len() as u64 - cursor.position()
-                + 2 * DmapType::INT(0).get_num_bytes()
+            > cursor.get_ref().len() as u64 - cursor.position() + 2 * Atom::INT(0).get_num_bytes()
         {
             return Err(DmapError::RecordError(format!(
-                "Record size {size} bigger than remaining buffer"
+                "Record size {size} at byte {} bigger than remaining buffer {}",
+                cursor.position() - Atom::INT(0).get_num_bytes(),
+                cursor.get_ref().len() as u64 - cursor.position()
+                    + 2 * Atom::INT(0).get_num_bytes()
             )));
         } else if size <= 0 {
             return Err(DmapError::RecordError(format!("Record size {size} <= 0")));
         }
 
-        let num_scalars = match read_data(cursor, DmapType::INT(0))? {
-            DmapType::INT(i) => Ok(i),
-            _ => Err(DmapError::RecordError(format!(
-                "Cannot interpret number of scalars"
+        let num_scalars = match read_data(cursor, Atom::INT(0))? {
+            Atom::INT(i) => Ok(i),
+            data => Err(DmapError::RecordError(format!(
+                "Cannot interpret number of scalars at byte {}",
+                cursor.position() - data.get_num_bytes()
             ))),
         }?;
-        let num_vectors = match read_data(cursor, DmapType::INT(0))? {
-            DmapType::INT(i) => Ok(i),
-            _ => Err(DmapError::RecordError(format!(
-                "Cannot interpret number of vectors"
+        let num_vectors = match read_data(cursor, Atom::INT(0))? {
+            Atom::INT(i) => Ok(i),
+            data => Err(DmapError::RecordError(format!(
+                "Cannot interpret number of vectors at byte {}",
+                cursor.position() - data.get_num_bytes()
             ))),
         }?;
         if num_scalars <= 0 {
             return Err(DmapError::RecordError(format!(
-                "Number of scalars {num_scalars} <= 0"
+                "Number of scalars {num_scalars} at byte {} <= 0",
+                cursor.position() - 2 * Atom::INT(0).get_num_bytes()
             )));
         } else if num_vectors <= 0 {
             return Err(DmapError::RecordError(format!(
-                "Number of vectors {num_vectors} <= 0"
+                "Number of vectors {num_vectors} at byte {} <= 0",
+                cursor.position() - Atom::INT(0).get_num_bytes()
             )));
         } else if num_scalars + num_vectors > size {
-            return Err(DmapError::RecordError(format!("Number of scalars {num_scalars} plus vectors {num_vectors} greater than size '{size}'")));
+            return Err(DmapError::RecordError(format!(
+                "Number of scalars {num_scalars} plus vectors {num_vectors} greater than size '{size}'")));
         }
 
         let mut scalars = HashMap::new();
@@ -122,8 +137,8 @@ pub trait DmapRecord {
 
     /// Creates a new object from the parsed scalars and vectors
     fn new(
-        scalars: &mut HashMap<String, RawDmapScalar>,
-        vectors: &mut HashMap<String, RawDmapVector>,
+        scalars: &mut HashMap<String, DmapScalar>,
+        vectors: &mut HashMap<String, DmapVector>,
     ) -> Result<Self, DmapError>
     where
         Self: Sized;
@@ -142,6 +157,9 @@ pub trait DmapRecord {
 
     /// Converts only the data within the record to bytes (no metadata)
     fn to_bytes(&self) -> (i32, i32, Vec<u8>);
+
+    /// Creates a Hashmap representation of the record with the traditional DMAP field names
+    fn to_dict(&self) -> HashMap<String, GenericDmap>;
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -215,8 +233,8 @@ pub struct IqdatRecord {
 }
 impl DmapRecord for IqdatRecord {
     fn new(
-        scalars: &mut HashMap<String, RawDmapScalar>,
-        vectors: &mut HashMap<String, RawDmapVector>,
+        scalars: &mut HashMap<String, DmapScalar>,
+        vectors: &mut HashMap<String, DmapVector>,
     ) -> Result<IqdatRecord, DmapError> {
         // scalar fields
         let radar_revision_major = get_scalar_val::<i8>(scalars, "radar.revision.major")?;
@@ -281,8 +299,6 @@ impl DmapRecord for IqdatRecord {
         let sequence_noise = get_vector_val::<f32>(vectors, "tnoise")?;
         let sequence_offset = get_vector_val::<i32>(vectors, "toff")?;
         let sequence_size = get_vector_val::<i32>(vectors, "tsze")?;
-        // let bad_sequence_flag = get_vector_val::<i32>(vectors, "tbadtr")?;
-        // let bad_pulse_flag = get_vector_val::<i32>(vectors, "badtr")?;
         let data = get_vector_val::<i16>(vectors, "data")?;
 
         Ok(IqdatRecord {
@@ -431,6 +447,99 @@ impl DmapRecord for IqdatRecord {
 
         (num_scalars, num_vectors, data_bytes)
     }
+
+    fn to_dict(&self) -> HashMap<String, GenericDmap> {
+        let mut map: HashMap<String, GenericDmap> = HashMap::new();
+
+        // scalar fields
+        map.insert(
+            "radar.revision.major".to_string(),
+            self.radar_revision_major.collect(),
+        );
+        map.insert(
+            "radar.revision.minor".to_string(),
+            self.radar_revision_minor.collect(),
+        );
+        map.insert("origin.code".to_string(), self.origin_code.collect());
+        map.insert(
+            "origin.time".to_string(),
+            self.origin_time.clone().collect(),
+        );
+        map.insert(
+            "origin.command".to_string(),
+            self.origin_command.clone().collect(),
+        );
+        map.insert("cp".to_string(), self.control_program.collect());
+        map.insert("stid".to_string(), self.station_id.collect());
+        map.insert("time.yr".to_string(), self.year.collect());
+        map.insert("time.mo".to_string(), self.month.collect());
+        map.insert("time.dy".to_string(), self.day.collect());
+        map.insert("time.hr".to_string(), self.hour.collect());
+        map.insert("time.mt".to_string(), self.minute.collect());
+        map.insert("time.sc".to_string(), self.second.collect());
+        map.insert("time.us".to_string(), self.microsecond.collect());
+        map.insert("txpow".to_string(), self.tx_power.collect());
+        map.insert("nave".to_string(), self.num_averages.collect());
+        map.insert("atten".to_string(), self.attenuation.collect());
+        map.insert("lagfr".to_string(), self.lag_to_first_range.collect());
+        map.insert("smsep".to_string(), self.sample_separation.collect());
+        map.insert("ercod".to_string(), self.error_code.collect());
+        map.insert("stat.agc".to_string(), self.agc_status.collect());
+        map.insert("stat.lopwr".to_string(), self.low_power_status.collect());
+        map.insert("noise.search".to_string(), self.search_noise.collect());
+        map.insert("noise.mean".to_string(), self.mean_noise.collect());
+        map.insert("channel".to_string(), self.channel.collect());
+        map.insert("bmnum".to_string(), self.beam_num.collect());
+        map.insert("bmazm".to_string(), self.beam_azimuth.collect());
+        map.insert("scan".to_string(), self.scan_flag.collect());
+        map.insert("offset".to_string(), self.offset.collect());
+        map.insert("rxrise".to_string(), self.rx_rise_time.collect());
+        map.insert("intt.sc".to_string(), self.intt_second.collect());
+        map.insert("intt.us".to_string(), self.intt_microsecond.collect());
+        map.insert("txpl".to_string(), self.tx_pulse_length.collect());
+        map.insert("mpinc".to_string(), self.multi_pulse_increment.collect());
+        map.insert("mppul".to_string(), self.num_pulses.collect());
+        map.insert("mplgs".to_string(), self.num_lags.collect());
+        if let Some(x) = self.num_lags_extras {
+            map.insert("mplgexs".to_string(), x.collect());
+        }
+        if let Some(x) = self.if_mode {
+            map.insert("ifmode".to_string(), x.collect());
+        }
+        map.insert("nrang".to_string(), self.num_ranges.collect());
+        map.insert("frang".to_string(), self.first_range.collect());
+        map.insert("rsep".to_string(), self.range_sep.collect());
+        map.insert("xcf".to_string(), self.xcf_flag.collect());
+        map.insert("tfreq".to_string(), self.tx_freq.collect());
+        map.insert("mxpwr".to_string(), self.max_power.collect());
+        map.insert("lvmax".to_string(), self.max_noise_level.collect());
+        map.insert(
+            "iqdata.revision.major".to_string(),
+            self.iqdat_revision_major.collect(),
+        );
+        map.insert(
+            "iqdata.revision.minor".to_string(),
+            self.iqdat_revision_minor.collect(),
+        );
+        map.insert("combf".to_string(), self.comment.clone().collect());
+        map.insert("seqnum".to_string(), self.num_sequences.collect());
+        map.insert("chnnum".to_string(), self.num_channels.collect());
+        map.insert("smpnum".to_string(), self.num_samples.collect());
+        map.insert("skpnum".to_string(), self.num_skipped_samples.collect());
+
+        // vector fields
+        map.insert("ptab".to_string(), self.pulse_table.clone());
+        map.insert("ltab".to_string(), self.lag_table.clone());
+        map.insert("tsc".to_string(), self.seconds_past_epoch.clone());
+        map.insert("tus".to_string(), self.microseconds_past_epoch.clone());
+        map.insert("tatten".to_string(), self.sequence_attenuation.clone());
+        map.insert("tnoise".to_string(), self.sequence_noise.clone());
+        map.insert("toff".to_string(), self.sequence_offset.clone());
+        map.insert("tsze".to_string(), self.sequence_size.clone());
+        map.insert("data".to_string(), self.data.clone());
+
+        map
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -496,8 +605,8 @@ pub struct RawacfRecord {
 }
 impl DmapRecord for RawacfRecord {
     fn new(
-        scalars: &mut HashMap<String, RawDmapScalar>,
-        vectors: &mut HashMap<String, RawDmapVector>,
+        scalars: &mut HashMap<String, DmapScalar>,
+        vectors: &mut HashMap<String, DmapVector>,
     ) -> Result<RawacfRecord, DmapError> {
         // scalar fields
         let radar_revision_major = get_scalar_val::<i8>(scalars, "radar.revision.major")?;
@@ -691,6 +800,88 @@ impl DmapRecord for RawacfRecord {
 
         (num_scalars, num_vectors, data_bytes)
     }
+    fn to_dict(&self) -> HashMap<String, GenericDmap> {
+        let mut map = HashMap::new();
+
+        // scalar fields
+        map.insert(
+            "radar.revision.major".to_string(),
+            self.radar_revision_major.collect(),
+        );
+        map.insert(
+            "radar.revision.minor".to_string(),
+            self.radar_revision_minor.collect(),
+        );
+        map.insert("origin.code".to_string(), self.origin_code.collect());
+        map.insert("origin.time".to_string(), self.origin_time.collect());
+        map.insert("origin.command".to_string(), self.origin_command.collect());
+        map.insert("cp".to_string(), self.control_program.collect());
+        map.insert("stid".to_string(), self.station_id.collect());
+        map.insert("time.yr".to_string(), self.year.collect());
+        map.insert("time.mo".to_string(), self.month.collect());
+        map.insert("time.dy".to_string(), self.day.collect());
+        map.insert("time.hr".to_string(), self.hour.collect());
+        map.insert("time.mt".to_string(), self.minute.collect());
+        map.insert("time.sc".to_string(), self.second.collect());
+        map.insert("time.us".to_string(), self.microsecond.collect());
+        map.insert("txpow".to_string(), self.tx_power.collect());
+        map.insert("nave".to_string(), self.num_averages.collect());
+        map.insert("atten".to_string(), self.attenuation.collect());
+        map.insert("lagfr".to_string(), self.lag_to_first_range.collect());
+        map.insert("smsep".to_string(), self.sample_separation.collect());
+        map.insert("ercod".to_string(), self.error_code.collect());
+        map.insert("stat.agc".to_string(), self.agc_status.collect());
+        map.insert("stat.lopwr".to_string(), self.low_power_status.collect());
+        map.insert("noise.search".to_string(), self.search_noise.collect());
+        map.insert("noise.mean".to_string(), self.mean_noise.collect());
+        map.insert("channel".to_string(), self.channel.collect());
+        map.insert("bmnum".to_string(), self.beam_num.collect());
+        map.insert("bmazm".to_string(), self.beam_azimuth.collect());
+        map.insert("scan".to_string(), self.scan_flag.collect());
+        map.insert("offset".to_string(), self.offset.collect());
+        map.insert("rxrise".to_string(), self.rx_rise_time.collect());
+        map.insert("intt.sc".to_string(), self.intt_second.collect());
+        map.insert("intt.us".to_string(), self.intt_microsecond.collect());
+        map.insert("txpl".to_string(), self.tx_pulse_length.collect());
+        map.insert("mpinc".to_string(), self.multi_pulse_increment.collect());
+        map.insert("mppul".to_string(), self.num_pulses.collect());
+        map.insert("mplgs".to_string(), self.num_lags.collect());
+        if let Some(x) = self.num_lags_extras {
+            map.insert("mplgexs".to_string(), x.collect());
+        }
+        if let Some(x) = self.if_mode {
+            map.insert("ifmode".to_string(), x.collect());
+        }
+        map.insert("nrang".to_string(), self.num_ranges.collect());
+        map.insert("frang".to_string(), self.first_range.collect());
+        map.insert("rsep".to_string(), self.range_sep.collect());
+        map.insert("xcf".to_string(), self.xcf_flag.collect());
+        map.insert("tfreq".to_string(), self.tx_freq.collect());
+        map.insert("mxpwr".to_string(), self.max_power.collect());
+        map.insert("lvmax".to_string(), self.max_noise_level.collect());
+        map.insert("combf".to_string(), self.comment.collect());
+        map.insert(
+            "rawacf.revision.major".to_string(),
+            self.rawacf_revision_major.collect(),
+        );
+        map.insert(
+            "rawacf.revision.minor".to_string(),
+            self.rawacf_revision_minor.collect(),
+        );
+        map.insert("thr".to_string(), self.threshold.collect());
+
+        // vector fields
+        map.insert("ptab".to_string(), self.pulse_table.clone());
+        map.insert("ltab".to_string(), self.lag_table.clone());
+        map.insert("pwr0".to_string(), self.lag_zero_power.clone());
+        map.insert("slist".to_string(), self.range_list.clone());
+        map.insert("acfd".to_string(), self.acfs.clone());
+        if let Some(x) = &self.xcfs {
+            map.insert("xcfd".to_string(), x.clone());
+        }
+
+        map
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -796,8 +987,8 @@ pub struct FitacfRecord {
 }
 impl DmapRecord for FitacfRecord {
     fn new(
-        scalars: &mut HashMap<String, RawDmapScalar>,
-        vectors: &mut HashMap<String, RawDmapVector>,
+        scalars: &mut HashMap<String, DmapScalar>,
+        vectors: &mut HashMap<String, DmapVector>,
     ) -> Result<FitacfRecord, DmapError> {
         // scalar fields
         let radar_revision_major = get_scalar_val::<i8>(scalars, "radar.revision.major")?;
@@ -1180,6 +1371,178 @@ impl DmapRecord for FitacfRecord {
 
         (num_scalars, num_vectors, data_bytes)
     }
+
+    fn to_dict(&self) -> HashMap<String, GenericDmap> {
+        let mut map = HashMap::new();
+
+        // scalar fields
+        map.insert(
+            "radar.revision.major".to_string(),
+            self.radar_revision_major.collect(),
+        );
+        map.insert(
+            "radar.revision.minor".to_string(),
+            self.radar_revision_minor.collect(),
+        );
+        map.insert("origin.code".to_string(), self.origin_code.collect());
+        map.insert("origin.time".to_string(), self.origin_time.collect());
+        map.insert("origin.command".to_string(), self.origin_command.collect());
+        map.insert("cp".to_string(), self.control_program.collect());
+        map.insert("stid".to_string(), self.station_id.collect());
+        map.insert("time.yr".to_string(), self.year.collect());
+        map.insert("time.mo".to_string(), self.month.collect());
+        map.insert("time.dy".to_string(), self.day.collect());
+        map.insert("time.hr".to_string(), self.hour.collect());
+        map.insert("time.mt".to_string(), self.minute.collect());
+        map.insert("time.sc".to_string(), self.second.collect());
+        map.insert("time.us".to_string(), self.microsecond.collect());
+        map.insert("txpow".to_string(), self.tx_power.collect());
+        map.insert("nave".to_string(), self.num_averages.collect());
+        map.insert("atten".to_string(), self.attenuation.collect());
+        map.insert("lagfr".to_string(), self.lag_to_first_range.collect());
+        map.insert("smsep".to_string(), self.sample_separation.collect());
+        map.insert("ercod".to_string(), self.error_code.collect());
+        map.insert("stat.agc".to_string(), self.agc_status.collect());
+        map.insert("stat.lopwr".to_string(), self.low_power_status.collect());
+        map.insert("noise.search".to_string(), self.search_noise.collect());
+        map.insert("noise.mean".to_string(), self.mean_noise.collect());
+        map.insert("channel".to_string(), self.channel.collect());
+        map.insert("bmnum".to_string(), self.beam_num.collect());
+        map.insert("bmazm".to_string(), self.beam_azimuth.collect());
+        map.insert("scan".to_string(), self.scan_flag.collect());
+        map.insert("offset".to_string(), self.offset.collect());
+        map.insert("rxrise".to_string(), self.rx_rise_time.collect());
+        map.insert("intt.sc".to_string(), self.intt_second.collect());
+        map.insert("intt.us".to_string(), self.intt_microsecond.collect());
+        map.insert("txpl".to_string(), self.tx_pulse_length.collect());
+        map.insert("mpinc".to_string(), self.multi_pulse_increment.collect());
+        map.insert("mppul".to_string(), self.num_pulses.collect());
+        map.insert("mplgs".to_string(), self.num_lags.collect());
+        if let Some(x) = self.num_lags_extras {
+            map.insert("mplgexs".to_string(), x.collect());
+        }
+        if let Some(x) = self.if_mode {
+            map.insert("ifmode".to_string(), x.collect());
+        }
+        map.insert("nrang".to_string(), self.num_ranges.collect());
+        map.insert("frang".to_string(), self.first_range.collect());
+        map.insert("rsep".to_string(), self.range_sep.collect());
+        map.insert("xcf".to_string(), self.xcf_flag.collect());
+        map.insert("tfreq".to_string(), self.tx_freq.collect());
+        map.insert("mxpwr".to_string(), self.max_power.collect());
+        map.insert("lvmax".to_string(), self.max_noise_level.collect());
+        map.insert("combf".to_string(), self.comment.collect());
+        if let Some(x) = &self.algorithm {
+            map.insert("algorithm".to_string(), x.collect());
+        }
+        map.insert(
+            "fitacf.revision.major".to_string(),
+            self.fitacf_revision_major.collect(),
+        );
+        map.insert(
+            "fitacf.revision.minor".to_string(),
+            self.fitacf_revision_minor.collect(),
+        );
+        map.insert("noise.sky".to_string(), self.sky_noise.collect());
+        map.insert("noise.lag0".to_string(), self.lag_zero_noise.collect());
+        map.insert("noise.vel".to_string(), self.velocity_noise.collect());
+        if let Some(x) = self.tdiff {
+            map.insert("tdiff".to_string(), x.collect());
+        }
+
+        // vector fields
+        map.insert("ptab".to_string(), self.pulse_table.clone());
+        map.insert("ltab".to_string(), self.lag_table.clone());
+        map.insert("pwr0".to_string(), self.lag_zero_power.clone());
+        map.insert("slist".to_string(), self.range_list.clone());
+        map.insert("nlag".to_string(), self.fitted_points.clone());
+        map.insert("qflg".to_string(), self.quality_flag.clone());
+        map.insert("gflg".to_string(), self.ground_flag.clone());
+        map.insert("p_l".to_string(), self.lambda_power.clone());
+        map.insert("p_l_e".to_string(), self.lambda_power_error.clone());
+        map.insert("p_s".to_string(), self.sigma_power.clone());
+        map.insert("p_s_e".to_string(), self.sigma_power_error.clone());
+        map.insert("v".to_string(), self.velocity.clone());
+        map.insert("v_e".to_string(), self.velocity_error.clone());
+        map.insert("w_l".to_string(), self.lambda_spectral_width.clone());
+        map.insert(
+            "w_l_e".to_string(),
+            self.lambda_spectral_width_error.clone(),
+        );
+        map.insert("w_s".to_string(), self.sigma_spectral_width.clone());
+        map.insert("w_s_e".to_string(), self.sigma_spectral_width_error.clone());
+        map.insert("sd_l".to_string(), self.lambda_std_dev.clone());
+        map.insert("sd_s".to_string(), self.sigma_std_dev.clone());
+        map.insert("sd_phi".to_string(), self.phi_std_dev.clone());
+        if let Some(x) = &self.xcf_quality_flag {
+            map.insert("x_qflg".to_string(), x.clone());
+        }
+        if let Some(x) = &self.xcf_ground_flag {
+            map.insert("x_gflg".to_string(), x.clone());
+        }
+        if let Some(x) = &self.lambda_xcf_power {
+            map.insert("x_p_l".to_string(), x.clone());
+        }
+        if let Some(x) = &self.lambda_xcf_power_error {
+            map.insert("x_p_l_e".to_string(), x.clone());
+        }
+        if let Some(x) = &self.sigma_xcf_power {
+            map.insert("x_p_s".to_string(), x.clone());
+        }
+        if let Some(x) = &self.sigma_xcf_power_error {
+            map.insert("x_p_s_e".to_string(), x.clone());
+        }
+        if let Some(x) = &self.xcf_velocity {
+            map.insert("x_v".to_string(), x.clone());
+        }
+        if let Some(x) = &self.xcf_velocity_error {
+            map.insert("x_v_e".to_string(), x.clone());
+        }
+        if let Some(x) = &self.lambda_xcf_spectral_width {
+            map.insert("x_w_l".to_string(), x.clone());
+        }
+        if let Some(x) = &self.lambda_xcf_spectral_width_error {
+            map.insert("x_w_l_e".to_string(), x.clone());
+        }
+        if let Some(x) = &self.sigma_xcf_spectral_width {
+            map.insert("x_w_s".to_string(), x.clone());
+        }
+        if let Some(x) = &self.sigma_xcf_spectral_width_error {
+            map.insert("x_w_s_e".to_string(), x.clone());
+        }
+        if let Some(x) = &self.lag_zero_phi {
+            map.insert("phi0".to_string(), x.clone());
+        }
+        if let Some(x) = &self.lag_zero_phi_error {
+            map.insert("phi0_e".to_string(), x.clone());
+        }
+        if let Some(x) = &self.elevation {
+            map.insert("elv".to_string(), x.clone());
+        }
+        if let Some(x) = &self.elevation_fitted {
+            map.insert("elv_fitted".to_string(), x.clone());
+        }
+        if let Some(x) = &self.elevation_error {
+            map.insert("elv_error".to_string(), x.clone());
+        }
+        if let Some(x) = &self.elevation_low {
+            map.insert("elv_low".to_string(), x.clone());
+        }
+        if let Some(x) = &self.elevation_high {
+            map.insert("elv_high".to_string(), x.clone());
+        }
+        if let Some(x) = &self.lambda_xcf_std_dev {
+            map.insert("x_sd_l".to_string(), x.clone());
+        }
+        if let Some(x) = &self.sigma_xcf_std_dev {
+            map.insert("x_sd_s".to_string(), x.clone());
+        }
+        if let Some(x) = &self.phi_xcf_std_dev {
+            map.insert("x_sd_phi".to_string(), x.clone());
+        }
+
+        map
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -1232,8 +1595,8 @@ pub struct GridRecord {
 }
 impl DmapRecord for GridRecord {
     fn new(
-        scalars: &mut HashMap<String, RawDmapScalar>,
-        vectors: &mut HashMap<String, RawDmapVector>,
+        scalars: &mut HashMap<String, DmapScalar>,
+        vectors: &mut HashMap<String, DmapVector>,
     ) -> Result<GridRecord, DmapError> {
         // scalar fields
         let start_year = get_scalar_val::<i16>(scalars, "start.year")?;
@@ -1379,6 +1742,111 @@ impl DmapRecord for GridRecord {
 
         (num_scalars, num_vectors, data_bytes)
     }
+    fn to_dict(&self) -> HashMap<String, GenericDmap> {
+        let mut map = HashMap::new();
+
+        // scalar fields
+        map.insert("start.year".to_string(), self.start_year.collect());
+        map.insert("start.month".to_string(), self.start_month.collect());
+        map.insert("start.day".to_string(), self.start_day.collect());
+        map.insert("start.hour".to_string(), self.start_hour.collect());
+        map.insert("start.minute".to_string(), self.start_minute.collect());
+        map.insert("start.second".to_string(), self.start_second.collect());
+        map.insert("end.year".to_string(), self.end_year.collect());
+        map.insert("end.month".to_string(), self.end_month.collect());
+        map.insert("end.day".to_string(), self.end_day.collect());
+        map.insert("end.hour".to_string(), self.end_hour.collect());
+        map.insert("end.minute".to_string(), self.end_minute.collect());
+        map.insert("end.second".to_string(), self.end_second.collect());
+
+        // vector fields
+        map.insert("stid".to_string(), self.station_ids.clone().collect());
+        map.insert("channel".to_string(), self.channels.clone().collect());
+        map.insert("nvec".to_string(), self.num_vectors.clone().collect());
+        map.insert("freq".to_string(), self.freq.clone().collect());
+        map.insert(
+            "major.revision".to_string(),
+            self.grid_major_revision.clone().collect(),
+        );
+        map.insert(
+            "minor.revision".to_string(),
+            self.grid_minor_revision.clone().collect(),
+        );
+        map.insert("program.id".to_string(), self.program_ids.clone().collect());
+        map.insert("noise.mean".to_string(), self.noise_mean.clone().collect());
+        map.insert("noise.sd".to_string(), self.noise_stddev.clone().collect());
+        map.insert("gsct".to_string(), self.groundscatter.clone().collect());
+        map.insert("v.min".to_string(), self.velocity_min.clone().collect());
+        map.insert("v.max".to_string(), self.velocity_max.clone().collect());
+        map.insert("p.min".to_string(), self.power_min.clone().collect());
+        map.insert("p.max".to_string(), self.power_max.clone().collect());
+        map.insert(
+            "w.min".to_string(),
+            self.spectral_width_min.clone().collect(),
+        );
+        map.insert(
+            "w.max".to_string(),
+            self.spectral_width_max.clone().collect(),
+        );
+        map.insert(
+            "ve.min".to_string(),
+            self.velocity_error_min.clone().collect(),
+        );
+        map.insert(
+            "ve.max".to_string(),
+            self.velocity_error_max.clone().collect(),
+        );
+        map.insert(
+            "vector.mlat".to_string(),
+            self.magnetic_lat.clone().collect(),
+        );
+        map.insert(
+            "vector.mlon".to_string(),
+            self.magnetic_lon.clone().collect(),
+        );
+        map.insert(
+            "vector.kvect".to_string(),
+            self.magnetic_azi.clone().collect(),
+        );
+        map.insert(
+            "vector.stid".to_string(),
+            self.station_id_vector.clone().collect(),
+        );
+        map.insert(
+            "vector.channel".to_string(),
+            self.channel_vector.clone().collect(),
+        );
+        map.insert(
+            "vector.index".to_string(),
+            self.grid_cell_index.clone().collect(),
+        );
+        map.insert(
+            "vector.vel.median".to_string(),
+            self.velocity_median.clone().collect(),
+        );
+        map.insert(
+            "vector.vel.sd".to_string(),
+            self.velocity_stddev.clone().collect(),
+        );
+        map.insert(
+            "vector.pwr.median".to_string(),
+            self.power_median.clone().collect(),
+        );
+        map.insert(
+            "vector.pwr.sd".to_string(),
+            self.power_stddev.clone().collect(),
+        );
+        map.insert(
+            "vector.wdt.median".to_string(),
+            self.spectral_width_median.clone().collect(),
+        );
+        map.insert(
+            "vector.wdt.sd".to_string(),
+            self.spectral_width_stddev.clone().collect(),
+        );
+
+        map
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -1477,8 +1945,8 @@ pub struct MapRecord {
 }
 impl DmapRecord for MapRecord {
     fn new(
-        scalars: &mut HashMap<String, RawDmapScalar>,
-        vectors: &mut HashMap<String, RawDmapVector>,
+        scalars: &mut HashMap<String, DmapScalar>,
+        vectors: &mut HashMap<String, DmapVector>,
     ) -> Result<MapRecord, DmapError> {
         let start_year = get_scalar_val::<i16>(scalars, "start.year")?;
         let start_month = get_scalar_val::<i16>(scalars, "start.month")?;
@@ -1841,5 +2309,226 @@ impl DmapRecord for MapRecord {
         }
 
         (num_scalars, num_vectors, data_bytes)
+    }
+
+    fn to_dict(&self) -> HashMap<String, GenericDmap> {
+        let mut map = HashMap::new();
+
+        // scalar fields
+        map.insert("start.year".to_string(), self.start_year.collect());
+        map.insert("start.month".to_string(), self.start_month.collect());
+        map.insert("start.day".to_string(), self.start_day.collect());
+        map.insert("start.hour".to_string(), self.start_hour.collect());
+        map.insert("start.minute".to_string(), self.start_minute.collect());
+        map.insert("start.second".to_string(), self.start_sec.collect());
+        map.insert("end.year".to_string(), self.end_year.collect());
+        map.insert("end.month".to_string(), self.end_month.collect());
+        map.insert("end.day".to_string(), self.end_day.collect());
+        map.insert("end.hour".to_string(), self.end_hour.collect());
+        map.insert("end.minute".to_string(), self.end_minute.collect());
+        map.insert("end.second".to_string(), self.end_second.collect());
+        map.insert(
+            "map.major.revision".to_string(),
+            self.map_major_revision.collect(),
+        );
+        map.insert(
+            "map.minor.revision".to_string(),
+            self.map_minor_revision.collect(),
+        );
+        if let Some(x) = &self.source {
+            map.insert("source".to_string(), x.collect());
+        }
+        map.insert("doping.level", self.doping_level.collect());
+        map.insert("model.wt", self.model_weight.collect());
+        map.insert("error.wt", self.error_weight.collect());
+        map.insert("IMF.flag", self.imf_flag.collect());
+        if let Some(x) = &self.imf_delay {
+            map.insert("IMF.delay".to_string(), x.collect());
+        }
+        if let Some(x) = &self.imf_bx {
+            map.insert("IMF.Bx".to_string(), x.collect());
+        }
+        if let Some(x) = &self.imf_by {
+            map.insert("IMF.By".to_string(), x.collect());
+        }
+        if let Some(x) = &self.imf_bz {
+            map.insert("IMF.Bz".to_string(), x.collect());
+        }
+        if let Some(x) = &self.imf_vx {
+            map.insert("IMF.Vx".to_string(), x.collect());
+        }
+        if let Some(x) = &self.imf_tilt {
+            map.insert("IMF.tilt".to_string(), x.collect());
+        }
+        if let Some(x) = &self.imf_kp {
+            map.insert("IMF.Kp".to_string(), x.collect());
+        }
+        if let Some(x) = &self.model_angle {
+            map.insert("model.angle".to_string(), x.collect());
+        }
+        if let Some(x) = &self.model_level {
+            map.insert("model.level".to_string(), x.collect());
+        }
+        if let Some(x) = &self.model_tilt {
+            map.insert("model.tilt".to_string(), x.collect());
+        }
+        if let Some(x) = &self.model_name {
+            map.insert("model.name".to_string(), x.collect());
+        }
+        if let Some(x) = &self.igrf_flag {
+            map.insert("noigrf".to_string(), x.collect());
+        }
+        map.insert("hemisphere".to_string(), self.hemisphere.collect());
+        map.insert("fit.order".to_string(), self.fit_order.collect());
+        map.insert("latmin".to_string(), self.min_latitude.collect());
+        map.insert("chi.sqr".to_string(), self.chi_squared.collect());
+        map.insert("chi.sqr.dat".to_string(), self.chi_squared_data.collect());
+        map.insert("rms.err".to_string(), self.rms_error.collect());
+        map.insert("lon.shft".to_string(), self.longitude_pole_shift.collect());
+        map.insert("lat.shft".to_string(), self.latitude_pole_shift.collect());
+        map.insert(
+            "mlt.start".to_string(),
+            self.magnetic_local_time_start.collect(),
+        );
+        map.insert(
+            "mlt.end".to_string(),
+            self.magnetic_local_time_end.collect(),
+        );
+        map.insert("mlt.av".to_string(), self.magnetic_local_time_mid.collect());
+        map.insert("pot.drop".to_string(), self.potential_drop.collect());
+        map.insert(
+            "pot.drop.err".to_string(),
+            self.potential_drop_error.collect(),
+        );
+        map.insert("pot.max".to_string(), self.max_potential.collect());
+        map.insert(
+            "pot.max.err".to_string(),
+            self.max_potential_error.collect(),
+        );
+        map.insert("pot.min".to_string(), self.min_potential.collect());
+        map.insert(
+            "pot.min.err".to_string(),
+            self.min_potential_error.collect(),
+        );
+
+        // vector fields
+        map.insert("stid".to_string(), self.station_ids.clone().collect());
+        map.insert("channel".to_string(), self.channels.clone().collect());
+        map.insert("nvec".to_string(), self.num_vectors.clone().collect());
+        map.insert("freq".to_string(), self.frequencies.clone().collect());
+        map.insert(
+            "major.revision".to_string(),
+            self.major_revisions.clone().collect(),
+        );
+        map.insert(
+            "minor.revision".to_string(),
+            self.minor_revisions.clone().collect(),
+        );
+        map.insert("program.id".to_string(), self.program_ids.clone().collect());
+        map.insert("noise.mean".to_string(), self.noise_means.clone().collect());
+        map.insert(
+            "noise.sd".to_string(),
+            self.noise_std_devs.clone().collect(),
+        );
+        map.insert(
+            "gsct".to_string(),
+            self.groundscatter_flags.clone().collect(),
+        );
+        map.insert("v.min".to_string(), self.min_velocities.clone().collect());
+        map.insert("v.max".to_string(), self.max_velocities.clone().collect());
+        map.insert("p.min".to_string(), self.min_powers.clone().collect());
+        map.insert("p.max".to_string(), self.max_powers.clone().collect());
+        map.insert(
+            "w.min".to_string(),
+            self.min_spectral_width.clone().collect(),
+        );
+        map.insert(
+            "w.max".to_string(),
+            self.max_spectral_width.clone().collect(),
+        );
+        map.insert(
+            "ve.min".to_string(),
+            self.velocity_errors_min.clone().collect(),
+        );
+        map.insert(
+            "ve.max".to_string(),
+            self.velocity_errors_max.clone().collect(),
+        );
+        map.insert(
+            "vector.mlat".to_string(),
+            self.magnetic_latitudes.clone().collect(),
+        );
+        map.insert(
+            "vector.mlon".to_string(),
+            self.magnetic_longitudes.clone().collect(),
+        );
+        map.insert(
+            "vector.kvect".to_string(),
+            self.magnetic_azimuth.clone().collect(),
+        );
+        map.insert(
+            "vector.stid".to_string(),
+            self.vector_station_ids.clone().collect(),
+        );
+        map.insert(
+            "vector.channel".to_string(),
+            self.vector_channels.clone().collect(),
+        );
+        map.insert(
+            "vector.index".to_string(),
+            self.vector_index.clone().collect(),
+        );
+        map.insert(
+            "vector.vel.median".to_string(),
+            self.vector_velocity_median.clone().collect(),
+        );
+        map.insert(
+            "vector.vel.sd".to_string(),
+            self.vector_velocity_std_dev.clone().collect(),
+        );
+        if let Some(x) = &self.vector_power_median {
+            map.insert("vector.pwr.median".to_string(), x.clone().collect());
+        }
+        if let Some(x) = &self.vector_power_std_dev {
+            map.insert("vector.pwr.sd".to_string(), x.clone().collect());
+        }
+        if let Some(x) = &self.vector_spectral_width_median {
+            map.insert("vector.wdt.median".to_string(), x.clone().collect());
+        }
+        if let Some(x) = &self.vector_spectral_width_std_dev {
+            map.insert("vector.wdt.sd".to_string(), x.clone().collect());
+        }
+        if let Some(x) = &self.l_value {
+            map.insert("N".to_string(), x.clone().collect());
+        }
+        if let Some(x) = &self.m_value {
+            map.insert("N+1".to_string(), x.clone().collect());
+        }
+        if let Some(x) = &self.coefficient_value {
+            map.insert("N+2".to_string(), x.clone().collect());
+        }
+        if let Some(x) = &self.sigma_error {
+            map.insert("N+3".to_string(), x.clone().collect());
+        }
+        if let Some(x) = &self.model_magnetic_latitude {
+            map.insert("model.mlat".to_string(), x.clone().collect());
+        }
+        if let Some(x) = &self.model_magnetic_longitude {
+            map.insert("model.mlon".to_string(), x.clone().collect());
+        }
+        if let Some(x) = &self.model_magnetic_azimuth {
+            map.insert("model.kvect".to_string(), x.clone().collect());
+        }
+        if let Some(x) = &self.model_velocity_median {
+            map.insert("model.vel.median".to_string(), x.clone().collect());
+        }
+        if let Some(x) = &self.boundary_magnetic_latitude {
+            map.insert("boundary.mlat".to_string(), x.clone().collect());
+        }
+        if let Some(x) = &self.boundary_magnetic_longitude {
+            map.insert("boundary.mlon".to_string(), x.clone().collect());
+        }
+
+        map
     }
 }
