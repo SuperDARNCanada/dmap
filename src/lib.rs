@@ -6,7 +6,6 @@ use crate::formats::dmap::Record;
 use crate::formats::rawacf::RawacfRecord;
 use crate::types::GenericDmap;
 use indexmap::IndexMap;
-use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use std::fs::File;
 use std::io::Write;
@@ -20,7 +19,7 @@ fn read_rawacf(infile: PathBuf) -> PyResult<Vec<IndexMap<String, GenericDmap>>> 
             let new_recs = recs.into_iter().map(|rec| rec.data).collect();
             Ok(new_recs)
         }
-        Err(e) => Err(PyValueError::new_err(format!("{e}"))),
+        Err(e) => Err(PyErr::from(e)),
     }
 }
 

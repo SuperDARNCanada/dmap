@@ -1,7 +1,9 @@
 use crate::error::DmapError;
 use indexmap::IndexMap;
 use numpy::ndarray::{Array1, Array2, Array3};
+use numpy::array::PyArray;
 use std::io::Cursor;
+use pyo3::{IntoPy, PyObject, Python};
 
 type Result<T> = std::result::Result<T, DmapError>;
 
@@ -74,6 +76,24 @@ impl std::fmt::Display for Atom {
             Atom::USHORT(x) => write!(f, "{}", x),
             Atom::UINT(x) => write!(f, "{}", x),
             Atom::ULONG(x) => write!(f, "{}", x),
+        }
+    }
+}
+impl IntoPy<PyObject> for Atom {
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        match self {
+            Atom::DMAP => PyObject::from("DMAP".to_string()),
+            Atom::CHAR(x) => PyObject::from(x),
+            Atom::SHORT(x) => PyObject::from(x),
+            Atom::INT(x) => PyObject::from(x),
+            Atom::FLOAT(x) => PyObject::from(x),
+            Atom::DOUBLE(x) => PyObject::from(x),
+            Atom::STRING(x) => PyObject::from(x),
+            Atom::LONG(x) => PyObject::from(x),
+            Atom::UCHAR(x) => PyObject::from(x),
+            Atom::USHORT(x) => PyObject::from(x),
+            Atom::UINT(x) => PyObject::from(x),
+            Atom::ULONG(x) => PyObject::from(x),
         }
     }
 }
@@ -290,6 +310,16 @@ impl GenericDmap {
         todo!()
     }
 }
+impl IntoPy<PyObject> for GenericDmap {
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        match self {
+            GenericDmap::Scalar(x) => x.into_py(py),
+            GenericDmap::Vec1D(x) => PyArray::from_owned_array_bound(py, x).collect(),
+            GenericDmap::Vec2D(x) => PyArray::from_owned_array_bound(py, x).collect(),
+            GenericDmap::Vec3D(x) => PyArray::from_owned_array_bound(py, x).collect(),
+        }
+    }
+}
 
 /// Trait for types that can be stored in DMAP files
 pub trait InDmap {
@@ -476,33 +506,6 @@ impl InDmap for u64 {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct DmapVec<T>
-where
-    T: InDmap,
-{
-    pub dimensions: Vec<i32>,
-    pub data: Vec<T>,
-}
-impl<T> DmapVec<T>
-where
-    T: InDmap,
-{
-    pub(crate) fn to_bytes(&self, name: &str) -> Vec<u8> {
-        let mut bytes: Vec<u8> = vec![];
-        bytes.extend(name.to_string().data_to_bytes());
-        bytes.push(T::get_dmap_key());
-        bytes.extend((self.dimensions.len() as i32).data_to_bytes());
-        let reversed_dims: Vec<i32> = self.dimensions.clone().into_iter().rev().collect(); // reverse back into column-major order
-        for dim in reversed_dims {
-            bytes.extend(dim.data_to_bytes());
-        }
-        for val in self.data.iter() {
-            bytes.extend(val.data_to_bytes());
-        }
-        bytes
-    }
-}
 
 pub fn check_scalar<T: InDmap + TryFrom<Atom>>(
     fields: &mut IndexMap<String, GenericDmap>,
@@ -516,6 +519,7 @@ pub fn check_scalar<T: InDmap + TryFrom<Atom>>(
         None => Err(DmapError::ScalarError(format!("{name} is not in record"))),
     }
 }
+
 pub fn check_scalar_opt<T: InDmap + TryFrom<Atom>>(
     fields: &mut IndexMap<String, GenericDmap>,
     name: &str,
