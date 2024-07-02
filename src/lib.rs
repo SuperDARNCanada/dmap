@@ -2,20 +2,26 @@ pub mod error;
 pub mod formats;
 pub mod types;
 
+use crate::formats::dmap::Record;
 use crate::formats::rawacf::RawacfRecord;
-use crate::formats::dmap::DmapRecord;
+use crate::types::GenericDmap;
+use indexmap::IndexMap;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::PyList;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 #[pyfunction]
-fn read_rawacf(infile: PathBuf) -> PyResult<PyList> {
+fn read_rawacf(infile: PathBuf) -> PyResult<Vec<IndexMap<String, GenericDmap>>> {
     let file = File::open(infile)?;
-    let contents = RawacfRecord::read_records(file)?;
-
-    Ok(vec![].collect())
+    match RawacfRecord::read_records(file) {
+        Ok(recs) => {
+            let new_recs = recs.into_iter().map(|rec| rec.data).collect();
+            Ok(new_recs)
+        }
+        Err(e) => Err(PyValueError::new_err(format!("{e}"))),
+    }
 }
 
 /// Functions for SuperDARN DMAP file format I/O.
@@ -29,10 +35,7 @@ fn dmap(m: &Bound<'_, PyModule>) -> PyResult<()> {
 ///
 /// # Failures
 /// If file cannot be created at path or data cannot be written to file.
-pub fn to_file<P: AsRef<Path>, T: DmapRecord>(
-    path: P,
-    dmap_records: &Vec<T>,
-) -> std::io::Result<()> {
+pub fn to_file<P: AsRef<Path>, T: Record>(path: P, dmap_records: &Vec<T>) -> std::io::Result<()> {
     let mut stream = vec![];
     for rec in dmap_records {
         stream.append(&mut rec.to_dmap());

@@ -1,3 +1,6 @@
+use pyo3::exceptions::PyValueError;
+use pyo3::PyErr;
+
 #[derive(Debug)]
 pub enum DmapError {
     /// Represents an empty source.
@@ -80,5 +83,11 @@ impl std::fmt::Display for DmapError {
 impl From<std::io::Error> for DmapError {
     fn from(err: std::io::Error) -> Self {
         DmapError::IOError(err)
+    }
+}
+
+impl From<DmapError> for PyErr {
+    fn from(value: DmapError) -> Self {
+        PyValueError::new_err(format!("{value}"))
     }
 }

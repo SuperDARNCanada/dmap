@@ -1,9 +1,11 @@
-use std::collections::HashMap;
-use std::io::{Cursor, Read};
 use crate::error::DmapError;
-use crate::types::{Atom, DmapScalar, DmapVector, GenericDmap, InDmap, parse_scalar, parse_vector, read_data};
+use crate::types::GenericDmap::{Scalar, Vec1D, Vec2D, Vec3D};
+use crate::types::{parse_scalar, parse_vector, read_data, Atom, GenericDmap, InDmap};
+use indexmap::IndexMap;
+use numpy::ndarray::Array;
+use std::io::{Cursor, Read};
 
-pub trait DmapRecord {
+pub trait Record {
     /// Reads from dmap_data and parses into a collection of RawDmapRecord's.
     ///
     /// # Failures
@@ -90,16 +92,52 @@ pub trait DmapRecord {
                 "Number of scalars {num_scalars} plus vectors {num_vectors} greater than size '{size}'")));
         }
 
-        let mut scalars = HashMap::new();
+        let mut fields: IndexMap<String, GenericDmap> = IndexMap::new();
         for _ in 0..num_scalars {
             let (name, val) = parse_scalar(cursor)?;
-            scalars.insert(name, val);
+            fields.insert(name, Scalar(val.data));
         }
-
-        let mut vectors = HashMap::new();
         for _ in 0..num_vectors {
             let (name, val) = parse_vector(cursor, size)?;
-            vectors.insert(name, val);
+            match val.dimensions.len() {
+                1 => {
+                    fields.insert(name, Vec1D(Array::from_vec(val.data)));
+                }
+                2 => {
+                    fields.insert(
+                        name,
+                        Vec2D(
+                            Array::from_shape_vec(
+                                (val.dimensions[0] as usize, val.dimensions[1] as usize),
+                                val.data,
+                            )
+                            .map_err(|e| DmapError::VectorError(format!("{e}")))?,
+                        ),
+                    );
+                }
+                3 => {
+                    fields.insert(
+                        name,
+                        Vec3D(
+                            Array::from_shape_vec(
+                                (
+                                    val.dimensions[0] as usize,
+                                    val.dimensions[1] as usize,
+                                    val.dimensions[2] as usize,
+                                ),
+                                val.data,
+                            )
+                            .map_err(|e| DmapError::VectorError(format!("{e}")))?,
+                        ),
+                    );
+                }
+                _ => {
+                    return Err(DmapError::VectorError(format!(
+                        "Vector {name} has invalid number of dimensions {}",
+                        val.dimensions.len()
+                    )))
+                }
+            };
         }
 
         if cursor.position() - bytes_already_read != size as u64 {
@@ -110,14 +148,11 @@ pub trait DmapRecord {
             )));
         }
 
-        Self::new(&mut scalars, &mut vectors)
+        Self::new(&mut fields)
     }
 
     /// Creates a new object from the parsed scalars and vectors
-    fn new(
-        scalars: &mut HashMap<String, DmapScalar>,
-        vectors: &mut HashMap<String, DmapVector>,
-    ) -> Result<Self, DmapError>
+    fn new(fields: &mut IndexMap<String, GenericDmap>) -> Result<Self, DmapError>
     where
         Self: Sized;
 
@@ -135,7 +170,4 @@ pub trait DmapRecord {
 
     /// Converts only the data within the record to bytes (no metadata)
     fn to_bytes(&self) -> (i32, i32, Vec<u8>);
-
-    /// Creates a Hashmap representation of the record with the traditional DMAP field names
-    fn to_dict(&self) -> HashMap<String, GenericDmap>;
 }

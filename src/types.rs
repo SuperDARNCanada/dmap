@@ -1,7 +1,6 @@
 use crate::error::DmapError;
-use numpy::ndarray::{Array, ArrayBase, ArrayD, Dim, IntoDimension, IxDynImpl};
-use numpy::IxDyn;
-use std::collections::HashMap;
+use indexmap::IndexMap;
+use numpy::ndarray::{Array1, Array2, Array3};
 use std::io::Cursor;
 
 type Result<T> = std::result::Result<T, DmapError>;
@@ -83,9 +82,31 @@ impl From<u8> for Atom {
         Atom::UCHAR(value)
     }
 }
+impl TryFrom<Atom> for u8 {
+    type Error = DmapError;
+    fn try_from(value: Atom) -> std::result::Result<u8, Self::Error> {
+        match value {
+            Atom::UCHAR(x) => Ok(x),
+            _ => Err(DmapError::ScalarError(
+                "Scalar type is not UCHAR".to_string(),
+            )),
+        }
+    }
+}
 impl From<u16> for Atom {
     fn from(value: u16) -> Self {
         Atom::USHORT(value)
+    }
+}
+impl TryFrom<Atom> for u16 {
+    type Error = DmapError;
+    fn try_from(value: Atom) -> std::result::Result<u16, Self::Error> {
+        match value {
+            Atom::USHORT(x) => Ok(x),
+            _ => Err(DmapError::ScalarError(
+                "Scalar type is not USHORT".to_string(),
+            )),
+        }
     }
 }
 impl From<u32> for Atom {
@@ -93,9 +114,31 @@ impl From<u32> for Atom {
         Atom::UINT(value)
     }
 }
+impl TryFrom<Atom> for u32 {
+    type Error = DmapError;
+    fn try_from(value: Atom) -> std::result::Result<u32, Self::Error> {
+        match value {
+            Atom::UINT(x) => Ok(x),
+            _ => Err(DmapError::ScalarError(
+                "Scalar type is not UINT".to_string(),
+            )),
+        }
+    }
+}
 impl From<u64> for Atom {
     fn from(value: u64) -> Self {
         Atom::ULONG(value)
+    }
+}
+impl TryFrom<Atom> for u64 {
+    type Error = DmapError;
+    fn try_from(value: Atom) -> std::result::Result<u64, Self::Error> {
+        match value {
+            Atom::ULONG(x) => Ok(x),
+            _ => Err(DmapError::ScalarError(
+                "Scalar type is not ULONG".to_string(),
+            )),
+        }
     }
 }
 impl From<i8> for Atom {
@@ -103,9 +146,31 @@ impl From<i8> for Atom {
         Atom::CHAR(value)
     }
 }
+impl TryFrom<Atom> for i8 {
+    type Error = DmapError;
+    fn try_from(value: Atom) -> std::result::Result<i8, Self::Error> {
+        match value {
+            Atom::CHAR(x) => Ok(x),
+            _ => Err(DmapError::ScalarError(
+                "Scalar type is not CHAR".to_string(),
+            )),
+        }
+    }
+}
 impl From<i16> for Atom {
     fn from(value: i16) -> Self {
         Atom::SHORT(value)
+    }
+}
+impl TryFrom<Atom> for i16 {
+    type Error = DmapError;
+    fn try_from(value: Atom) -> std::result::Result<i16, Self::Error> {
+        match value {
+            Atom::SHORT(x) => Ok(x),
+            _ => Err(DmapError::ScalarError(
+                "Scalar type is not SHORT".to_string(),
+            )),
+        }
     }
 }
 impl From<i32> for Atom {
@@ -113,9 +178,29 @@ impl From<i32> for Atom {
         Atom::INT(value)
     }
 }
+impl TryFrom<Atom> for i32 {
+    type Error = DmapError;
+    fn try_from(value: Atom) -> std::result::Result<i32, Self::Error> {
+        match value {
+            Atom::INT(x) => Ok(x),
+            _ => Err(DmapError::ScalarError("Scalar type is not INT".to_string())),
+        }
+    }
+}
 impl From<i64> for Atom {
     fn from(value: i64) -> Self {
         Atom::LONG(value)
+    }
+}
+impl TryFrom<Atom> for i64 {
+    type Error = DmapError;
+    fn try_from(value: Atom) -> std::result::Result<i64, Self::Error> {
+        match value {
+            Atom::LONG(x) => Ok(x),
+            _ => Err(DmapError::ScalarError(
+                "Scalar type is not LONG".to_string(),
+            )),
+        }
     }
 }
 impl From<f32> for Atom {
@@ -123,9 +208,31 @@ impl From<f32> for Atom {
         Atom::FLOAT(value)
     }
 }
+impl TryFrom<Atom> for f32 {
+    type Error = DmapError;
+    fn try_from(value: Atom) -> std::result::Result<f32, Self::Error> {
+        match value {
+            Atom::FLOAT(x) => Ok(x),
+            _ => Err(DmapError::ScalarError(
+                "Scalar type is not FLOAT".to_string(),
+            )),
+        }
+    }
+}
 impl From<f64> for Atom {
     fn from(value: f64) -> Self {
         Atom::DOUBLE(value)
+    }
+}
+impl TryFrom<Atom> for f64 {
+    type Error = DmapError;
+    fn try_from(value: Atom) -> std::result::Result<f64, Self::Error> {
+        match value {
+            Atom::DOUBLE(x) => Ok(x),
+            _ => Err(DmapError::ScalarError(
+                "Scalar type is not DOUBLE".to_string(),
+            )),
+        }
     }
 }
 impl From<String> for Atom {
@@ -133,10 +240,16 @@ impl From<String> for Atom {
         Atom::STRING(value)
     }
 }
-
-#[derive(Debug, Clone)]
-pub struct Molecule {
-    data: ArrayD<Atom>,
+impl TryFrom<Atom> for String {
+    type Error = DmapError;
+    fn try_from(value: Atom) -> std::result::Result<String, Self::Error> {
+        match value {
+            Atom::STRING(x) => Ok(x),
+            _ => Err(DmapError::ScalarError(
+                "Scalar type is not STRING".to_string(),
+            )),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -168,15 +281,22 @@ impl PartialEq for DmapVector {
 #[repr(C)]
 pub enum GenericDmap {
     Scalar(Atom),
-    Vector(Molecule),
+    Vec1D(Array1<Atom>),
+    Vec2D(Array2<Atom>),
+    Vec3D(Array3<Atom>),
 }
-
+impl GenericDmap {
+    pub fn to_bytes(&self, name: &str) -> Vec<u8> {
+        todo!()
+    }
+}
 
 /// Trait for types that can be stored in DMAP files
 pub trait InDmap {
     fn get_inner_value(data: Atom) -> Result<Self>
     where
         Self: Sized;
+
     fn to_bytes(&self, name: &str) -> Vec<u8> {
         let mut bytes = vec![];
         bytes.extend(name.to_string().data_to_bytes());
@@ -384,63 +504,70 @@ where
     }
 }
 
-/// Gets scalar value from scalars HashMap and unwraps into the built-in type
-pub fn get_scalar_val<T: InDmap>(
-    scalars: &mut HashMap<String, DmapScalar>,
+pub fn check_scalar<T: InDmap + TryFrom<Atom>>(
+    fields: &mut IndexMap<String, GenericDmap>,
     name: &str,
-) -> Result<T> {
-    if let Some(DmapScalar { data, mode: _ }) = scalars.remove(name) {
-        Ok(T::get_inner_value(data)?)
-    } else {
-        Err(DmapError::ScalarError(format!("{} not found", name)))
+) -> Result<()> {
+    match fields.get(name) {
+        Some(&GenericDmap::Scalar(data)) => T::try_from(data)
+            .map(|_| ())
+            .map_err(|_| DmapError::ScalarError(format!("Incorrect type for {name}"))),
+        Some(_) => Err(DmapError::ScalarError(format!("{name} is a vector field"))),
+        None => Err(DmapError::ScalarError(format!("{name} is not in record"))),
+    }
+}
+pub fn check_scalar_opt<T: InDmap + TryFrom<Atom>>(
+    fields: &mut IndexMap<String, GenericDmap>,
+    name: &str,
+) -> Result<()> {
+    match fields.get(name) {
+        Some(&GenericDmap::Scalar(data)) => T::try_from(data)
+            .map(|_| ())
+            .map_err(|_| DmapError::ScalarError(format!("Incorrect type for {name}"))),
+        Some(_) => Err(DmapError::ScalarError(format!("{name} is a vector field"))),
+        None => Ok(()),
     }
 }
 
-/// Gets vector value from vectors HashMap and unwraps into the built-in type
-// pub fn get_vector_val<T: InDmap>(
-//     vectors: &mut HashMap<String, DmapVector>,
-//     name: &str,
-// ) -> Result<DmapVec<T>> {
-//     if let Some(DmapVector {
-//         data,
-//         mode: _,
-//         dimensions,
-//     }) = vectors.remove(name)
-//     {
-//         let arr = data
-//             .into_iter()
-//             .map(|x| {
-//                 T::get_inner_value(x).unwrap_or_else(|_| panic!("error getting vector {name}"))
-//             })
-//             .collect();
-//         Ok(DmapVec {
-//             data: arr,
-//             dimensions,
-//         })
-//     } else {
-//         Err(DmapError::VectorError(format!("{} not found", name)))
-//     }
-// }
-pub fn get_vector_val<T: InDmap>(
-    vectors: &mut HashMap<String, DmapVector>,
+pub fn check_vector<T: InDmap + TryFrom<Atom>>(
+    fields: &mut IndexMap<String, GenericDmap>,
     name: &str,
-) -> Result<Array<T, IxDyn>> {
-    if let Some(DmapVector {
-        data,
-        mode: _,
-        dimensions,
-    }) = vectors.remove(name)
-    {
-        let raw_vec = data
-            .into_iter()
-            .map(|x| {
-                T::get_inner_value(x).unwrap_or_else(|_| panic!("error getting vector {name}"))
-            })
-            .collect();
-        let arr = Array::from_shape_vec(<Vec<i32> as TryInto<Vec<usize>>>::try_into(dimensions)?.into_dimension(), raw_vec)?;
-        Ok(arr)
-    } else {
-        Err(DmapError::VectorError(format!("{} not found", name)))
+) -> Result<()> {
+    match fields.get(name) {
+        Some(GenericDmap::Vec1D(data)) => T::try_from(data[0].clone())
+            .map(|_| ())
+            .map_err(|e| DmapError::VectorError(format!("Incorrect type for {name}"))),
+        Some(GenericDmap::Vec2D(data)) => T::try_from(data[[0, 0]].clone())
+            .map(|_| ())
+            .map_err(|e| DmapError::VectorError(format!("Incorrect type for {name}"))),
+        Some(GenericDmap::Vec3D(data)) => T::try_from(data[[0, 0, 0]].clone())
+            .map(|_| ())
+            .map_err(|e| DmapError::VectorError(format!("Incorrect type for {name}"))),
+        Some(GenericDmap::Scalar(_)) => {
+            Err(DmapError::VectorError(format!("{name} is a scalar field")))
+        }
+        None => Err(DmapError::VectorError(format!("{name} not in record"))),
+    }
+}
+
+pub fn check_vector_opt<T: InDmap + TryFrom<Atom>>(
+    fields: &mut IndexMap<String, GenericDmap>,
+    name: &str,
+) -> Result<()> {
+    match fields.get(name) {
+        Some(GenericDmap::Vec1D(data)) => T::try_from(data[0].clone())
+            .map(|_| ())
+            .map_err(|e| DmapError::VectorError(format!("Incorrect type for {name}"))),
+        Some(GenericDmap::Vec2D(data)) => T::try_from(data[[0, 0]].clone())
+            .map(|_| ())
+            .map_err(|e| DmapError::VectorError(format!("Incorrect type for {name}"))),
+        Some(GenericDmap::Vec3D(data)) => T::try_from(data[[0, 0, 0]].clone())
+            .map(|_| ())
+            .map_err(|e| DmapError::VectorError(format!("Incorrect type for {name}"))),
+        Some(GenericDmap::Scalar(_)) => {
+            Err(DmapError::VectorError(format!("{name} is a scalar field")))
+        }
+        None => Ok(()),
     }
 }
 
@@ -709,7 +836,6 @@ pub(crate) fn read_data(cursor: &mut Cursor<Vec<u8>>, data_type: Atom) -> Result
 
     Ok(parsed_data)
 }
-
 
 // #[derive(Debug, Default)]
 // pub struct DmapDifference {
