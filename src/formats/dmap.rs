@@ -1,8 +1,6 @@
 use crate::error::DmapError;
-use crate::types::GenericDmap::{Scalar, Vec1D, Vec2D, Vec3D};
-use crate::types::{parse_scalar, parse_vector, read_data, Atom, GenericDmap, InDmap};
+use crate::types::{parse_scalar, parse_vector, read_data, DmapField, DmapType};
 use indexmap::IndexMap;
-use numpy::ndarray::Array;
 use std::io::{Cursor, Read};
 
 pub trait Record {
@@ -33,111 +31,66 @@ pub trait Record {
         Self: Sized,
     {
         let bytes_already_read = cursor.position();
-        let _code = match read_data(cursor, Atom::INT(0))? {
-            Atom::INT(i) => Ok(i),
-            data => Err(DmapError::RecordError(format!(
-                "Cannot interpret code '{}' at byte {}",
-                data, bytes_already_read
-            ))),
-        }?;
-        let size = match read_data(cursor, Atom::INT(0))? {
-            Atom::INT(i) => Ok(i),
-            data => Err(DmapError::RecordError(format!(
-                "Cannot interpret size '{}' at byte {}",
-                data,
-                bytes_already_read + Atom::INT(0).get_num_bytes()
-            ))),
-        }?;
+        let _code = read_data::<i32>(cursor).map_err(|e| {
+            DmapError::RecordError(format!(
+                "Cannot interpret code at byte {}: {e}",
+                bytes_already_read
+            ))
+        })?;
+        let size = read_data::<i32>(cursor).map_err(|e| {
+            DmapError::RecordError(format!(
+                "Cannot interpret size at byte {}: {e}",
+                bytes_already_read + i32::size() as u64
+            ))
+        })?;
 
         // adding 8 bytes because code and size are part of the record.
-        if size as u64
-            > cursor.get_ref().len() as u64 - cursor.position() + 2 * Atom::INT(0).get_num_bytes()
+        if size as u64 > cursor.get_ref().len() as u64 - cursor.position() + 2 * i32::size() as u64
         {
             return Err(DmapError::RecordError(format!(
                 "Record size {size} at byte {} bigger than remaining buffer {}",
-                cursor.position() - Atom::INT(0).get_num_bytes(),
-                cursor.get_ref().len() as u64 - cursor.position()
-                    + 2 * Atom::INT(0).get_num_bytes()
+                cursor.position() - i32::size() as u64,
+                cursor.get_ref().len() as u64 - cursor.position() + 2 * i32::size() as u64
             )));
         } else if size <= 0 {
             return Err(DmapError::RecordError(format!("Record size {size} <= 0")));
         }
 
-        let num_scalars = match read_data(cursor, Atom::INT(0))? {
-            Atom::INT(i) => Ok(i),
-            data => Err(DmapError::RecordError(format!(
-                "Cannot interpret number of scalars at byte {}",
-                cursor.position() - data.get_num_bytes()
-            ))),
-        }?;
-        let num_vectors = match read_data(cursor, Atom::INT(0))? {
-            Atom::INT(i) => Ok(i),
-            data => Err(DmapError::RecordError(format!(
-                "Cannot interpret number of vectors at byte {}",
-                cursor.position() - data.get_num_bytes()
-            ))),
-        }?;
+        let num_scalars = read_data::<i32>(cursor).map_err(|e| {
+            DmapError::RecordError(format!(
+                "Cannot interpret number of scalars at byte {}: {e}",
+                cursor.position() - i32::size() as u64
+            ))
+        })?;
+        let num_vectors = read_data::<i32>(cursor).map_err(|e| {
+            DmapError::RecordError(format!(
+                "Cannot interpret number of vectors at byte {}: {e}",
+                cursor.position() - i32::size() as u64
+            ))
+        })?;
         if num_scalars <= 0 {
             return Err(DmapError::RecordError(format!(
                 "Number of scalars {num_scalars} at byte {} <= 0",
-                cursor.position() - 2 * Atom::INT(0).get_num_bytes()
+                cursor.position() - 2 * i32::size() as u64
             )));
         } else if num_vectors <= 0 {
             return Err(DmapError::RecordError(format!(
                 "Number of vectors {num_vectors} at byte {} <= 0",
-                cursor.position() - Atom::INT(0).get_num_bytes()
+                cursor.position() - i32::size() as u64
             )));
         } else if num_scalars + num_vectors > size {
             return Err(DmapError::RecordError(format!(
                 "Number of scalars {num_scalars} plus vectors {num_vectors} greater than size '{size}'")));
         }
 
-        let mut fields: IndexMap<String, GenericDmap> = IndexMap::new();
+        let mut fields: IndexMap<String, DmapField> = IndexMap::new();
         for _ in 0..num_scalars {
             let (name, val) = parse_scalar(cursor)?;
-            fields.insert(name, Scalar(val.data));
+            fields.insert(name, val);
         }
         for _ in 0..num_vectors {
             let (name, val) = parse_vector(cursor, size)?;
-            match val.dimensions.len() {
-                1 => {
-                    fields.insert(name, Vec1D(Array::from_vec(val.data)));
-                }
-                2 => {
-                    fields.insert(
-                        name,
-                        Vec2D(
-                            Array::from_shape_vec(
-                                (val.dimensions[0] as usize, val.dimensions[1] as usize),
-                                val.data,
-                            )
-                            .map_err(|e| DmapError::VectorError(format!("{e}")))?,
-                        ),
-                    );
-                }
-                3 => {
-                    fields.insert(
-                        name,
-                        Vec3D(
-                            Array::from_shape_vec(
-                                (
-                                    val.dimensions[0] as usize,
-                                    val.dimensions[1] as usize,
-                                    val.dimensions[2] as usize,
-                                ),
-                                val.data,
-                            )
-                            .map_err(|e| DmapError::VectorError(format!("{e}")))?,
-                        ),
-                    );
-                }
-                _ => {
-                    return Err(DmapError::VectorError(format!(
-                        "Vector {name} has invalid number of dimensions {}",
-                        val.dimensions.len()
-                    )))
-                }
-            };
+            fields.insert(name, val);
         }
 
         if cursor.position() - bytes_already_read != size as u64 {
@@ -152,7 +105,7 @@ pub trait Record {
     }
 
     /// Creates a new object from the parsed scalars and vectors
-    fn new(fields: &mut IndexMap<String, GenericDmap>) -> Result<Self, DmapError>
+    fn new(fields: &mut IndexMap<String, DmapField>) -> Result<Self, DmapError>
     where
         Self: Sized;
 
@@ -160,10 +113,10 @@ pub trait Record {
     fn to_dmap(&self) -> Vec<u8> {
         let (num_scalars, num_vectors, mut data_bytes) = self.to_bytes();
         let mut bytes: Vec<u8> = vec![];
-        bytes.extend((65537_i32).data_to_bytes()); // No idea why this is what it is, copied from backscatter
-        bytes.extend((data_bytes.len() as i32 + 16).data_to_bytes()); // +16 for code, length, num_scalars, num_vectors
-        bytes.extend(num_scalars.data_to_bytes());
-        bytes.extend(num_vectors.data_to_bytes());
+        bytes.extend((65537_i32).as_bytes()); // No idea why this is what it is, copied from backscatter
+        bytes.extend((data_bytes.len() as i32 + 16).as_bytes()); // +16 for code, length, num_scalars, num_vectors
+        bytes.extend(num_scalars.as_bytes());
+        bytes.extend(num_vectors.as_bytes());
         bytes.append(&mut data_bytes); // consumes data_bytes
         bytes
     }
