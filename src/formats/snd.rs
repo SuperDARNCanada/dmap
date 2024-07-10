@@ -2,8 +2,9 @@ use crate::error::DmapError;
 use crate::formats::dmap::Record;
 use crate::types::{DmapField, DmapType, Type};
 use indexmap::IndexMap;
+use std::convert::TryFrom;
 
-static SCALAR_FIELDS: [(&str, Type); 47] = [
+static SCALAR_FIELDS: [(&str, Type); 37] = [
     ("radar.revision.major", Type::Char),
     ("radar.revision.minor", Type::Char),
     ("origin.code", Type::Char),
@@ -18,54 +19,50 @@ static SCALAR_FIELDS: [(&str, Type); 47] = [
     ("time.mt", Type::Short),
     ("time.sc", Type::Short),
     ("time.us", Type::Int),
-    ("txpow", Type::Short),
     ("nave", Type::Short),
-    ("atten", Type::Short),
     ("lagfr", Type::Short),
     ("smsep", Type::Short),
-    ("ercod", Type::Short),
-    ("stat.agc", Type::Short),
-    ("stat.lopwr", Type::Short),
     ("noise.search", Type::Float),
     ("noise.mean", Type::Float),
     ("channel", Type::Short),
     ("bmnum", Type::Short),
     ("bmazm", Type::Float),
     ("scan", Type::Short),
-    ("offset", Type::Short),
     ("rxrise", Type::Short),
     ("intt.sc", Type::Short),
     ("intt.us", Type::Int),
-    ("txpl", Type::Short),
-    ("mpinc", Type::Short),
-    ("mppul", Type::Short),
-    ("mplgs", Type::Short),
     ("nrang", Type::Short),
     ("frang", Type::Short),
     ("rsep", Type::Short),
     ("xcf", Type::Short),
     ("tfreq", Type::Short),
-    ("mxpwr", Type::Int),
-    ("lvmax", Type::Int),
+    ("noise.sky", Type::Float),
     ("combf", Type::String),
-    ("rawacf.revision.major", Type::Int),
-    ("rawacf.revision.minor", Type::Int),
-    ("thr", Type::Float),
+    ("fitacf.revision.major", Type::Int),
+    ("fitacf.revision.minor", Type::Int),
+    ("snd.revision.major", Type::Short),
+    ("snd.revision.minor", Type::Short),
 ];
 
-static SCALAR_FIELDS_OPT: [(&str, Type); 2] = [("mplgexs", Type::Short), ("ifmode", Type::Short)];
+static SCALAR_FIELDS_OPT: [(&str, Type); 0] = [];
 
-static VECTOR_FIELDS: [(&str, Type); 5] = [
-    ("ptab", Type::Short),
-    ("ltab", Type::Short),
-    ("pwr0", Type::Float),
+static VECTOR_FIELDS: [(&str, Type); 7] = [
     ("slist", Type::Short),
-    ("acfd", Type::Float),
+    ("qflg", Type::Char),
+    ("gflg", Type::Char),
+    ("v", Type::Float),
+    ("v_e", Type::Float),
+    ("p_l", Type::Float),
+    ("w_l", Type::Float),
 ];
 
-static VECTOR_FIELDS_OPT: [(&str, Type); 1] = [("xcfd", Type::Float)];
+static VECTOR_FIELDS_OPT: [(&str, Type); 3] = [
+    ("x_qflg", Type::Char),
+    ("phi0", Type::Float),
+    ("phi0_e", Type::Float),
+];
 
-static RAWACF_FIELDS: [&str; 55] = [
+static SND_FIELDS: [&str; 47] = [
     "radar.revision.major",
     "radar.revision.minor",
     "origin.code",
@@ -80,68 +77,60 @@ static RAWACF_FIELDS: [&str; 55] = [
     "time.mt",
     "time.sc",
     "time.us",
-    "txpow",
     "nave",
-    "atten",
     "lagfr",
     "smsep",
-    "ercod",
-    "stat.agc",
-    "stat.lopwr",
     "noise.search",
     "noise.mean",
     "channel",
     "bmnum",
     "bmazm",
     "scan",
-    "offset",
     "rxrise",
     "intt.sc",
     "intt.us",
-    "txpl",
-    "mpinc",
-    "mppul",
-    "mplgs",
     "nrang",
     "frang",
     "rsep",
     "xcf",
     "tfreq",
-    "mxpwr",
-    "lvmax",
+    "noise.sky",
     "combf",
-    "rawacf.revision.major",
-    "rawacf.revision.minor",
-    "thr",
-    "mplgexs",
-    "ifmode",
-    "ptab",
-    "ltab",
-    "pwr0",
+    "fitacf.revision.major",
+    "fitacf.revision.minor",
+    "snd.revision.major",
+    "snd.revision.minor",
     "slist",
-    "acfd",
-    "xcfd",
+    "qflg",
+    "gflg",
+    "v",
+    "v_e",
+    "p_l",
+    "w_l",
+    "x_qflg",
+    "phi0",
+    "phi0_e",
 ];
 
-pub struct RawacfRecord {
+pub struct SndRecord {
     pub(crate) data: IndexMap<String, DmapField>,
 }
 
-impl Record for RawacfRecord {
-    fn new(fields: &mut IndexMap<String, DmapField>) -> Result<RawacfRecord, DmapError> {
+impl Record for SndRecord {
+    fn new(fields: &mut IndexMap<String, DmapField>) -> Result<SndRecord, DmapError> {
         match Self::check_fields(
             fields,
             &SCALAR_FIELDS,
             &SCALAR_FIELDS_OPT,
             &VECTOR_FIELDS,
             &VECTOR_FIELDS_OPT,
-            &RAWACF_FIELDS,
+            &SND_FIELDS,
         ) {
             Ok(_) => {}
             Err(e) => Err(e)?,
         }
 
-        Ok(RawacfRecord {
+        Ok(SndRecord {
             data: fields.to_owned(),
         })
     }
@@ -164,17 +153,17 @@ impl Record for RawacfRecord {
     }
 }
 
-impl TryFrom<&mut IndexMap<String, DmapField>> for RawacfRecord {
+impl TryFrom<&mut IndexMap<String, DmapField>> for SndRecord {
     type Error = DmapError;
 
     fn try_from(value: &mut IndexMap<String, DmapField>) -> Result<Self, Self::Error> {
-        Ok(Self::coerce::<RawacfRecord>(
+        Ok(Self::coerce::<SndRecord>(
             value,
             &SCALAR_FIELDS,
             &SCALAR_FIELDS_OPT,
             &VECTOR_FIELDS,
             &VECTOR_FIELDS_OPT,
-            &RAWACF_FIELDS,
+            &SND_FIELDS,
         )?)
     }
 }

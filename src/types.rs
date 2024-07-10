@@ -2,11 +2,14 @@ use crate::error::DmapError;
 use indexmap::IndexMap;
 use numpy::array::PyArray;
 use numpy::ndarray::ArrayD;
-use pyo3::{IntoPy, PyObject, Python};
+use numpy::PyArrayMethods;
+use pyo3::exceptions::PyValueError;
+use pyo3::prelude::PyAnyMethods;
+use pyo3::{Bound, FromPyObject, IntoPy, PyAny, PyObject, PyResult, Python};
 use std::cmp::PartialEq;
 use std::fmt::{Display, Formatter};
 use std::io::Cursor;
-use zerocopy::{AsBytes, FromBytes};
+use zerocopy::{AsBytes, ByteOrder, FromBytes, LittleEndian};
 
 type Result<T> = std::result::Result<T, DmapError>;
 
@@ -59,6 +62,21 @@ impl Type {
         };
         Ok(data)
     }
+    fn key(&self) -> i8 {
+        match self {
+            Self::Char => 1,
+            Self::Short => 2,
+            Self::Int => 3,
+            Self::Long => 10,
+            Self::Uchar => 16,
+            Self::Ushort => 17,
+            Self::Uint => 18,
+            Self::Ulong => 19,
+            Self::Float => 4,
+            Self::Double => 8,
+            Self::String => 9,
+        }
+    }
 
     fn size(&self) -> usize {
         match self {
@@ -77,7 +95,7 @@ impl Type {
     }
 }
 /// Enum of the different data types supported by the DMAP format.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, FromPyObject)]
 #[repr(C)]
 pub enum DmapScalar {
     Char(i8),
@@ -107,6 +125,41 @@ impl DmapScalar {
             Self::Double(_) => Type::Double,
             Self::String(_) => Type::String,
         }
+    }
+    pub(crate) fn cast_as(&self, new_type: &Type) -> Result<Self> {
+        match new_type {
+            Type::Char => Ok(Self::Char(i8::try_from(self)?)),
+            Type::Short => Ok(Self::Short(i16::try_from(self)?)),
+            Type::Int => Ok(Self::Int(i32::try_from(self)?)),
+            Type::Long => Ok(Self::Long(i64::try_from(self)?)),
+            Type::Uchar => Ok(Self::Uchar(u8::try_from(self)?)),
+            Type::Ushort => Ok(Self::Ushort(u16::try_from(self)?)),
+            Type::Uint => Ok(Self::Uint(u32::try_from(self)?)),
+            Type::Ulong => Ok(Self::Ulong(u64::try_from(self)?)),
+            Type::Float => Ok(Self::Float(f32::try_from(self)?)),
+            Type::Double => Ok(Self::Double(f64::try_from(self)?)),
+            Type::String => Err(DmapError::ScalarError(
+                "Unable to cast value to String".to_string(),
+            )),
+        }
+    }
+    fn as_bytes(&self) -> Vec<u8> {
+        let mut bytes: Vec<u8> = DmapType::as_bytes(&self.get_type().key()).to_vec();
+        let mut data_bytes: Vec<u8> = match self {
+            Self::Char(x) => DmapType::as_bytes(x),
+            Self::Short(x) => DmapType::as_bytes(x),
+            Self::Int(x) => DmapType::as_bytes(x),
+            Self::Long(x) => DmapType::as_bytes(x),
+            Self::Uchar(x) => DmapType::as_bytes(x),
+            Self::Ushort(x) => DmapType::as_bytes(x),
+            Self::Uint(x) => DmapType::as_bytes(x),
+            Self::Ulong(x) => DmapType::as_bytes(x),
+            Self::Float(x) => DmapType::as_bytes(x),
+            Self::Double(x) => DmapType::as_bytes(x),
+            Self::String(x) => DmapType::as_bytes(x),
+        };
+        bytes.append(&mut data_bytes);
+        bytes
     }
 }
 impl Display for DmapScalar {
@@ -172,6 +225,102 @@ impl DmapVec {
             DmapVec::Double(_) => Type::Double,
         }
     }
+    fn as_bytes(&self) -> Vec<u8> {
+        let mut bytes: Vec<u8> = DmapType::as_bytes(&self.get_type().key()).to_vec();
+        match self {
+            DmapVec::Char(x) => {
+                bytes.extend((x.ndim() as i32).to_le_bytes());
+                for &dim in x.shape().iter().rev() {
+                    bytes.extend((dim as i32).to_le_bytes());
+                }
+                for y in x.iter() {
+                    bytes.append(&mut DmapType::as_bytes(y).to_vec());
+                }
+            }
+            DmapVec::Short(x) => {
+                bytes.extend((x.ndim() as i32).to_le_bytes());
+                for &dim in x.shape().iter().rev() {
+                    bytes.extend((dim as i32).to_le_bytes());
+                }
+                for y in x.iter() {
+                    bytes.append(&mut DmapType::as_bytes(y).to_vec());
+                }
+            }
+            DmapVec::Int(x) => {
+                bytes.extend((x.ndim() as i32).to_le_bytes());
+                for &dim in x.shape().iter().rev() {
+                    bytes.extend((dim as i32).to_le_bytes());
+                }
+                for y in x.iter() {
+                    bytes.append(&mut DmapType::as_bytes(y).to_vec());
+                }
+            }
+            DmapVec::Long(x) => {
+                bytes.extend((x.ndim() as i32).to_le_bytes());
+                for &dim in x.shape().iter().rev() {
+                    bytes.extend((dim as i32).to_le_bytes());
+                }
+                for y in x.iter() {
+                    bytes.append(&mut DmapType::as_bytes(y).to_vec());
+                }
+            }
+            DmapVec::Uchar(x) => {
+                bytes.extend((x.ndim() as i32).to_le_bytes());
+                for &dim in x.shape().iter().rev() {
+                    bytes.extend((dim as i32).to_le_bytes());
+                }
+                for y in x.iter() {
+                    bytes.append(&mut DmapType::as_bytes(y).to_vec());
+                }
+            }
+            DmapVec::Ushort(x) => {
+                bytes.extend((x.ndim() as i32).to_le_bytes());
+                for &dim in x.shape().iter().rev() {
+                    bytes.extend((dim as i32).to_le_bytes());
+                }
+                for y in x.iter() {
+                    bytes.append(&mut DmapType::as_bytes(y).to_vec());
+                }
+            }
+            DmapVec::Uint(x) => {
+                bytes.extend((x.ndim() as i32).to_le_bytes());
+                for &dim in x.shape().iter().rev() {
+                    bytes.extend((dim as i32).to_le_bytes());
+                }
+                for y in x.iter() {
+                    bytes.append(&mut DmapType::as_bytes(y).to_vec());
+                }
+            }
+            DmapVec::Ulong(x) => {
+                bytes.extend((x.ndim() as i32).to_le_bytes());
+                for &dim in x.shape().iter().rev() {
+                    bytes.extend((dim as i32).to_le_bytes());
+                }
+                for y in x.iter() {
+                    bytes.append(&mut DmapType::as_bytes(y).to_vec());
+                }
+            }
+            DmapVec::Float(x) => {
+                bytes.extend((x.ndim() as i32).to_le_bytes());
+                for &dim in x.shape().iter().rev() {
+                    bytes.extend((dim as i32).to_le_bytes());
+                }
+                for y in x.iter() {
+                    bytes.append(&mut DmapType::as_bytes(y).to_vec());
+                }
+            }
+            DmapVec::Double(x) => {
+                bytes.extend((x.ndim() as i32).to_le_bytes());
+                for &dim in x.shape().iter().rev() {
+                    bytes.extend((dim as i32).to_le_bytes());
+                }
+                for y in x.iter() {
+                    bytes.append(&mut DmapType::as_bytes(y).to_vec());
+                }
+            }
+        };
+        bytes
+    }
 }
 impl IntoPy<PyObject> for DmapVec {
     fn into_py(self, py: Python<'_>) -> PyObject {
@@ -189,8 +338,35 @@ impl IntoPy<PyObject> for DmapVec {
         }
     }
 }
+impl<'py> FromPyObject<'py> for DmapVec {
+    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
+        if let Ok(x) = ob.downcast::<PyArray<u8, _>>() {
+            Ok(DmapVec::Uchar(x.to_owned_array()))
+        } else if let Ok(x) = ob.downcast::<PyArray<u16, _>>() {
+            Ok(DmapVec::Ushort(x.to_owned_array()))
+        } else if let Ok(x) = ob.downcast::<PyArray<u32, _>>() {
+            Ok(DmapVec::Uint(x.to_owned_array()))
+        } else if let Ok(x) = ob.downcast::<PyArray<u64, _>>() {
+            Ok(DmapVec::Ulong(x.to_owned_array()))
+        } else if let Ok(x) = ob.downcast::<PyArray<i8, _>>() {
+            Ok(DmapVec::Char(x.to_owned_array()))
+        } else if let Ok(x) = ob.downcast::<PyArray<i16, _>>() {
+            Ok(DmapVec::Short(x.to_owned_array()))
+        } else if let Ok(x) = ob.downcast::<PyArray<i32, _>>() {
+            Ok(DmapVec::Int(x.to_owned_array()))
+        } else if let Ok(x) = ob.downcast::<PyArray<i64, _>>() {
+            Ok(DmapVec::Long(x.to_owned_array()))
+        } else if let Ok(x) = ob.downcast::<PyArray<f32, _>>() {
+            Ok(DmapVec::Float(x.to_owned_array()))
+        } else if let Ok(x) = ob.downcast::<PyArray<f64, _>>() {
+            Ok(DmapVec::Double(x.to_owned_array()))
+        } else {
+            Err(PyValueError::new_err("Could not extract vector"))
+        }
+    }
+}
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, FromPyObject)]
 #[repr(C)]
 pub enum DmapField {
     Scalar(DmapScalar),
@@ -198,7 +374,10 @@ pub enum DmapField {
 }
 impl DmapField {
     pub fn as_bytes(&self) -> Vec<u8> {
-        todo!()
+        match self {
+            Self::Scalar(x) => x.as_bytes(),
+            Self::Vector(x) => x.as_bytes(),
+        }
     }
 }
 impl IntoPy<PyObject> for DmapField {
@@ -215,7 +394,7 @@ pub trait DmapType: std::fmt::Debug {
     fn size() -> usize
     where
         Self: Sized;
-    fn as_bytes(&self) -> &[u8];
+    fn as_bytes(&self) -> Vec<u8>;
     fn from_bytes(bytes: &[u8]) -> Result<Self>
     where
         Self: Sized;
@@ -231,8 +410,8 @@ impl DmapType for i8 {
     fn get_dmap_key() -> u8 {
         1
     }
-    fn as_bytes(&self) -> &[u8] {
-        AsBytes::as_bytes(self)
+    fn as_bytes(&self) -> Vec<u8> {
+        AsBytes::as_bytes(self).to_vec()
     }
     fn from_bytes(bytes: &[u8]) -> Result<Self>
     where
@@ -251,8 +430,10 @@ impl DmapType for i16 {
     fn get_dmap_key() -> u8 {
         2
     }
-    fn as_bytes(&self) -> &[u8] {
-        AsBytes::as_bytes(self)
+    fn as_bytes(&self) -> Vec<u8> {
+        let mut bytes = [0; 2];
+        LittleEndian::write_i16(&mut bytes, *self);
+        bytes.to_vec()
     }
     fn from_bytes(bytes: &[u8]) -> Result<Self>
     where
@@ -271,8 +452,10 @@ impl DmapType for i32 {
     fn get_dmap_key() -> u8 {
         3
     }
-    fn as_bytes(&self) -> &[u8] {
-        AsBytes::as_bytes(self)
+    fn as_bytes(&self) -> Vec<u8> {
+        let mut bytes = [0; 4];
+        LittleEndian::write_i32(&mut bytes, *self);
+        bytes.to_vec()
     }
     fn from_bytes(bytes: &[u8]) -> Result<Self>
     where
@@ -291,8 +474,10 @@ impl DmapType for i64 {
     fn get_dmap_key() -> u8 {
         10
     }
-    fn as_bytes(&self) -> &[u8] {
-        AsBytes::as_bytes(self)
+    fn as_bytes(&self) -> Vec<u8> {
+        let mut bytes = [0; 8];
+        LittleEndian::write_i64(&mut bytes, *self);
+        bytes.to_vec()
     }
     fn from_bytes(bytes: &[u8]) -> Result<Self>
     where
@@ -311,8 +496,8 @@ impl DmapType for u8 {
     fn get_dmap_key() -> u8 {
         16
     }
-    fn as_bytes(&self) -> &[u8] {
-        AsBytes::as_bytes(self)
+    fn as_bytes(&self) -> Vec<u8> {
+        AsBytes::as_bytes(self).to_vec()
     }
     fn from_bytes(bytes: &[u8]) -> Result<Self>
     where
@@ -331,8 +516,10 @@ impl DmapType for u16 {
     fn get_dmap_key() -> u8 {
         17
     }
-    fn as_bytes(&self) -> &[u8] {
-        AsBytes::as_bytes(self)
+    fn as_bytes(&self) -> Vec<u8> {
+        let mut bytes = [0; 2];
+        LittleEndian::write_u16(&mut bytes, *self);
+        bytes.to_vec()
     }
     fn from_bytes(bytes: &[u8]) -> Result<Self>
     where
@@ -351,8 +538,10 @@ impl DmapType for u32 {
     fn get_dmap_key() -> u8 {
         18
     }
-    fn as_bytes(&self) -> &[u8] {
-        AsBytes::as_bytes(self)
+    fn as_bytes(&self) -> Vec<u8> {
+        let mut bytes = [0; 4];
+        LittleEndian::write_u32(&mut bytes, *self);
+        bytes.to_vec()
     }
     fn from_bytes(bytes: &[u8]) -> Result<Self>
     where
@@ -371,8 +560,10 @@ impl DmapType for u64 {
     fn get_dmap_key() -> u8 {
         19
     }
-    fn as_bytes(&self) -> &[u8] {
-        AsBytes::as_bytes(self)
+    fn as_bytes(&self) -> Vec<u8> {
+        let mut bytes = [0; 8];
+        LittleEndian::write_u64(&mut bytes, *self);
+        bytes.to_vec()
     }
     fn from_bytes(bytes: &[u8]) -> Result<Self>
     where
@@ -391,8 +582,10 @@ impl DmapType for f32 {
     fn get_dmap_key() -> u8 {
         4
     }
-    fn as_bytes(&self) -> &[u8] {
-        AsBytes::as_bytes(self)
+    fn as_bytes(&self) -> Vec<u8> {
+        let mut bytes = [0; 4];
+        LittleEndian::write_f32(&mut bytes, *self);
+        bytes.to_vec()
     }
     fn from_bytes(bytes: &[u8]) -> Result<Self>
     where
@@ -411,8 +604,10 @@ impl DmapType for f64 {
     fn get_dmap_key() -> u8 {
         8
     }
-    fn as_bytes(&self) -> &[u8] {
-        AsBytes::as_bytes(self)
+    fn as_bytes(&self) -> Vec<u8> {
+        let mut bytes = [0; 8];
+        LittleEndian::write_f64(&mut bytes, *self);
+        bytes.to_vec()
     }
     fn from_bytes(bytes: &[u8]) -> Result<Self>
     where
@@ -429,8 +624,10 @@ impl DmapType for String {
         0
     }
 
-    fn as_bytes(&self) -> &[u8] {
-        self.as_bytes()
+    fn as_bytes(&self) -> Vec<u8> {
+        let mut bytes = self.as_bytes().to_vec();
+        bytes.push(0); // null-terminate
+        bytes
     }
 
     fn from_bytes(bytes: &[u8]) -> Result<Self> {
@@ -445,7 +642,206 @@ impl DmapType for String {
         Type::String
     }
 }
-
+impl TryFrom<&DmapScalar> for u8 {
+    type Error = DmapError;
+    fn try_from(value: &DmapScalar) -> std::result::Result<Self, Self::Error> {
+        match value {
+            DmapScalar::Char(x) => Ok(x.clone() as u8),
+            DmapScalar::Short(x) => Ok(x.clone() as u8),
+            DmapScalar::Int(x) => Ok(x.clone() as u8),
+            DmapScalar::Long(x) => Ok(x.clone() as u8),
+            DmapScalar::Uchar(x) => Ok(x.clone()),
+            DmapScalar::Ushort(x) => Ok(x.clone() as u8),
+            DmapScalar::Uint(x) => Ok(x.clone() as u8),
+            DmapScalar::Ulong(x) => Ok(x.clone() as u8),
+            DmapScalar::Float(x) => Ok(x.clone() as u8),
+            DmapScalar::Double(x) => Ok(x.clone() as u8),
+            DmapScalar::String(x) => Err(DmapError::ScalarError(format!(
+                "Unable to convert {x} to u8"
+            ))),
+        }
+    }
+}
+impl TryFrom<&DmapScalar> for u16 {
+    type Error = DmapError;
+    fn try_from(value: &DmapScalar) -> std::result::Result<Self, Self::Error> {
+        match value {
+            DmapScalar::Char(x) => Ok(x.clone() as u16),
+            DmapScalar::Short(x) => Ok(x.clone() as u16),
+            DmapScalar::Int(x) => Ok(x.clone() as u16),
+            DmapScalar::Long(x) => Ok(x.clone() as u16),
+            DmapScalar::Uchar(x) => Ok(x.clone() as u16),
+            DmapScalar::Ushort(x) => Ok(x.clone()),
+            DmapScalar::Uint(x) => Ok(x.clone() as u16),
+            DmapScalar::Ulong(x) => Ok(x.clone() as u16),
+            DmapScalar::Float(x) => Ok(x.clone() as u16),
+            DmapScalar::Double(x) => Ok(x.clone() as u16),
+            DmapScalar::String(x) => Err(DmapError::ScalarError(format!(
+                "Unable to convert {x} to u16"
+            ))),
+        }
+    }
+}
+impl TryFrom<&DmapScalar> for u32 {
+    type Error = DmapError;
+    fn try_from(value: &DmapScalar) -> std::result::Result<Self, Self::Error> {
+        match value {
+            DmapScalar::Char(x) => Ok(x.clone() as u32),
+            DmapScalar::Short(x) => Ok(x.clone() as u32),
+            DmapScalar::Int(x) => Ok(x.clone() as u32),
+            DmapScalar::Long(x) => Ok(x.clone() as u32),
+            DmapScalar::Uchar(x) => Ok(x.clone() as u32),
+            DmapScalar::Ushort(x) => Ok(x.clone() as u32),
+            DmapScalar::Uint(x) => Ok(x.clone()),
+            DmapScalar::Ulong(x) => Ok(x.clone() as u32),
+            DmapScalar::Float(x) => Ok(x.clone() as u32),
+            DmapScalar::Double(x) => Ok(x.clone() as u32),
+            DmapScalar::String(x) => Err(DmapError::ScalarError(format!(
+                "Unable to convert {x} to u32"
+            ))),
+        }
+    }
+}
+impl TryFrom<&DmapScalar> for u64 {
+    type Error = DmapError;
+    fn try_from(value: &DmapScalar) -> std::result::Result<Self, Self::Error> {
+        match value {
+            DmapScalar::Char(x) => Ok(x.clone() as u64),
+            DmapScalar::Short(x) => Ok(x.clone() as u64),
+            DmapScalar::Int(x) => Ok(x.clone() as u64),
+            DmapScalar::Long(x) => Ok(x.clone() as u64),
+            DmapScalar::Uchar(x) => Ok(x.clone() as u64),
+            DmapScalar::Ushort(x) => Ok(x.clone() as u64),
+            DmapScalar::Uint(x) => Ok(x.clone() as u64),
+            DmapScalar::Ulong(x) => Ok(x.clone()),
+            DmapScalar::Float(x) => Ok(x.clone() as u64),
+            DmapScalar::Double(x) => Ok(x.clone() as u64),
+            DmapScalar::String(x) => Err(DmapError::ScalarError(format!(
+                "Unable to convert {x} to u64"
+            ))),
+        }
+    }
+}
+impl TryFrom<&DmapScalar> for i8 {
+    type Error = DmapError;
+    fn try_from(value: &DmapScalar) -> std::result::Result<Self, Self::Error> {
+        match value {
+            DmapScalar::Char(x) => Ok(x.clone()),
+            DmapScalar::Short(x) => Ok(x.clone() as i8),
+            DmapScalar::Int(x) => Ok(x.clone() as i8),
+            DmapScalar::Long(x) => Ok(x.clone() as i8),
+            DmapScalar::Uchar(x) => Ok(x.clone() as i8),
+            DmapScalar::Ushort(x) => Ok(x.clone() as i8),
+            DmapScalar::Uint(x) => Ok(x.clone() as i8),
+            DmapScalar::Ulong(x) => Ok(x.clone() as i8),
+            DmapScalar::Float(x) => Ok(x.clone() as i8),
+            DmapScalar::Double(x) => Ok(x.clone() as i8),
+            DmapScalar::String(x) => Err(DmapError::ScalarError(format!(
+                "Unable to convert {x} to i8"
+            ))),
+        }
+    }
+}
+impl TryFrom<&DmapScalar> for i16 {
+    type Error = DmapError;
+    fn try_from(value: &DmapScalar) -> std::result::Result<Self, Self::Error> {
+        match value {
+            DmapScalar::Char(x) => Ok(x.clone() as i16),
+            DmapScalar::Short(x) => Ok(x.clone()),
+            DmapScalar::Int(x) => Ok(x.clone() as i16),
+            DmapScalar::Long(x) => Ok(x.clone() as i16),
+            DmapScalar::Uchar(x) => Ok(x.clone() as i16),
+            DmapScalar::Ushort(x) => Ok(x.clone() as i16),
+            DmapScalar::Uint(x) => Ok(x.clone() as i16),
+            DmapScalar::Ulong(x) => Ok(x.clone() as i16),
+            DmapScalar::Float(x) => Ok(x.clone() as i16),
+            DmapScalar::Double(x) => Ok(x.clone() as i16),
+            DmapScalar::String(x) => Err(DmapError::ScalarError(format!(
+                "Unable to convert {x} to i16"
+            ))),
+        }
+    }
+}
+impl TryFrom<&DmapScalar> for i32 {
+    type Error = DmapError;
+    fn try_from(value: &DmapScalar) -> std::result::Result<Self, Self::Error> {
+        match value {
+            DmapScalar::Char(x) => Ok(x.clone() as i32),
+            DmapScalar::Short(x) => Ok(x.clone() as i32),
+            DmapScalar::Int(x) => Ok(x.clone()),
+            DmapScalar::Long(x) => Ok(x.clone() as i32),
+            DmapScalar::Uchar(x) => Ok(x.clone() as i32),
+            DmapScalar::Ushort(x) => Ok(x.clone() as i32),
+            DmapScalar::Uint(x) => Ok(x.clone() as i32),
+            DmapScalar::Ulong(x) => Ok(x.clone() as i32),
+            DmapScalar::Float(x) => Ok(x.clone() as i32),
+            DmapScalar::Double(x) => Ok(x.clone() as i32),
+            DmapScalar::String(x) => Err(DmapError::ScalarError(format!(
+                "Unable to convert {x} to i32"
+            ))),
+        }
+    }
+}
+impl TryFrom<&DmapScalar> for i64 {
+    type Error = DmapError;
+    fn try_from(value: &DmapScalar) -> std::result::Result<Self, Self::Error> {
+        match value {
+            DmapScalar::Char(x) => Ok(x.clone() as i64),
+            DmapScalar::Short(x) => Ok(x.clone() as i64),
+            DmapScalar::Int(x) => Ok(x.clone() as i64),
+            DmapScalar::Long(x) => Ok(x.clone()),
+            DmapScalar::Uchar(x) => Ok(x.clone() as i64),
+            DmapScalar::Ushort(x) => Ok(x.clone() as i64),
+            DmapScalar::Uint(x) => Ok(x.clone() as i64),
+            DmapScalar::Ulong(x) => Ok(x.clone() as i64),
+            DmapScalar::Float(x) => Ok(x.clone() as i64),
+            DmapScalar::Double(x) => Ok(x.clone() as i64),
+            DmapScalar::String(x) => Err(DmapError::ScalarError(format!(
+                "Unable to convert {x} to i64"
+            ))),
+        }
+    }
+}
+impl TryFrom<&DmapScalar> for f32 {
+    type Error = DmapError;
+    fn try_from(value: &DmapScalar) -> std::result::Result<Self, Self::Error> {
+        match value {
+            DmapScalar::Char(x) => Ok(x.clone() as f32),
+            DmapScalar::Short(x) => Ok(x.clone() as f32),
+            DmapScalar::Int(x) => Ok(x.clone() as f32),
+            DmapScalar::Long(x) => Ok(x.clone() as f32),
+            DmapScalar::Uchar(x) => Ok(x.clone() as f32),
+            DmapScalar::Ushort(x) => Ok(x.clone() as f32),
+            DmapScalar::Uint(x) => Ok(x.clone() as f32),
+            DmapScalar::Ulong(x) => Ok(x.clone() as f32),
+            DmapScalar::Float(x) => Ok(x.clone()),
+            DmapScalar::Double(x) => Ok(x.clone() as f32),
+            DmapScalar::String(x) => Err(DmapError::ScalarError(format!(
+                "Unable to convert {x} to f32"
+            ))),
+        }
+    }
+}
+impl TryFrom<&DmapScalar> for f64 {
+    type Error = DmapError;
+    fn try_from(value: &DmapScalar) -> std::result::Result<Self, Self::Error> {
+        match value {
+            DmapScalar::Char(x) => Ok(x.clone() as f64),
+            DmapScalar::Short(x) => Ok(x.clone() as f64),
+            DmapScalar::Int(x) => Ok(x.clone() as f64),
+            DmapScalar::Long(x) => Ok(x.clone() as f64),
+            DmapScalar::Uchar(x) => Ok(x.clone() as f64),
+            DmapScalar::Ushort(x) => Ok(x.clone() as f64),
+            DmapScalar::Uint(x) => Ok(x.clone() as f64),
+            DmapScalar::Ulong(x) => Ok(x.clone() as f64),
+            DmapScalar::Float(x) => Ok(x.clone() as f64),
+            DmapScalar::Double(x) => Ok(x.clone()),
+            DmapScalar::String(x) => Err(DmapError::ScalarError(format!(
+                "Unable to convert {x} to f64"
+            ))),
+        }
+    }
+}
 pub fn check_scalar(
     fields: &mut IndexMap<String, DmapField>,
     name: &str,
@@ -530,26 +926,31 @@ pub(crate) fn parse_scalar(cursor: &mut Cursor<Vec<u8>>) -> Result<(String, Dmap
             cursor.position()
         ))
     })?;
-    let data_type_key = read_data::<i8>(cursor).map_err(|e| {
-        DmapError::ScalarError(format!(
+    let data_type_key = match read_data::<i8>(cursor) {
+        Err(e) => Err(DmapError::ScalarError(format!(
             "Invalid data type for field '{name}', byte {}: {e}",
             cursor.position() - i8::size() as u64
-        ))
-    })?;
+        )))?,
+        Ok(x) => Type::from_key(x).map_err(|e| {
+            DmapError::ScalarError(format!(
+                "Field {name}: {e}, byte {}",
+                cursor.position() - i8::size() as u64
+            ))
+        })?,
+    };
 
-    let data: DmapScalar = match Type::from_key(data_type_key) {
-        Ok(Type::Char) => DmapScalar::Char(read_data::<i8>(cursor)?),
-        Ok(Type::Short) => DmapScalar::Short(read_data::<i16>(cursor)?),
-        Ok(Type::Int) => DmapScalar::Int(read_data::<i32>(cursor)?),
-        Ok(Type::Long) => DmapScalar::Long(read_data::<i64>(cursor)?),
-        Ok(Type::Uchar) => DmapScalar::Uchar(read_data::<u8>(cursor)?),
-        Ok(Type::Ushort) => DmapScalar::Ushort(read_data::<u16>(cursor)?),
-        Ok(Type::Uint) => DmapScalar::Uint(read_data::<u32>(cursor)?),
-        Ok(Type::Ulong) => DmapScalar::Ulong(read_data::<u64>(cursor)?),
-        Ok(Type::Float) => DmapScalar::Float(read_data::<f32>(cursor)?),
-        Ok(Type::Double) => DmapScalar::Double(read_data::<f64>(cursor)?),
-        Ok(Type::String) => DmapScalar::String(read_data::<String>(cursor)?),
-        Err(e) => Err(e)?,
+    let data: DmapScalar = match data_type_key {
+        Type::Char => DmapScalar::Char(read_data::<i8>(cursor)?),
+        Type::Short => DmapScalar::Short(read_data::<i16>(cursor)?),
+        Type::Int => DmapScalar::Int(read_data::<i32>(cursor)?),
+        Type::Long => DmapScalar::Long(read_data::<i64>(cursor)?),
+        Type::Uchar => DmapScalar::Uchar(read_data::<u8>(cursor)?),
+        Type::Ushort => DmapScalar::Ushort(read_data::<u16>(cursor)?),
+        Type::Uint => DmapScalar::Uint(read_data::<u32>(cursor)?),
+        Type::Ulong => DmapScalar::Ulong(read_data::<u64>(cursor)?),
+        Type::Float => DmapScalar::Float(read_data::<f32>(cursor)?),
+        Type::Double => DmapScalar::Double(read_data::<f64>(cursor)?),
+        Type::String => DmapScalar::String(read_data::<String>(cursor)?),
     };
 
     Ok((name, DmapField::Scalar(data)))

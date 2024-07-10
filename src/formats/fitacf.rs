@@ -1,7 +1,8 @@
 use crate::error::DmapError;
 use crate::formats::dmap::Record;
-use crate::types::{DmapField, Type};
+use crate::types::{DmapField, DmapType, Type};
 use indexmap::IndexMap;
+use std::convert::TryFrom;
 
 static SCALAR_FIELDS: [(&str, Type); 49] = [
     ("radar.revision.major", Type::Char),
@@ -55,7 +56,12 @@ static SCALAR_FIELDS: [(&str, Type); 49] = [
     ("noise.vel", Type::Float),
 ];
 
-static SCALAR_FIELDS_OPT: [(&str, Type); 4] = [("mplgexs", Type::Short), ("ifmode", Type::Short), ("algorithm", Type::String), ("tdiff", Type::Float)];
+static SCALAR_FIELDS_OPT: [(&str, Type); 4] = [
+    ("mplgexs", Type::Short),
+    ("ifmode", Type::Short),
+    ("algorithm", Type::String),
+    ("tdiff", Type::Float),
+];
 
 static VECTOR_FIELDS: [(&str, Type); 20] = [
     ("ptab", Type::Short),
@@ -209,125 +215,52 @@ pub struct FitacfRecord {
 
 impl Record for FitacfRecord {
     fn new(fields: &mut IndexMap<String, DmapField>) -> Result<FitacfRecord, DmapError> {
-        let unsupported_keys: Vec<&String> = fields
-            .keys()
-            .filter(|&k| !FITACF_FIELDS.contains(&&**k))
-            .collect();
-        if unsupported_keys.len() > 0 {
-            Err(DmapError::RecordError(format!(
-                "Unsupported fields {:?}, fields supported are {FITACF_FIELDS:?}",
-                unsupported_keys
-            )))?
-        }
-
-        for (field, expected_type) in SCALAR_FIELDS.iter() {
-            match fields.get(&field.to_string()) {
-                Some(&DmapField::Scalar(ref x)) if &x.get_type() == expected_type => {}
-                Some(&DmapField::Scalar(ref x)) => Err(DmapError::RecordError(format!(
-                    "Field {} has incorrect type {}, expected {}",
-                    field,
-                    x.get_type(),
-                    expected_type
-                )))?,
-                Some(_) => Err(DmapError::RecordError(format!(
-                    "Field {} is a vector, expected scalar",
-                    field
-                )))?,
-                None => Err(DmapError::RecordError(format!("Field {field:?} ({:?}) missing: fields {:?}", &field.to_string(), fields.keys())))?,
-            }
-        }
-        for (field, expected_type) in SCALAR_FIELDS_OPT.iter() {
-            match fields.get(&field.to_string()) {
-                Some(&DmapField::Scalar(ref x)) if &x.get_type() == expected_type => {}
-                Some(&DmapField::Scalar(ref x)) => Err(DmapError::RecordError(format!(
-                    "Field {} has incorrect type {}, expected {}",
-                    field,
-                    x.get_type(),
-                    expected_type
-                )))?,
-                Some(_) => Err(DmapError::RecordError(format!(
-                    "Field {} is a vector, expected scalar",
-                    field
-                )))?,
-                None => {}
-            }
-        }
-        for (field, expected_type) in VECTOR_FIELDS.iter() {
-            match fields.get(&field.to_string()) {
-                Some(&DmapField::Scalar(_)) => Err(DmapError::RecordError(format!(
-                    "Field {} is a scalar, expected vector",
-                    field
-                )))?,
-                Some(&DmapField::Vector(ref x)) if &x.get_type() != expected_type => Err(DmapError::RecordError(format!(
-                    "Field {field} has incorrect type {:?}, expected {expected_type:?}",
-                    x.get_type()
-                )))?,
-                Some(&DmapField::Vector(_)) => {},
-                None => Err(DmapError::RecordError(format!("Field {field} missing")))?,
-            }
-        }
-        for (field, expected_type) in VECTOR_FIELDS_OPT.iter() {
-            match fields.get(&field.to_string()) {
-                Some(&DmapField::Scalar(_)) => Err(DmapError::RecordError(format!(
-                    "Field {} is a scalar, expected vector",
-                    field
-                )))?,
-                Some(&DmapField::Vector(ref x)) if &x.get_type() != expected_type => {
-                    Err(DmapError::RecordError(format!(
-                        "Field {field} has incorrect type {}, expected {expected_type}",
-                        x.get_type()
-                    )))?
-                }
-                _ => {}
-            }
+        match Self::check_fields(
+            fields,
+            &SCALAR_FIELDS,
+            &SCALAR_FIELDS_OPT,
+            &VECTOR_FIELDS,
+            &VECTOR_FIELDS_OPT,
+            &FITACF_FIELDS,
+        ) {
+            Ok(_) => {}
+            Err(e) => Err(e)?,
         }
 
         Ok(FitacfRecord {
             data: fields.to_owned(),
         })
     }
-    fn to_bytes(&self) -> (i32, i32, Vec<u8>) {
-        let mut data_bytes: Vec<u8> = vec![];
-        let mut num_scalars: i32 = 0;
-        let mut num_vectors: i32 = 0;
+    fn to_bytes(&self) -> Result<Vec<u8>, DmapError> {
+        let (num_scalars, num_vectors, mut data_bytes) = Self::data_to_bytes(
+            &self.data,
+            &SCALAR_FIELDS,
+            &SCALAR_FIELDS_OPT,
+            &VECTOR_FIELDS,
+            &VECTOR_FIELDS_OPT,
+        )?;
 
-        for (field, _) in SCALAR_FIELDS.iter() {
-            if let Some(x) = self.data.get(*field) {
-                data_bytes.extend(field.as_bytes());
-                // data_bytes.extend([0]); // null-terminate string
-                // data_bytes.extend(dmap_key)
-                data_bytes.extend(x.as_bytes());
-                num_scalars += 1;
-            }
-        }
-        for (field, _) in SCALAR_FIELDS_OPT.iter() {
-            if let Some(x) = self.data.get(*field) {
-                data_bytes.extend(field.as_bytes());
-                // data_bytes.extend([0]); // null-terminate string
-                // data_bytes.extend(dmap_key)
-                data_bytes.extend(x.as_bytes());
-                num_scalars += 1;
-            }
-        }
-        for (field, _) in VECTOR_FIELDS.iter() {
-            if let Some(x) = self.data.get(*field) {
-                data_bytes.extend(field.as_bytes());
-                // data_bytes.extend([0]); // null-terminate string
-                // data_bytes.extend(dmap_key)
-                data_bytes.extend(x.as_bytes());
-                num_vectors += 1;
-            }
-        }
-        for (field, _) in VECTOR_FIELDS_OPT.iter() {
-            if let Some(x) = self.data.get(*field) {
-                data_bytes.extend(field.as_bytes());
-                // data_bytes.extend([0]); // null-terminate string
-                // data_bytes.extend(dmap_key)
-                data_bytes.extend(x.as_bytes());
-                num_vectors += 1;
-            }
-        }
+        let mut bytes: Vec<u8> = vec![];
+        bytes.extend((65537_i32).as_bytes()); // No idea why this is what it is, copied from backscatter
+        bytes.extend((data_bytes.len() as i32 + 16).as_bytes()); // +16 for code, length, num_scalars, num_vectors
+        bytes.extend(num_scalars.as_bytes());
+        bytes.extend(num_vectors.as_bytes());
+        bytes.append(&mut data_bytes); // consumes data_bytes
+        Ok(bytes)
+    }
+}
 
-        (num_scalars, num_vectors, data_bytes)
+impl TryFrom<&mut IndexMap<String, DmapField>> for FitacfRecord {
+    type Error = DmapError;
+
+    fn try_from(value: &mut IndexMap<String, DmapField>) -> Result<Self, Self::Error> {
+        Ok(Self::coerce::<FitacfRecord>(
+            value,
+            &SCALAR_FIELDS,
+            &SCALAR_FIELDS_OPT,
+            &VECTOR_FIELDS,
+            &VECTOR_FIELDS_OPT,
+            &FITACF_FIELDS,
+        )?)
     }
 }
