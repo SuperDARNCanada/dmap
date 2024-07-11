@@ -2,9 +2,10 @@ use crate::error::DmapError;
 use crate::types::{parse_scalar, parse_vector, read_data, DmapField, DmapType, Type};
 use indexmap::IndexMap;
 use rayon::prelude::*;
+use std::fmt::Debug;
 use std::io::{Cursor, Read};
 
-pub trait Record {
+pub trait Record: Debug {
     /// Reads from dmap_data and parses into a collection of Records.
     ///
     /// # Failures

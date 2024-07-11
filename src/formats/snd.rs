@@ -112,6 +112,7 @@ static SND_FIELDS: [&str; 47] = [
     "phi0_e",
 ];
 
+#[derive(Debug, PartialEq)]
 pub struct SndRecord {
     pub(crate) data: IndexMap<String, DmapField>,
 }

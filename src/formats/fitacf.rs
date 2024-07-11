@@ -209,6 +209,7 @@ static FITACF_FIELDS: [&str; 95] = [
     "x_sd_phi",
 ];
 
+#[derive(Debug, PartialEq)]
 pub struct FitacfRecord {
     pub(crate) data: IndexMap<String, DmapField>,
 }

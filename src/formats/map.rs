@@ -194,6 +194,7 @@ static MAP_FIELDS: [&str; 88] = [
     "boundary.mlon",
 ];
 
+#[derive(Debug, PartialEq)]
 pub struct MapRecord {
     pub(crate) data: IndexMap<String, DmapField>,
 }

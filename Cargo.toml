@@ -9,10 +9,10 @@ edition = "2021"
 name = "dmap"
 
 # "cdylib" is necessary to produce a shared library for Python to import from.
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-pyo3 = {  version = "0.21.0", features = ["extension-module", "indexmap"] }
+pyo3 = { version = "0.21.0", features = ["extension-module", "indexmap", "abi3-py37"] }
 numpy = "0.21.0"
 indexmap = "1.9.3"
 itertools = "0.13.0"
@@ -21,7 +21,6 @@ zerocopy = {  version = "0.7.35" , features = ["byteorder"] }
 
 [dev-dependencies]
 criterion = { version = "0.4", features = ["html_reports"] }
-itertools = "0.10.5"
 
 [[bench]]
 name = "io_benchmarking"

@@ -101,6 +101,7 @@ static GRID_FIELDS: [&str; 42] = [
     "vector.wdt.sd",
 ];
 
+#[derive(Debug, PartialEq)]
 pub struct GridRecord {
     pub(crate) data: IndexMap<String, DmapField>,
 }

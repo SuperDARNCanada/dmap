@@ -123,6 +123,7 @@ static RAWACF_FIELDS: [&str; 55] = [
     "xcfd",
 ];
 
+#[derive(Debug, PartialEq)]
 pub struct RawacfRecord {
     pub(crate) data: IndexMap<String, DmapField>,
 }

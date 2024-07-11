@@ -197,7 +197,7 @@ impl IntoPy<PyObject> for DmapScalar {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum DmapVec {
     Char(ArrayD<i8>),
     Short(ArrayD<i16>),
@@ -366,7 +366,7 @@ impl<'py> FromPyObject<'py> for DmapVec {
     }
 }
 
-#[derive(Debug, Clone, FromPyObject)]
+#[derive(Debug, Clone, PartialEq, FromPyObject)]
 #[repr(C)]
 pub enum DmapField {
     Scalar(DmapScalar),

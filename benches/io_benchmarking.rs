@@ -1,7 +1,12 @@
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use dmap::formats::{DmapRecord, FitacfRecord, IqdatRecord, MapRecord, RawacfRecord};
-// use dmap::RawDmapRecord;
+use criterion::{criterion_group, criterion_main, Criterion};
+use dmap::formats::rawacf::RawacfRecord;
+use dmap::formats::fitacf::FitacfRecord;
+use dmap::formats::iqdat::IqdatRecord;
+use dmap::formats::map::MapRecord;
+// use dmap::formats::snd::SndRecord;
+// use dmap::formats::grid::GridRecord;
 use std::fs::File;
+use dmap::formats::dmap::Record;
 
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("Read IQDAT", |b| b.iter(|| read_iqdat()));

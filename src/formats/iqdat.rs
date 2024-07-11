@@ -137,6 +137,7 @@ static IQDAT_FIELDS: [&str; 61] = [
     "data",
 ];
 
+#[derive(Debug, PartialEq)]
 pub struct IqdatRecord {
     pub(crate) data: IndexMap<String, DmapField>,
 }
