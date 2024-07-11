@@ -45,7 +45,7 @@ static VECTOR_FIELDS: [(&str, Type); 30] = [
     ("vector.kvect", Type::Float),
     ("vector.stid", Type::Short),
     ("vector.channel", Type::Short),
-    ("vector.index", Type::Short),
+    ("vector.index", Type::Int),
     ("vector.vel.median", Type::Float),
     ("vector.vel.sd", Type::Float),
     ("vector.pwr.median", Type::Float),
