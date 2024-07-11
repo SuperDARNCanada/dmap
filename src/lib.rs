@@ -2,6 +2,7 @@ pub mod error;
 pub mod formats;
 pub mod types;
 
+use crate::error::DmapError;
 use crate::formats::dmap::Record;
 use crate::formats::fitacf::FitacfRecord;
 use crate::formats::grid::GridRecord;
@@ -11,7 +12,9 @@ use crate::formats::rawacf::RawacfRecord;
 use crate::formats::snd::SndRecord;
 use crate::types::DmapField;
 use indexmap::IndexMap;
+use itertools::{Either, Itertools};
 use pyo3::prelude::*;
+use rayon::prelude::*;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
@@ -103,10 +106,23 @@ fn write_iqdat(mut fields: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -
 #[pyfunction]
 fn write_rawacf(mut fields: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -> PyResult<()> {
     let mut bytes: Vec<u8> = vec![];
-    for dict in fields.iter_mut() {
-        let rec = RawacfRecord::try_from(dict)?;
-        bytes.extend(rec.to_bytes()?);
+    // for dict in fields.iter_mut() {
+    //     let rec = RawacfRecord::try_from(dict)?;
+    //     bytes.extend(rec.to_bytes()?);
+    // }
+    let (errors, rec_bytes): (Vec<(usize, DmapError)>, Vec<Vec<u8>>) = fields
+        .par_iter_mut()
+        .enumerate()
+        .partition_map(|(i, rec)| match RawacfRecord::try_from(rec) {
+            Err(e) => Either::Left((i, e)),
+            Ok(x) => Either::Right(x.to_bytes()),
+        });
+    if errors.len() > 0 {
+        Err(DmapError::RecordError(format!(
+            "Corrupted records: {errors}"
+        )))?
     }
+    bytes.par_extend(rec_bytes.into_par_iter());
     let mut file = File::create(outfile)?;
     file.write_all(&bytes)?;
     Ok(())
