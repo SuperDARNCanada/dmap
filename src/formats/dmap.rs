@@ -1,27 +1,48 @@
 use crate::error::DmapError;
 use crate::types::{parse_scalar, parse_vector, read_data, DmapField, DmapType, Type};
 use indexmap::IndexMap;
+use rayon::prelude::*;
 use std::io::{Cursor, Read};
 
 pub trait Record {
-    /// Reads from dmap_data and parses into a collection of RawDmapRecord's.
+    /// Reads from dmap_data and parses into a collection of Records.
     ///
     /// # Failures
     /// If dmap_data cannot be read or contains invalid data.
     fn read_records(mut dmap_data: impl Read) -> Result<Vec<Self>, DmapError>
     where
         Self: Sized,
+        Self: Send,
     {
         let mut buffer: Vec<u8> = vec![];
-
         dmap_data.read_to_end(&mut buffer)?;
 
-        let mut cursor = Cursor::new(buffer);
-        let mut dmap_records: Vec<Self> = vec![];
-
-        while cursor.position() < cursor.get_ref().len() as u64 {
-            dmap_records.push(Self::parse_record(&mut cursor)?);
+        let mut slices: Vec<_> = vec![];
+        let mut rec_start: usize = 0;
+        let mut rec_size: usize;
+        let mut rec_end: usize;
+        while ((rec_start + 2 * i32::size()) as u64) < buffer.len() as u64 {
+            rec_size = i32::from_le_bytes(buffer[rec_start + 4..rec_start + 8].try_into().unwrap())
+                as usize; // advance 4 bytes, skipping the "code" field
+            rec_end = rec_start + rec_size; // error-checking the size is conducted in Self::parse_record()
+            slices.push(Cursor::new(buffer[rec_start..rec_end].to_vec()));
+            rec_start = rec_end;
         }
+        let mut dmap_results: Vec<Result<Self, DmapError>> = vec![];
+        dmap_results.par_extend(
+            slices
+                .par_iter_mut()
+                .map(|cursor| Self::parse_record(cursor)),
+        );
+
+        let mut dmap_records: Vec<Self> = vec![];
+        for (i, rec) in dmap_results.into_iter().enumerate() {
+            dmap_records.push(match rec {
+                Err(e) => Err(DmapError::RecordError(format!("{e}: record {i}")))?,
+                Ok(x) => x,
+            });
+        }
+
         Ok(dmap_records)
     }
 
