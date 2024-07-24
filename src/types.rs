@@ -58,7 +58,7 @@ impl Type {
             4 => Self::Float,
             8 => Self::Double,
             9 => Self::String,
-            x => Err(DmapError::KeyError(x))?,
+            x => Err(DmapError::InvalidKey(x))?,
         };
         Ok(data)
     }
@@ -138,7 +138,7 @@ impl DmapScalar {
             Type::Ulong => Ok(Self::Ulong(u64::try_from(self)?)),
             Type::Float => Ok(Self::Float(f32::try_from(self)?)),
             Type::Double => Ok(Self::Double(f64::try_from(self)?)),
-            Type::String => Err(DmapError::ScalarError(
+            Type::String => Err(DmapError::InvalidScalar(
                 "Unable to cast value to String".to_string(),
             )),
         }
@@ -417,7 +417,7 @@ impl DmapType for i8 {
     where
         Self: Sized,
     {
-        Self::read_from(bytes).ok_or(DmapError::CorruptDmapError("Unable to interpret bytes"))
+        Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
     }
     fn dmap_type(&self) -> Type {
         Type::Char
@@ -439,7 +439,7 @@ impl DmapType for i16 {
     where
         Self: Sized,
     {
-        Self::read_from(bytes).ok_or(DmapError::CorruptDmapError("Unable to interpret bytes"))
+        Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
     }
     fn dmap_type(&self) -> Type {
         Type::Short
@@ -461,7 +461,7 @@ impl DmapType for i32 {
     where
         Self: Sized,
     {
-        Self::read_from(bytes).ok_or(DmapError::CorruptDmapError("Unable to interpret bytes"))
+        Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
     }
     fn dmap_type(&self) -> Type {
         Type::Int
@@ -483,7 +483,7 @@ impl DmapType for i64 {
     where
         Self: Sized,
     {
-        Self::read_from(bytes).ok_or(DmapError::CorruptDmapError("Unable to interpret bytes"))
+        Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
     }
     fn dmap_type(&self) -> Type {
         Type::Long
@@ -503,7 +503,7 @@ impl DmapType for u8 {
     where
         Self: Sized,
     {
-        Self::read_from(bytes).ok_or(DmapError::CorruptDmapError("Unable to interpret bytes"))
+        Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
     }
     fn dmap_type(&self) -> Type {
         Type::Uchar
@@ -525,7 +525,7 @@ impl DmapType for u16 {
     where
         Self: Sized,
     {
-        Self::read_from(bytes).ok_or(DmapError::CorruptDmapError("Unable to interpret bytes"))
+        Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
     }
     fn dmap_type(&self) -> Type {
         Type::Ushort
@@ -547,7 +547,7 @@ impl DmapType for u32 {
     where
         Self: Sized,
     {
-        Self::read_from(bytes).ok_or(DmapError::CorruptDmapError("Unable to interpret bytes"))
+        Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
     }
     fn dmap_type(&self) -> Type {
         Type::Uint
@@ -569,7 +569,7 @@ impl DmapType for u64 {
     where
         Self: Sized,
     {
-        Self::read_from(bytes).ok_or(DmapError::CorruptDmapError("Unable to interpret bytes"))
+        Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
     }
     fn dmap_type(&self) -> Type {
         Type::Ulong
@@ -591,7 +591,7 @@ impl DmapType for f32 {
     where
         Self: Sized,
     {
-        Self::read_from(bytes).ok_or(DmapError::CorruptDmapError("Unable to interpret bytes"))
+        Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
     }
     fn dmap_type(&self) -> Type {
         Type::Float
@@ -613,7 +613,7 @@ impl DmapType for f64 {
     where
         Self: Sized,
     {
-        Self::read_from(bytes).ok_or(DmapError::CorruptDmapError("Unable to interpret bytes"))
+        Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
     }
     fn dmap_type(&self) -> Type {
         Type::Double
@@ -632,7 +632,7 @@ impl DmapType for String {
 
     fn from_bytes(bytes: &[u8]) -> Result<Self> {
         let data = String::from_utf8(bytes.to_owned())
-            .map_err(|_| DmapError::ScalarError(format!("Cannot convert bytes to String")))?;
+            .map_err(|_| DmapError::InvalidScalar(format!("Cannot convert bytes to String")))?;
         Ok(data.trim_end_matches(char::from(0)).to_string())
     }
     fn get_dmap_key() -> u8 {
@@ -656,7 +656,7 @@ impl TryFrom<&DmapScalar> for u8 {
             DmapScalar::Ulong(x) => Ok(x.clone() as u8),
             DmapScalar::Float(x) => Ok(x.clone() as u8),
             DmapScalar::Double(x) => Ok(x.clone() as u8),
-            DmapScalar::String(x) => Err(DmapError::ScalarError(format!(
+            DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to u8"
             ))),
         }
@@ -676,7 +676,7 @@ impl TryFrom<&DmapScalar> for u16 {
             DmapScalar::Ulong(x) => Ok(x.clone() as u16),
             DmapScalar::Float(x) => Ok(x.clone() as u16),
             DmapScalar::Double(x) => Ok(x.clone() as u16),
-            DmapScalar::String(x) => Err(DmapError::ScalarError(format!(
+            DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to u16"
             ))),
         }
@@ -696,7 +696,7 @@ impl TryFrom<&DmapScalar> for u32 {
             DmapScalar::Ulong(x) => Ok(x.clone() as u32),
             DmapScalar::Float(x) => Ok(x.clone() as u32),
             DmapScalar::Double(x) => Ok(x.clone() as u32),
-            DmapScalar::String(x) => Err(DmapError::ScalarError(format!(
+            DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to u32"
             ))),
         }
@@ -716,7 +716,7 @@ impl TryFrom<&DmapScalar> for u64 {
             DmapScalar::Ulong(x) => Ok(x.clone()),
             DmapScalar::Float(x) => Ok(x.clone() as u64),
             DmapScalar::Double(x) => Ok(x.clone() as u64),
-            DmapScalar::String(x) => Err(DmapError::ScalarError(format!(
+            DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to u64"
             ))),
         }
@@ -736,7 +736,7 @@ impl TryFrom<&DmapScalar> for i8 {
             DmapScalar::Ulong(x) => Ok(x.clone() as i8),
             DmapScalar::Float(x) => Ok(x.clone() as i8),
             DmapScalar::Double(x) => Ok(x.clone() as i8),
-            DmapScalar::String(x) => Err(DmapError::ScalarError(format!(
+            DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to i8"
             ))),
         }
@@ -756,7 +756,7 @@ impl TryFrom<&DmapScalar> for i16 {
             DmapScalar::Ulong(x) => Ok(x.clone() as i16),
             DmapScalar::Float(x) => Ok(x.clone() as i16),
             DmapScalar::Double(x) => Ok(x.clone() as i16),
-            DmapScalar::String(x) => Err(DmapError::ScalarError(format!(
+            DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to i16"
             ))),
         }
@@ -776,7 +776,7 @@ impl TryFrom<&DmapScalar> for i32 {
             DmapScalar::Ulong(x) => Ok(x.clone() as i32),
             DmapScalar::Float(x) => Ok(x.clone() as i32),
             DmapScalar::Double(x) => Ok(x.clone() as i32),
-            DmapScalar::String(x) => Err(DmapError::ScalarError(format!(
+            DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to i32"
             ))),
         }
@@ -796,7 +796,7 @@ impl TryFrom<&DmapScalar> for i64 {
             DmapScalar::Ulong(x) => Ok(x.clone() as i64),
             DmapScalar::Float(x) => Ok(x.clone() as i64),
             DmapScalar::Double(x) => Ok(x.clone() as i64),
-            DmapScalar::String(x) => Err(DmapError::ScalarError(format!(
+            DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to i64"
             ))),
         }
@@ -816,7 +816,7 @@ impl TryFrom<&DmapScalar> for f32 {
             DmapScalar::Ulong(x) => Ok(x.clone() as f32),
             DmapScalar::Float(x) => Ok(x.clone()),
             DmapScalar::Double(x) => Ok(x.clone() as f32),
-            DmapScalar::String(x) => Err(DmapError::ScalarError(format!(
+            DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to f32"
             ))),
         }
@@ -836,7 +836,7 @@ impl TryFrom<&DmapScalar> for f64 {
             DmapScalar::Ulong(x) => Ok(x.clone() as f64),
             DmapScalar::Float(x) => Ok(x.clone() as f64),
             DmapScalar::Double(x) => Ok(x.clone()),
-            DmapScalar::String(x) => Err(DmapError::ScalarError(format!(
+            DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to f64"
             ))),
         }
@@ -849,13 +849,13 @@ pub fn check_scalar(
 ) -> Result<()> {
     match fields.get(name) {
         Some(&DmapField::Scalar(ref data)) if data.get_type() == expected_type => Ok(()),
-        Some(&DmapField::Scalar(ref data)) => Err(DmapError::ScalarError(format!(
+        Some(&DmapField::Scalar(ref data)) => Err(DmapError::InvalidScalar(format!(
             "{name} is of type {}, expected {}",
             data.get_type(),
             expected_type
         ))),
-        Some(_) => Err(DmapError::ScalarError(format!("{name} is a vector field"))),
-        None => Err(DmapError::ScalarError(format!("{name} is not in record"))),
+        Some(_) => Err(DmapError::InvalidScalar(format!("{name} is a vector field"))),
+        None => Err(DmapError::InvalidScalar(format!("{name} is not in record"))),
     }
 }
 
@@ -866,12 +866,12 @@ pub fn check_scalar_opt(
 ) -> Result<()> {
     match fields.get(name) {
         Some(&DmapField::Scalar(ref data)) if data.get_type() == expected_type => Ok(()),
-        Some(&DmapField::Scalar(ref data)) => Err(DmapError::ScalarError(format!(
+        Some(&DmapField::Scalar(ref data)) => Err(DmapError::InvalidScalar(format!(
             "{name} is of type {}, expected {}",
             data.get_type(),
             expected_type
         ))),
-        Some(_) => Err(DmapError::ScalarError(format!("{name} is a vector field"))),
+        Some(_) => Err(DmapError::InvalidScalar(format!("{name} is a vector field"))),
         None => Ok(()),
     }
 }
@@ -883,16 +883,16 @@ pub fn check_vector(
 ) -> Result<()> {
     match fields.get(name) {
         Some(DmapField::Vector(data)) if data.get_type() != expected_type => {
-            Err(DmapError::VectorError(format!(
+            Err(DmapError::InvalidVector(format!(
                 "{name} is of type {}, expected {}",
                 data.get_type(),
                 expected_type
             )))
         }
         Some(DmapField::Scalar(_)) => {
-            Err(DmapError::VectorError(format!("{name} is a scalar field")))
+            Err(DmapError::InvalidVector(format!("{name} is a scalar field")))
         }
-        None => Err(DmapError::VectorError(format!("{name} not in record"))),
+        None => Err(DmapError::InvalidVector(format!("{name} not in record"))),
         _ => Ok(()),
     }
 }
@@ -904,14 +904,14 @@ pub fn check_vector_opt(
 ) -> Result<()> {
     match fields.get(name) {
         Some(DmapField::Vector(data)) if data.get_type() != expected_type => {
-            Err(DmapError::VectorError(format!(
+            Err(DmapError::InvalidVector(format!(
                 "{name} is of type {}, expected {}",
                 data.get_type(),
                 expected_type
             )))
         }
         Some(DmapField::Scalar(_)) => {
-            Err(DmapError::VectorError(format!("{name} is a scalar field")))
+            Err(DmapError::InvalidVector(format!("{name} is a scalar field")))
         }
         _ => Ok(()),
     }
@@ -921,18 +921,18 @@ pub fn check_vector_opt(
 pub(crate) fn parse_scalar(cursor: &mut Cursor<Vec<u8>>) -> Result<(String, DmapField)> {
     let _mode = 6;
     let name = read_data::<String>(cursor).map_err(|e| {
-        DmapError::ScalarError(format!(
+        DmapError::InvalidScalar(format!(
             "Invalid scalar name, byte {}: {e}",
             cursor.position()
         ))
     })?;
     let data_type_key = match read_data::<i8>(cursor) {
-        Err(e) => Err(DmapError::ScalarError(format!(
+        Err(e) => Err(DmapError::InvalidScalar(format!(
             "Invalid data type for field '{name}', byte {}: {e}",
             cursor.position() - i8::size() as u64
         )))?,
         Ok(x) => Type::from_key(x).map_err(|e| {
-            DmapError::ScalarError(format!(
+            DmapError::InvalidScalar(format!(
                 "Field {name}: {e}, byte {}",
                 cursor.position() - i8::size() as u64
             ))
@@ -963,13 +963,13 @@ pub(crate) fn parse_vector(
 ) -> Result<(String, DmapField)> {
     let _mode = 7;
     let name = read_data::<String>(cursor).map_err(|e| {
-        DmapError::VectorError(format!(
+        DmapError::InvalidVector(format!(
             "Invalid vector name, byte {}: {e}",
             cursor.position()
         ))
     })?;
     let data_type_key = read_data::<i8>(cursor).map_err(|e| {
-        DmapError::VectorError(format!(
+        DmapError::InvalidVector(format!(
             "Invalid data type for field '{name}', byte {}: {e}",
             cursor.position() - i8::size() as u64
         ))
@@ -979,7 +979,7 @@ pub(crate) fn parse_vector(
 
     let vector_dimension = read_data::<i32>(cursor)?;
     if vector_dimension > record_size {
-        return Err(DmapError::VectorError(format!(
+        return Err(DmapError::InvalidVector(format!(
             "Parsed number of vector dimensions {} for field '{}' at byte {} are larger \
             than record size {}",
             vector_dimension,
@@ -988,7 +988,7 @@ pub(crate) fn parse_vector(
             record_size
         )));
     } else if vector_dimension <= 0 {
-        return Err(DmapError::VectorError(format!(
+        return Err(DmapError::InvalidVector(format!(
             "Parsed number of vector dimensions {} for field '{}' at byte {} are zero or \
             negative",
             vector_dimension,
@@ -1002,14 +1002,14 @@ pub(crate) fn parse_vector(
     for _ in 0..vector_dimension {
         let dim = read_data::<i32>(cursor)?;
         if dim <= 0 && name != "slist" {
-            return Err(DmapError::VectorError(format!(
+            return Err(DmapError::InvalidVector(format!(
                 "Vector dimension {} at byte {} is zero or negative for field '{}'",
                 dim,
                 cursor.position() - i32::size() as u64,
                 name
             )));
         } else if dim > record_size {
-            return Err(DmapError::VectorError(format!(
+            return Err(DmapError::InvalidVector(format!(
                 "Vector dimension {} at byte {} for field '{}' exceeds record size {} ",
                 dim,
                 cursor.position() - i32::size() as u64,
@@ -1022,7 +1022,7 @@ pub(crate) fn parse_vector(
     }
     dimensions = dimensions.into_iter().rev().collect(); // reverse the dimensions, stored in column-major order
     if total_elements * data_type.size() as i32 > record_size {
-        return Err(DmapError::VectorError(format!(
+        return Err(DmapError::InvalidVector(format!(
             "Vector size {} starting at byte {} for field '{}' exceeds record size {}",
             total_elements * data_type.size() as i32,
             cursor.position() - vector_dimension as u64 * i32::size() as u64,
@@ -1035,65 +1035,65 @@ pub(crate) fn parse_vector(
         Type::Char => DmapVec::Char(
             ArrayD::from_shape_vec(dimensions, read_vector::<i8>(cursor, total_elements)?)
                 .map_err(|e| {
-                    DmapError::VectorError(format!("Could not read in vector field {name}: {e}"))
+                    DmapError::InvalidVector(format!("Could not read in vector field {name}: {e}"))
                 })?,
         ),
         Type::Short => DmapVec::Short(
             ArrayD::from_shape_vec(dimensions, read_vector::<i16>(cursor, total_elements)?)
                 .map_err(|e| {
-                    DmapError::VectorError(format!("Could not read in vector field {name}: {e}"))
+                    DmapError::InvalidVector(format!("Could not read in vector field {name}: {e}"))
                 })?,
         ),
         Type::Int => DmapVec::Int(
             ArrayD::from_shape_vec(dimensions, read_vector::<i32>(cursor, total_elements)?)
                 .map_err(|e| {
-                    DmapError::VectorError(format!("Could not read in vector field {name}: {e}"))
+                    DmapError::InvalidVector(format!("Could not read in vector field {name}: {e}"))
                 })?,
         ),
         Type::Long => DmapVec::Long(
             ArrayD::from_shape_vec(dimensions, read_vector::<i64>(cursor, total_elements)?)
                 .map_err(|e| {
-                    DmapError::VectorError(format!("Could not read in vector field {name}: {e}"))
+                    DmapError::InvalidVector(format!("Could not read in vector field {name}: {e}"))
                 })?,
         ),
         Type::Uchar => DmapVec::Uchar(
             ArrayD::from_shape_vec(dimensions, read_vector::<u8>(cursor, total_elements)?)
                 .map_err(|e| {
-                    DmapError::VectorError(format!("Could not read in vector field {name}: {e}"))
+                    DmapError::InvalidVector(format!("Could not read in vector field {name}: {e}"))
                 })?,
         ),
         Type::Ushort => DmapVec::Ushort(
             ArrayD::from_shape_vec(dimensions, read_vector::<u16>(cursor, total_elements)?)
                 .map_err(|e| {
-                    DmapError::VectorError(format!("Could not read in vector field {name}: {e}"))
+                    DmapError::InvalidVector(format!("Could not read in vector field {name}: {e}"))
                 })?,
         ),
         Type::Uint => DmapVec::Uint(
             ArrayD::from_shape_vec(dimensions, read_vector::<u32>(cursor, total_elements)?)
                 .map_err(|e| {
-                    DmapError::VectorError(format!("Could not read in vector field {name}: {e}"))
+                    DmapError::InvalidVector(format!("Could not read in vector field {name}: {e}"))
                 })?,
         ),
         Type::Ulong => DmapVec::Ulong(
             ArrayD::from_shape_vec(dimensions, read_vector::<u64>(cursor, total_elements)?)
                 .map_err(|e| {
-                    DmapError::VectorError(format!("Could not read in vector field {name}: {e}"))
+                    DmapError::InvalidVector(format!("Could not read in vector field {name}: {e}"))
                 })?,
         ),
         Type::Float => DmapVec::Float(
             ArrayD::from_shape_vec(dimensions, read_vector::<f32>(cursor, total_elements)?)
                 .map_err(|e| {
-                    DmapError::VectorError(format!("Could not read in vector field {name}: {e}"))
+                    DmapError::InvalidVector(format!("Could not read in vector field {name}: {e}"))
                 })?,
         ),
         Type::Double => DmapVec::Double(
             ArrayD::from_shape_vec(dimensions, read_vector::<f64>(cursor, total_elements)?)
                 .map_err(|e| {
-                    DmapError::VectorError(format!("Could not read in vector field {name}: {e}"))
+                    DmapError::InvalidVector(format!("Could not read in vector field {name}: {e}"))
                 })?,
         ),
         _ => {
-            return Err(DmapError::VectorError(format!(
+            return Err(DmapError::InvalidVector(format!(
                 "Invalid type {} for DMAP vector {}",
                 data_type, name
             )))
@@ -1117,10 +1117,10 @@ pub(crate) fn read_data<T: DmapType>(cursor: &mut Cursor<Vec<u8>>) -> Result<T> 
     let stream = cursor.get_mut();
 
     if position > stream.len() {
-        return Err(DmapError::CorruptDmapError("Cursor extends out of buffer"));
+        return Err(DmapError::CorruptStream("Cursor extends out of buffer"));
     }
     if stream.len() - position < T::size() {
-        return Err(DmapError::CorruptDmapError(
+        return Err(DmapError::CorruptStream(
             "Byte offsets into buffer are not properly aligned",
         ));
     }
@@ -1132,7 +1132,7 @@ pub(crate) fn read_data<T: DmapType>(cursor: &mut Cursor<Vec<u8>>) -> Result<T> 
             while stream[position + byte_counter] != 0 {
                 byte_counter += 1;
                 if position + byte_counter >= stream.len() {
-                    return Err(DmapError::CorruptDmapError(
+                    return Err(DmapError::CorruptStream(
                         "String is improperly terminated",
                     ));
                 }

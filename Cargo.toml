@@ -17,6 +17,7 @@ numpy = "0.21.0"
 indexmap = "1.9.3"
 itertools = "0.13.0"
 rayon = "1.10.0"
+thiserror = "1.0.63"
 zerocopy = {  version = "0.7.35" , features = ["byteorder"] }
 
 [dev-dependencies]

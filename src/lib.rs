@@ -112,7 +112,7 @@ fn write_iqdat(mut fields: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -
             }
         });
     if errors.len() > 0 {
-        Err(DmapError::RecordError(format!(
+        Err(DmapError::InvalidRecord(format!(
             "Corrupted records: {errors:?}"
         )))?
     }
@@ -137,7 +137,7 @@ fn write_rawacf(mut fields: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) 
             }
         });
     if errors.len() > 0 {
-        Err(DmapError::RecordError(format!(
+        Err(DmapError::InvalidRecord(format!(
             "Corrupted records: {errors:?}"
         )))?
     }
@@ -162,7 +162,7 @@ fn write_fitacf(mut fields: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) 
             }
         });
     if errors.len() > 0 {
-        Err(DmapError::RecordError(format!(
+        Err(DmapError::InvalidRecord(format!(
             "Corrupted records: {errors:?}"
         )))?
     }
@@ -187,7 +187,7 @@ fn write_grid(mut fields: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) ->
             }
         });
     if errors.len() > 0 {
-        Err(DmapError::RecordError(format!(
+        Err(DmapError::InvalidRecord(format!(
             "Corrupted records: {errors:?}"
         )))?
     }
@@ -212,7 +212,7 @@ fn write_map(mut fields: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -> 
             }
         });
     if errors.len() > 0 {
-        Err(DmapError::RecordError(format!(
+        Err(DmapError::InvalidRecord(format!(
             "Corrupted records: {errors:?}"
         )))?
     }
@@ -237,7 +237,7 @@ fn write_snd(mut fields: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -> 
             }
         });
     if errors.len() > 0 {
-        Err(DmapError::RecordError(format!(
+        Err(DmapError::InvalidRecord(format!(
             "Corrupted records: {errors:?}"
         )))?
     }

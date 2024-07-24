@@ -39,7 +39,7 @@ pub trait Record: Debug {
         let mut dmap_records: Vec<Self> = vec![];
         for (i, rec) in dmap_results.into_iter().enumerate() {
             dmap_records.push(match rec {
-                Err(e) => Err(DmapError::RecordError(format!("{e}: record {i}")))?,
+                Err(e) => Err(DmapError::InvalidRecord(format!("{e}: record {i}")))?,
                 Ok(x) => x,
             });
         }
@@ -54,13 +54,13 @@ pub trait Record: Debug {
     {
         let bytes_already_read = cursor.position();
         let _code = read_data::<i32>(cursor).map_err(|e| {
-            DmapError::RecordError(format!(
+            DmapError::InvalidRecord(format!(
                 "Cannot interpret code at byte {}: {e}",
                 bytes_already_read
             ))
         })?;
         let size = read_data::<i32>(cursor).map_err(|e| {
-            DmapError::RecordError(format!(
+            DmapError::InvalidRecord(format!(
                 "Cannot interpret size at byte {}: {e}",
                 bytes_already_read + i32::size() as u64
             ))
@@ -69,39 +69,39 @@ pub trait Record: Debug {
         // adding 8 bytes because code and size are part of the record.
         if size as u64 > cursor.get_ref().len() as u64 - cursor.position() + 2 * i32::size() as u64
         {
-            return Err(DmapError::RecordError(format!(
+            return Err(DmapError::InvalidRecord(format!(
                 "Record size {size} at byte {} bigger than remaining buffer {}",
                 cursor.position() - i32::size() as u64,
                 cursor.get_ref().len() as u64 - cursor.position() + 2 * i32::size() as u64
             )));
         } else if size <= 0 {
-            return Err(DmapError::RecordError(format!("Record size {size} <= 0")));
+            return Err(DmapError::InvalidRecord(format!("Record size {size} <= 0")));
         }
 
         let num_scalars = read_data::<i32>(cursor).map_err(|e| {
-            DmapError::RecordError(format!(
+            DmapError::InvalidRecord(format!(
                 "Cannot interpret number of scalars at byte {}: {e}",
                 cursor.position() - i32::size() as u64
             ))
         })?;
         let num_vectors = read_data::<i32>(cursor).map_err(|e| {
-            DmapError::RecordError(format!(
+            DmapError::InvalidRecord(format!(
                 "Cannot interpret number of vectors at byte {}: {e}",
                 cursor.position() - i32::size() as u64
             ))
         })?;
         if num_scalars <= 0 {
-            return Err(DmapError::RecordError(format!(
+            return Err(DmapError::InvalidRecord(format!(
                 "Number of scalars {num_scalars} at byte {} <= 0",
                 cursor.position() - 2 * i32::size() as u64
             )));
         } else if num_vectors <= 0 {
-            return Err(DmapError::RecordError(format!(
+            return Err(DmapError::InvalidRecord(format!(
                 "Number of vectors {num_vectors} at byte {} <= 0",
                 cursor.position() - i32::size() as u64
             )));
         } else if num_scalars + num_vectors > size {
-            return Err(DmapError::RecordError(format!(
+            return Err(DmapError::InvalidRecord(format!(
                 "Number of scalars {num_scalars} plus vectors {num_vectors} greater than size '{size}'")));
         }
 
@@ -116,7 +116,7 @@ pub trait Record: Debug {
         }
 
         if cursor.position() - bytes_already_read != size as u64 {
-            return Err(DmapError::RecordError(format!(
+            return Err(DmapError::InvalidRecord(format!(
                 "Bytes read {} does not match the records size field {}",
                 cursor.position() - bytes_already_read,
                 size
@@ -144,7 +144,7 @@ pub trait Record: Debug {
             .filter(|&k| !all_fields.contains(&&**k))
             .collect();
         if unsupported_keys.len() > 0 {
-            Err(DmapError::RecordError(format!(
+            Err(DmapError::InvalidRecord(format!(
                 "Unsupported fields {:?}, fields supported are {all_fields:?}",
                 unsupported_keys
             )))?
@@ -153,17 +153,17 @@ pub trait Record: Debug {
         for (field, expected_type) in scalars.iter() {
             match fields.get(&field.to_string()) {
                 Some(&DmapField::Scalar(ref x)) if &x.get_type() == expected_type => {}
-                Some(&DmapField::Scalar(ref x)) => Err(DmapError::RecordError(format!(
+                Some(&DmapField::Scalar(ref x)) => Err(DmapError::InvalidRecord(format!(
                     "Field {} has incorrect type {}, expected {}",
                     field,
                     x.get_type(),
                     expected_type
                 )))?,
-                Some(_) => Err(DmapError::RecordError(format!(
+                Some(_) => Err(DmapError::InvalidRecord(format!(
                     "Field {} is a vector, expected scalar",
                     field
                 )))?,
-                None => Err(DmapError::RecordError(format!(
+                None => Err(DmapError::InvalidRecord(format!(
                     "Field {field:?} ({:?}) missing: fields {:?}",
                     &field.to_string(),
                     fields.keys()
@@ -173,13 +173,13 @@ pub trait Record: Debug {
         for (field, expected_type) in scalars_opt.iter() {
             match fields.get(&field.to_string()) {
                 Some(&DmapField::Scalar(ref x)) if &x.get_type() == expected_type => {}
-                Some(&DmapField::Scalar(ref x)) => Err(DmapError::RecordError(format!(
+                Some(&DmapField::Scalar(ref x)) => Err(DmapError::InvalidRecord(format!(
                     "Field {} has incorrect type {}, expected {}",
                     field,
                     x.get_type(),
                     expected_type
                 )))?,
-                Some(_) => Err(DmapError::RecordError(format!(
+                Some(_) => Err(DmapError::InvalidRecord(format!(
                     "Field {} is a vector, expected scalar",
                     field
                 )))?,
@@ -188,28 +188,28 @@ pub trait Record: Debug {
         }
         for (field, expected_type) in vectors.iter() {
             match fields.get(&field.to_string()) {
-                Some(&DmapField::Scalar(_)) => Err(DmapError::RecordError(format!(
+                Some(&DmapField::Scalar(_)) => Err(DmapError::InvalidRecord(format!(
                     "Field {} is a scalar, expected vector",
                     field
                 )))?,
                 Some(&DmapField::Vector(ref x)) if &x.get_type() != expected_type => {
-                    Err(DmapError::RecordError(format!(
+                    Err(DmapError::InvalidRecord(format!(
                         "Field {field} has incorrect type {:?}, expected {expected_type:?}",
                         x.get_type()
                     )))?
                 }
                 Some(&DmapField::Vector(_)) => {}
-                None => Err(DmapError::RecordError(format!("Field {field} missing")))?,
+                None => Err(DmapError::InvalidRecord(format!("Field {field} missing")))?,
             }
         }
         for (field, expected_type) in vectors_opt.iter() {
             match fields.get(&field.to_string()) {
-                Some(&DmapField::Scalar(_)) => Err(DmapError::RecordError(format!(
+                Some(&DmapField::Scalar(_)) => Err(DmapError::InvalidRecord(format!(
                     "Field {} is a scalar, expected vector",
                     field
                 )))?,
                 Some(&DmapField::Vector(ref x)) if &x.get_type() != expected_type => {
-                    Err(DmapError::RecordError(format!(
+                    Err(DmapError::InvalidRecord(format!(
                         "Field {field} has incorrect type {}, expected {expected_type}",
                         x.get_type()
                     )))?
@@ -234,7 +234,7 @@ pub trait Record: Debug {
             .filter(|&k| !all_fields.contains(&&**k))
             .collect();
         if unsupported_keys.len() > 0 {
-            Err(DmapError::RecordError(format!(
+            Err(DmapError::InvalidRecord(format!(
                 "Unsupported fields {:?}, fields supported are {all_fields:?}",
                 unsupported_keys
             )))?
@@ -249,11 +249,11 @@ pub trait Record: Debug {
                     );
                 }
                 Some(&DmapField::Scalar(_)) => {}
-                Some(_) => Err(DmapError::RecordError(format!(
+                Some(_) => Err(DmapError::InvalidRecord(format!(
                     "Field {} is a vector, expected scalar",
                     field
                 )))?,
-                None => Err(DmapError::RecordError(format!(
+                None => Err(DmapError::InvalidRecord(format!(
                     "Field {field:?} ({:?}) missing: fields {:?}",
                     &field.to_string(),
                     fields.keys()
@@ -269,7 +269,7 @@ pub trait Record: Debug {
                         DmapField::Scalar(x.cast_as(expected_type)?),
                     );
                 }
-                Some(_) => Err(DmapError::RecordError(format!(
+                Some(_) => Err(DmapError::InvalidRecord(format!(
                     "Field {} is a vector, expected scalar",
                     field
                 )))?,
@@ -278,28 +278,28 @@ pub trait Record: Debug {
         }
         for (field, expected_type) in vectors.iter() {
             match fields.get(&field.to_string()) {
-                Some(&DmapField::Scalar(_)) => Err(DmapError::RecordError(format!(
+                Some(&DmapField::Scalar(_)) => Err(DmapError::InvalidRecord(format!(
                     "Field {} is a scalar, expected vector",
                     field
                 )))?,
                 Some(&DmapField::Vector(ref x)) if &x.get_type() != expected_type => {
-                    Err(DmapError::RecordError(format!(
+                    Err(DmapError::InvalidRecord(format!(
                         "Field {field} has incorrect type {:?}, expected {expected_type:?}",
                         x.get_type()
                     )))?
                 }
                 Some(&DmapField::Vector(_)) => {}
-                None => Err(DmapError::RecordError(format!("Field {field} missing")))?,
+                None => Err(DmapError::InvalidRecord(format!("Field {field} missing")))?,
             }
         }
         for (field, expected_type) in vectors_opt.iter() {
             match fields.get(&field.to_string()) {
-                Some(&DmapField::Scalar(_)) => Err(DmapError::RecordError(format!(
+                Some(&DmapField::Scalar(_)) => Err(DmapError::InvalidRecord(format!(
                     "Field {} is a scalar, expected vector",
                     field
                 )))?,
                 Some(&DmapField::Vector(ref x)) if &x.get_type() != expected_type => {
-                    Err(DmapError::RecordError(format!(
+                    Err(DmapError::InvalidRecord(format!(
                         "Field {field} has incorrect type {}, expected {expected_type}",
                         x.get_type()
                     )))?
@@ -332,7 +332,7 @@ pub trait Record: Debug {
                 data_bytes.append(&mut x.as_bytes());
                 num_scalars += 1;
             } else {
-                Err(DmapError::RecordError(format!(
+                Err(DmapError::InvalidRecord(format!(
                     "Field {field} missing from record"
                 )))?
             }
@@ -352,7 +352,7 @@ pub trait Record: Debug {
                 data_bytes.append(&mut x.as_bytes());
                 num_vectors += 1;
             } else {
-                Err(DmapError::RecordError(format!(
+                Err(DmapError::InvalidRecord(format!(
                     "Field {field} missing from record"
                 )))?
             }
