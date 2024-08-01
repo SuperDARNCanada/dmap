@@ -47,7 +47,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
-          args: --release -i python3.8 --out dist --zig -vv
+          args: --release -i python3.8 --out dist --zig -v
           sccache: 'true'
           manylinux: auto
       - name: Install wheels
