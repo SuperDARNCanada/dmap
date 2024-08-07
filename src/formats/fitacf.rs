@@ -64,10 +64,13 @@ static SCALAR_FIELDS_OPT: [(&str, Type); 4] = [
     ("tdiff", Type::Float),
 ];
 
-static VECTOR_FIELDS: [(&str, Type); 20] = [
+static VECTOR_FIELDS: [(&str, Type); 3] = [
     ("ptab", Type::Short),
     ("ltab", Type::Short),
     ("pwr0", Type::Float),
+];
+
+static VECTOR_FIELDS_OPT: [(&str, Type); 39] = [
     ("slist", Type::Short),
     ("nlag", Type::Short),
     ("qflg", Type::Char),
@@ -85,9 +88,6 @@ static VECTOR_FIELDS: [(&str, Type); 20] = [
     ("sd_l", Type::Float),
     ("sd_s", Type::Float),
     ("sd_phi", Type::Float),
-];
-
-static VECTOR_FIELDS_OPT: [(&str, Type); 22] = [
     ("x_qflg", Type::Char),
     ("x_gflg", Type::Char),
     ("x_p_l", Type::Float),
@@ -190,8 +190,6 @@ impl Record for FitacfRecord {
             Ok(_) => {}
             Err(e) => Err(e)?,
         }
-
-        // check for more complicated conditions
 
         Ok(FitacfRecord {
             data: fields.to_owned(),

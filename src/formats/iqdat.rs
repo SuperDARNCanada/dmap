@@ -107,8 +107,6 @@ impl Record for IqdatRecord {
             Err(e) => Err(e)?,
         }
 
-        // check for more complicated conditions
-
         Ok(IqdatRecord {
             data: fields.to_owned(),
         })

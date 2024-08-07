@@ -1,3 +1,12 @@
+//! # dmap
+//!
+//! `dmap` is an I/O library for SuperDARN DMAP files.
+//! This library has a Python API using pyo3 that supports
+//! reading and writing whole files.
+//!
+//! For more information about DMAP files, see [RST](https://radar-software-toolkit-rst.readthedocs.io/en/latest/)
+//! or [pyDARNio](https://pydarnio.readthedocs.io/en/latest/).
+
 pub mod error;
 pub mod formats;
 pub mod types;
@@ -19,7 +28,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 
-/// Reads a IQDAT file, returning a list of dictionaries containing the fields.
+/// Reads an IQDAT file, returning a list of dictionaries containing the fields.
 #[pyfunction]
 fn read_iqdat(infile: PathBuf) -> PyResult<Vec<IndexMap<String, DmapField>>> {
     let file = File::open(infile)?;

@@ -1,3 +1,4 @@
+//! Low-level data types within DMAP records.
 use crate::error::DmapError;
 use indexmap::IndexMap;
 use numpy::array::PyArray;
@@ -13,15 +14,25 @@ use zerocopy::{AsBytes, ByteOrder, FromBytes, LittleEndian};
 
 type Result<T> = std::result::Result<T, DmapError>;
 
+/// Defines the fields of a record and their Type
 pub struct Fields<'a> {
+    /// The names of all fields of the record type
     pub all_fields: Vec<&'a str>,
+    /// The name and Type of each required scalar field
     pub scalars_required: Vec<(&'a str, Type)>,
+    /// The name and Type of each optional scalar field
     pub scalars_optional: Vec<(&'a str, Type)>,
+    /// The name and Type of each required vector field
     pub vectors_required: Vec<(&'a str, Type)>,
+    /// The name and Type of each optional vector field
     pub vectors_optional: Vec<(&'a str, Type)>,
+    /// Groups of vector fields which must have identical dimensions
     pub vector_dim_groups: Vec<Vec<&'a str>>,
 }
 
+/// The possible data types that a scalar or vector field may have.
+///
+/// `String` type is not supported for vector fields.
 #[derive(Debug, PartialEq, Clone)]
 pub enum Type {
     Char,
@@ -54,6 +65,8 @@ impl Display for Type {
     }
 }
 impl Type {
+    /// Converts from DMAP key to corresponding `Type` (see [here](https://github.com/SuperDARN/rst/blob/main/codebase/general/src.lib/dmap.1.25/include/dmap.h)).
+    /// Returns the `Type` if the key is supported, otherwise raises `DmapError`
     fn from_key(key: i8) -> Result<Self> {
         let data = match key {
             1 => Self::Char,
@@ -71,6 +84,7 @@ impl Type {
         };
         Ok(data)
     }
+    /// Returns the corresponding key for the `Type` variant.
     fn key(&self) -> i8 {
         match self {
             Self::Char => 1,
@@ -86,7 +100,7 @@ impl Type {
             Self::String => 9,
         }
     }
-
+    /// The size in bytes of the data for `Type`
     fn size(&self) -> usize {
         match self {
             Self::Char => 1,
@@ -120,6 +134,7 @@ pub enum DmapScalar {
     String(String),
 }
 impl DmapScalar {
+    /// Gets the corresponding `Type`
     pub(crate) fn get_type(&self) -> Type {
         match self {
             Self::Char(_) => Type::Char,
@@ -135,6 +150,7 @@ impl DmapScalar {
             Self::String(_) => Type::String,
         }
     }
+    /// Converts `self` into a new `Type`, if possible.
     pub(crate) fn cast_as(&self, new_type: &Type) -> Result<Self> {
         match new_type {
             Type::Char => Ok(Self::Char(i8::try_from(self)?)),
@@ -152,6 +168,7 @@ impl DmapScalar {
             )),
         }
     }
+    /// Copies the data and metadata (`Type` key) to raw bytes
     fn as_bytes(&self) -> Vec<u8> {
         let mut bytes: Vec<u8> = DmapType::as_bytes(&self.get_type().key()).to_vec();
         let mut data_bytes: Vec<u8> = match self {
@@ -206,6 +223,7 @@ impl IntoPy<PyObject> for DmapScalar {
     }
 }
 
+/// A DMAP vector
 #[derive(Clone, Debug, PartialEq)]
 pub enum DmapVec {
     Char(ArrayD<i8>),
@@ -220,6 +238,7 @@ pub enum DmapVec {
     Double(ArrayD<f64>),
 }
 impl DmapVec {
+    /// Gets the corresponding `Type` of the vector
     pub(crate) fn get_type(&self) -> Type {
         match self {
             DmapVec::Char(_) => Type::Char,
@@ -234,6 +253,7 @@ impl DmapVec {
             DmapVec::Double(_) => Type::Double,
         }
     }
+    /// Copies the data and metadata (dimensions, `Type` key) to raw bytes
     fn as_bytes(&self) -> Vec<u8> {
         let mut bytes: Vec<u8> = DmapType::as_bytes(&self.get_type().key()).to_vec();
         match self {
@@ -330,6 +350,7 @@ impl DmapVec {
         };
         bytes
     }
+    /// Gets the dimensions of the vector.
     pub(crate) fn shape(&self) -> &[usize] {
         match self {
             DmapVec::Char(x) => x.shape(),
@@ -389,6 +410,7 @@ impl<'py> FromPyObject<'py> for DmapVec {
     }
 }
 
+/// A generic field of a DMAP record.
 #[derive(Debug, Clone, PartialEq, FromPyObject)]
 #[repr(C)]
 pub enum DmapField {
@@ -396,6 +418,7 @@ pub enum DmapField {
     Vector(DmapVec),
 }
 impl DmapField {
+    /// Converts the field and metadata (`Type` key and dimensions if applicable) to raw bytes.
     pub fn as_bytes(&self) -> Vec<u8> {
         match self {
             Self::Scalar(x) => x.as_bytes(),
@@ -412,25 +435,23 @@ impl IntoPy<PyObject> for DmapField {
     }
 }
 
-/// Trait for types that can be stored in DMAP files
+/// Trait for raw types that can be stored in DMAP files.
 pub trait DmapType: std::fmt::Debug {
+    /// Size in bytes of the type.
     fn size() -> usize
     where
         Self: Sized;
+    /// Create a copy of the data as raw bytes.
     fn as_bytes(&self) -> Vec<u8>;
+    /// Convert raw bytes to `Self`
     fn from_bytes(bytes: &[u8]) -> Result<Self>
     where
         Self: Sized;
-    fn get_dmap_key() -> u8
-    where
-        Self: Sized;
+    /// Get the `Type` variant that represents `Self`
     fn dmap_type(&self) -> Type;
 }
 impl DmapType for i8 {
     fn size() -> usize {
-        1
-    }
-    fn get_dmap_key() -> u8 {
         1
     }
     fn as_bytes(&self) -> Vec<u8> {
@@ -448,9 +469,6 @@ impl DmapType for i8 {
 }
 impl DmapType for i16 {
     fn size() -> usize {
-        2
-    }
-    fn get_dmap_key() -> u8 {
         2
     }
     fn as_bytes(&self) -> Vec<u8> {
@@ -472,9 +490,6 @@ impl DmapType for i32 {
     fn size() -> usize {
         4
     }
-    fn get_dmap_key() -> u8 {
-        3
-    }
     fn as_bytes(&self) -> Vec<u8> {
         let mut bytes = [0; 4];
         LittleEndian::write_i32(&mut bytes, *self);
@@ -493,9 +508,6 @@ impl DmapType for i32 {
 impl DmapType for i64 {
     fn size() -> usize {
         8
-    }
-    fn get_dmap_key() -> u8 {
-        10
     }
     fn as_bytes(&self) -> Vec<u8> {
         let mut bytes = [0; 8];
@@ -516,9 +528,6 @@ impl DmapType for u8 {
     fn size() -> usize {
         1
     }
-    fn get_dmap_key() -> u8 {
-        16
-    }
     fn as_bytes(&self) -> Vec<u8> {
         AsBytes::as_bytes(self).to_vec()
     }
@@ -535,9 +544,6 @@ impl DmapType for u8 {
 impl DmapType for u16 {
     fn size() -> usize {
         2
-    }
-    fn get_dmap_key() -> u8 {
-        17
     }
     fn as_bytes(&self) -> Vec<u8> {
         let mut bytes = [0; 2];
@@ -558,9 +564,6 @@ impl DmapType for u32 {
     fn size() -> usize {
         4
     }
-    fn get_dmap_key() -> u8 {
-        18
-    }
     fn as_bytes(&self) -> Vec<u8> {
         let mut bytes = [0; 4];
         LittleEndian::write_u32(&mut bytes, *self);
@@ -580,9 +583,6 @@ impl DmapType for u64 {
     fn size() -> usize {
         8
     }
-    fn get_dmap_key() -> u8 {
-        19
-    }
     fn as_bytes(&self) -> Vec<u8> {
         let mut bytes = [0; 8];
         LittleEndian::write_u64(&mut bytes, *self);
@@ -600,9 +600,6 @@ impl DmapType for u64 {
 }
 impl DmapType for f32 {
     fn size() -> usize {
-        4
-    }
-    fn get_dmap_key() -> u8 {
         4
     }
     fn as_bytes(&self) -> Vec<u8> {
@@ -624,9 +621,6 @@ impl DmapType for f64 {
     fn size() -> usize {
         8
     }
-    fn get_dmap_key() -> u8 {
-        8
-    }
     fn as_bytes(&self) -> Vec<u8> {
         let mut bytes = [0; 8];
         LittleEndian::write_f64(&mut bytes, *self);
@@ -646,20 +640,15 @@ impl DmapType for String {
     fn size() -> usize {
         0
     }
-
     fn as_bytes(&self) -> Vec<u8> {
         let mut bytes = self.as_bytes().to_vec();
         bytes.push(0); // null-terminate
         bytes
     }
-
     fn from_bytes(bytes: &[u8]) -> Result<Self> {
         let data = String::from_utf8(bytes.to_owned())
             .map_err(|_| DmapError::InvalidScalar(format!("Cannot convert bytes to String")))?;
         Ok(data.trim_end_matches(char::from(0)).to_string())
-    }
-    fn get_dmap_key() -> u8 {
-        9
     }
     fn dmap_type(&self) -> Type {
         Type::String
@@ -865,6 +854,8 @@ impl TryFrom<&DmapScalar> for f64 {
         }
     }
 }
+
+/// Verify that `name` exists in `fields` and is of the correct `Type`.
 pub fn check_scalar(
     fields: &mut IndexMap<String, DmapField>,
     name: &str,
@@ -884,6 +875,7 @@ pub fn check_scalar(
     }
 }
 
+/// If `name` is in `fields`, verify that it is of the correct `Type`.
 pub fn check_scalar_opt(
     fields: &mut IndexMap<String, DmapField>,
     name: &str,
@@ -903,6 +895,7 @@ pub fn check_scalar_opt(
     }
 }
 
+/// Verify that `name` exists in `fields` and is of the correct `Type`.
 pub fn check_vector(
     fields: &mut IndexMap<String, DmapField>,
     name: &str,
@@ -924,6 +917,7 @@ pub fn check_vector(
     }
 }
 
+/// If `name` is in `fields`, verify that it is of the correct `Type`.
 pub fn check_vector_opt(
     fields: &mut IndexMap<String, DmapField>,
     name: &str,
@@ -944,7 +938,10 @@ pub fn check_vector_opt(
     }
 }
 
-/// Reads a scalar starting from cursor position
+/// Parses a scalar starting from the `cursor` position.
+///
+/// The number of bytes read depends on the `Type` of the data, which is represented by a key
+/// stored as an `i32` beginning at the `cursor` position.
 pub(crate) fn parse_scalar(cursor: &mut Cursor<Vec<u8>>) -> Result<(String, DmapField)> {
     let _mode = 6;
     let name = read_data::<String>(cursor).map_err(|e| {
@@ -983,7 +980,11 @@ pub(crate) fn parse_scalar(cursor: &mut Cursor<Vec<u8>>) -> Result<(String, Dmap
     Ok((name, DmapField::Scalar(data)))
 }
 
-/// Reads a vector starting from cursor position
+/// Parses a vector starting from the `cursor` position.
+///
+/// The number of bytes read depends on the `Type` of the data, which is represented by a key
+/// stored as an `i32` beginning at the `cursor` position, as well as on the dimensions of the
+/// data which follows the key.
 pub(crate) fn parse_vector(
     cursor: &mut Cursor<Vec<u8>>,
     record_size: i32,
@@ -1130,6 +1131,7 @@ pub(crate) fn parse_vector(
     Ok((name, DmapField::Vector(vector)))
 }
 
+/// Read the raw data (excluding metadata) for a DMAP vector of type `T` from `cursor`.
 fn read_vector<T: DmapType>(cursor: &mut Cursor<Vec<u8>>, num_elements: i32) -> Result<Vec<T>> {
     let mut data: Vec<T> = vec![];
     for _ in 0..num_elements {
@@ -1138,7 +1140,7 @@ fn read_vector<T: DmapType>(cursor: &mut Cursor<Vec<u8>>, num_elements: i32) -> 
     Ok(data)
 }
 
-/// Reads a singular value of type T starting from cursor position
+/// Reads a singular value of type `T` starting from the `cursor` position.
 pub(crate) fn read_data<T: DmapType>(cursor: &mut Cursor<Vec<u8>>) -> Result<T> {
     let position = cursor.position() as usize;
     let stream = cursor.get_mut();
