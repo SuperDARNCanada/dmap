@@ -1,11 +1,11 @@
 use criterion::{criterion_group, criterion_main, Criterion};
+use dmap::formats::dmap::Record;
 use dmap::formats::fitacf::FitacfRecord;
+use dmap::formats::grid::GridRecord;
 use dmap::formats::iqdat::IqdatRecord;
 use dmap::formats::map::MapRecord;
 use dmap::formats::rawacf::RawacfRecord;
 use dmap::formats::snd::SndRecord;
-use dmap::formats::grid::GridRecord;
-use dmap::formats::dmap::Record;
 use std::fs::File;
 
 fn criterion_benchmark(c: &mut Criterion) {

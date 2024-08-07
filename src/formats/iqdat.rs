@@ -1,7 +1,8 @@
 use crate::error::DmapError;
 use crate::formats::dmap::Record;
-use crate::types::{DmapField, DmapType, Type};
+use crate::types::{DmapField, DmapType, Fields, Type};
 use indexmap::IndexMap;
+use lazy_static::lazy_static;
 use std::convert::TryFrom;
 
 static SCALAR_FIELDS: [(&str, Type); 50] = [
@@ -71,71 +72,28 @@ static VECTOR_FIELDS: [(&str, Type); 9] = [
     ("data", Type::Short),
 ];
 
+/// This defines the groups of vector fields that must have the same dimensionality.
+static MATCHED_VECS: [[&str; 6]; 1] = [["tsc", "tus", "tatten", "tnoise", "toff", "tsze"]];
+
 static VECTOR_FIELDS_OPT: [(&str, Type); 0] = [];
 
-static IQDAT_FIELDS: [&str; 61] = [
-    "radar.revision.major",
-    "radar.revision.minor",
-    "origin.code",
-    "origin.time",
-    "origin.command",
-    "cp",
-    "stid",
-    "time.yr",
-    "time.mo",
-    "time.dy",
-    "time.hr",
-    "time.mt",
-    "time.sc",
-    "time.us",
-    "txpow",
-    "nave",
-    "atten",
-    "lagfr",
-    "smsep",
-    "ercod",
-    "stat.agc",
-    "stat.lopwr",
-    "noise.search",
-    "noise.mean",
-    "channel",
-    "bmnum",
-    "bmazm",
-    "scan",
-    "offset",
-    "rxrise",
-    "intt.sc",
-    "intt.us",
-    "txpl",
-    "mpinc",
-    "mppul",
-    "mplgs",
-    "nrang",
-    "frang",
-    "rsep",
-    "xcf",
-    "tfreq",
-    "mxpwr",
-    "lvmax",
-    "combf",
-    "iqdata.revision.major",
-    "iqdata.revision.minor",
-    "seqnum",
-    "chnnum",
-    "smpnum",
-    "skpnum",
-    "mplgexs",
-    "ifmode",
-    "ptab",
-    "ltab",
-    "tsc",
-    "tus",
-    "tatten",
-    "tnoise",
-    "toff",
-    "tsze",
-    "data",
-];
+lazy_static! {
+    static ref IQDAT_FIELDS: Fields<'static> = Fields {
+        all_fields: {
+            let mut fields: Vec<&str> = vec![];
+            fields.extend(SCALAR_FIELDS.clone().into_iter().map(|x| x.0));
+            fields.extend(SCALAR_FIELDS_OPT.clone().into_iter().map(|x| x.0));
+            fields.extend(VECTOR_FIELDS.clone().into_iter().map(|x| x.0));
+            fields.extend(VECTOR_FIELDS_OPT.clone().into_iter().map(|x| x.0));
+            fields
+        },
+        scalars_required: SCALAR_FIELDS.to_vec(),
+        scalars_optional: SCALAR_FIELDS_OPT.to_vec(),
+        vectors_required: VECTOR_FIELDS.to_vec(),
+        vectors_optional: VECTOR_FIELDS_OPT.to_vec(),
+        vector_dim_groups: MATCHED_VECS.to_vec().iter().map(|x| x.to_vec()).collect(),
+    };
+}
 
 #[derive(Debug, PartialEq)]
 pub struct IqdatRecord {
@@ -144,30 +102,20 @@ pub struct IqdatRecord {
 
 impl Record for IqdatRecord {
     fn new(fields: &mut IndexMap<String, DmapField>) -> Result<IqdatRecord, DmapError> {
-        match Self::check_fields(
-            fields,
-            &SCALAR_FIELDS,
-            &SCALAR_FIELDS_OPT,
-            &VECTOR_FIELDS,
-            &VECTOR_FIELDS_OPT,
-            &IQDAT_FIELDS,
-        ) {
+        match Self::check_fields(fields, &IQDAT_FIELDS) {
             Ok(_) => {}
             Err(e) => Err(e)?,
         }
+
+        // check for more complicated conditions
 
         Ok(IqdatRecord {
             data: fields.to_owned(),
         })
     }
     fn to_bytes(&self) -> Result<Vec<u8>, DmapError> {
-        let (num_scalars, num_vectors, mut data_bytes) = Self::data_to_bytes(
-            &self.data,
-            &SCALAR_FIELDS,
-            &SCALAR_FIELDS_OPT,
-            &VECTOR_FIELDS,
-            &VECTOR_FIELDS_OPT,
-        )?;
+        let (num_scalars, num_vectors, mut data_bytes) =
+            Self::data_to_bytes(&self.data, &IQDAT_FIELDS)?;
 
         let mut bytes: Vec<u8> = vec![];
         bytes.extend((65537_i32).as_bytes()); // No idea why this is what it is, copied from backscatter
@@ -183,13 +131,6 @@ impl TryFrom<&mut IndexMap<String, DmapField>> for IqdatRecord {
     type Error = DmapError;
 
     fn try_from(value: &mut IndexMap<String, DmapField>) -> Result<Self, Self::Error> {
-        Ok(Self::coerce::<IqdatRecord>(
-            value,
-            &SCALAR_FIELDS,
-            &SCALAR_FIELDS_OPT,
-            &VECTOR_FIELDS,
-            &VECTOR_FIELDS_OPT,
-            &IQDAT_FIELDS,
-        )?)
+        Ok(Self::coerce::<IqdatRecord>(value, &IQDAT_FIELDS)?)
     }
 }

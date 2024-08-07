@@ -87,8 +87,7 @@ fn read_write_fitacf() {
 
 #[test]
 fn read_write_grid() {
-    let file =
-        File::open(Path::new("tests/test_files/test.grid")).expect("test file not found");
+    let file = File::open(Path::new("tests/test_files/test.grid")).expect("test file not found");
     let contents = GridRecord::read_records(file).expect("unable to read test file contents");
 
     let outfile = "tests/test_files/temp.grid";
@@ -138,8 +137,7 @@ fn read_write_map() {
 
 #[test]
 fn read_write_snd() {
-    let file =
-        File::open(Path::new("tests/test_files/test.snd")).expect("test file not found");
+    let file = File::open(Path::new("tests/test_files/test.snd")).expect("test file not found");
     let contents = SndRecord::read_records(file).expect("unable to read test file contents");
 
     let outfile = "tests/test_files/temp.snd";

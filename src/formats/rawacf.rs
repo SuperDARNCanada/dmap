@@ -1,7 +1,8 @@
 use crate::error::DmapError;
 use crate::formats::dmap::Record;
-use crate::types::{DmapField, DmapType, Type};
+use crate::types::{DmapField, DmapType, Fields, Type};
 use indexmap::IndexMap;
+use lazy_static::lazy_static;
 
 static SCALAR_FIELDS: [(&str, Type); 47] = [
     ("radar.revision.major", Type::Char),
@@ -65,63 +66,23 @@ static VECTOR_FIELDS: [(&str, Type); 5] = [
 
 static VECTOR_FIELDS_OPT: [(&str, Type); 1] = [("xcfd", Type::Float)];
 
-static RAWACF_FIELDS: [&str; 55] = [
-    "radar.revision.major",
-    "radar.revision.minor",
-    "origin.code",
-    "origin.time",
-    "origin.command",
-    "cp",
-    "stid",
-    "time.yr",
-    "time.mo",
-    "time.dy",
-    "time.hr",
-    "time.mt",
-    "time.sc",
-    "time.us",
-    "txpow",
-    "nave",
-    "atten",
-    "lagfr",
-    "smsep",
-    "ercod",
-    "stat.agc",
-    "stat.lopwr",
-    "noise.search",
-    "noise.mean",
-    "channel",
-    "bmnum",
-    "bmazm",
-    "scan",
-    "offset",
-    "rxrise",
-    "intt.sc",
-    "intt.us",
-    "txpl",
-    "mpinc",
-    "mppul",
-    "mplgs",
-    "nrang",
-    "frang",
-    "rsep",
-    "xcf",
-    "tfreq",
-    "mxpwr",
-    "lvmax",
-    "combf",
-    "rawacf.revision.major",
-    "rawacf.revision.minor",
-    "thr",
-    "mplgexs",
-    "ifmode",
-    "ptab",
-    "ltab",
-    "pwr0",
-    "slist",
-    "acfd",
-    "xcfd",
-];
+lazy_static! {
+    static ref RAWACF_FIELDS: Fields<'static> = Fields {
+        all_fields: {
+            let mut fields: Vec<&str> = vec![];
+            fields.extend(SCALAR_FIELDS.clone().into_iter().map(|x| x.0));
+            fields.extend(SCALAR_FIELDS_OPT.clone().into_iter().map(|x| x.0));
+            fields.extend(VECTOR_FIELDS.clone().into_iter().map(|x| x.0));
+            fields.extend(VECTOR_FIELDS_OPT.clone().into_iter().map(|x| x.0));
+            fields
+        },
+        scalars_required: SCALAR_FIELDS.to_vec(),
+        scalars_optional: SCALAR_FIELDS_OPT.to_vec(),
+        vectors_required: VECTOR_FIELDS.to_vec(),
+        vectors_optional: VECTOR_FIELDS_OPT.to_vec(),
+        vector_dim_groups: vec![],
+    };
+}
 
 #[derive(Debug, PartialEq)]
 pub struct RawacfRecord {
@@ -130,14 +91,7 @@ pub struct RawacfRecord {
 
 impl Record for RawacfRecord {
     fn new(fields: &mut IndexMap<String, DmapField>) -> Result<RawacfRecord, DmapError> {
-        match Self::check_fields(
-            fields,
-            &SCALAR_FIELDS,
-            &SCALAR_FIELDS_OPT,
-            &VECTOR_FIELDS,
-            &VECTOR_FIELDS_OPT,
-            &RAWACF_FIELDS,
-        ) {
+        match Self::check_fields(fields, &RAWACF_FIELDS) {
             Ok(_) => {}
             Err(e) => Err(e)?,
         }
@@ -147,13 +101,8 @@ impl Record for RawacfRecord {
         })
     }
     fn to_bytes(&self) -> Result<Vec<u8>, DmapError> {
-        let (num_scalars, num_vectors, mut data_bytes) = Self::data_to_bytes(
-            &self.data,
-            &SCALAR_FIELDS,
-            &SCALAR_FIELDS_OPT,
-            &VECTOR_FIELDS,
-            &VECTOR_FIELDS_OPT,
-        )?;
+        let (num_scalars, num_vectors, mut data_bytes) =
+            Self::data_to_bytes(&self.data, &RAWACF_FIELDS)?;
 
         let mut bytes: Vec<u8> = vec![];
         bytes.extend((65537_i32).as_bytes()); // No idea why this is what it is, copied from backscatter
@@ -169,13 +118,6 @@ impl TryFrom<&mut IndexMap<String, DmapField>> for RawacfRecord {
     type Error = DmapError;
 
     fn try_from(value: &mut IndexMap<String, DmapField>) -> Result<Self, Self::Error> {
-        Ok(Self::coerce::<RawacfRecord>(
-            value,
-            &SCALAR_FIELDS,
-            &SCALAR_FIELDS_OPT,
-            &VECTOR_FIELDS,
-            &VECTOR_FIELDS_OPT,
-            &RAWACF_FIELDS,
-        )?)
+        Ok(Self::coerce::<RawacfRecord>(value, &RAWACF_FIELDS)?)
     }
 }

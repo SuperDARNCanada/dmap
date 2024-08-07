@@ -4,7 +4,6 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum DmapError {
-
     /// Represents invalid conditions when reading from input.
     #[error("{0}")]
     CorruptStream(&'static str),
@@ -33,7 +32,7 @@ impl From<DmapError> for PyErr {
         match value {
             DmapError::CorruptStream(..) => PyIOError::new_err(msg),
             DmapError::Io(..) => PyIOError::new_err(msg),
-            _ => PyValueError::new_err(msg)
+            _ => PyValueError::new_err(msg),
         }
     }
 }

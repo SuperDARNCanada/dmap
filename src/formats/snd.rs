@@ -1,7 +1,8 @@
 use crate::error::DmapError;
 use crate::formats::dmap::Record;
-use crate::types::{DmapField, DmapType, Type};
+use crate::types::{DmapField, DmapType, Fields, Type};
 use indexmap::IndexMap;
+use lazy_static::lazy_static;
 use std::convert::TryFrom;
 
 static SCALAR_FIELDS: [(&str, Type); 37] = [
@@ -62,55 +63,27 @@ static VECTOR_FIELDS_OPT: [(&str, Type); 3] = [
     ("phi0_e", Type::Float),
 ];
 
-static SND_FIELDS: [&str; 47] = [
-    "radar.revision.major",
-    "radar.revision.minor",
-    "origin.code",
-    "origin.time",
-    "origin.command",
-    "cp",
-    "stid",
-    "time.yr",
-    "time.mo",
-    "time.dy",
-    "time.hr",
-    "time.mt",
-    "time.sc",
-    "time.us",
-    "nave",
-    "lagfr",
-    "smsep",
-    "noise.search",
-    "noise.mean",
-    "channel",
-    "bmnum",
-    "bmazm",
-    "scan",
-    "rxrise",
-    "intt.sc",
-    "intt.us",
-    "nrang",
-    "frang",
-    "rsep",
-    "xcf",
-    "tfreq",
-    "noise.sky",
-    "combf",
-    "fitacf.revision.major",
-    "fitacf.revision.minor",
-    "snd.revision.major",
-    "snd.revision.minor",
-    "slist",
-    "qflg",
-    "gflg",
-    "v",
-    "v_e",
-    "p_l",
-    "w_l",
-    "x_qflg",
-    "phi0",
-    "phi0_e",
-];
+static MATCHED_VECS: [[&str; 10]; 1] = [[
+    "slist", "qflg", "gflg", "v", "v_e", "p_l", "w_l", "x_qflg", "phi0", "phi0_e",
+]];
+
+lazy_static! {
+    static ref SND_FIELDS: Fields<'static> = Fields {
+        all_fields: {
+            let mut fields: Vec<&str> = vec![];
+            fields.extend(SCALAR_FIELDS.clone().into_iter().map(|x| x.0));
+            fields.extend(SCALAR_FIELDS_OPT.clone().into_iter().map(|x| x.0));
+            fields.extend(VECTOR_FIELDS.clone().into_iter().map(|x| x.0));
+            fields.extend(VECTOR_FIELDS_OPT.clone().into_iter().map(|x| x.0));
+            fields
+        },
+        scalars_required: SCALAR_FIELDS.to_vec(),
+        scalars_optional: SCALAR_FIELDS_OPT.to_vec(),
+        vectors_required: VECTOR_FIELDS.to_vec(),
+        vectors_optional: VECTOR_FIELDS_OPT.to_vec(),
+        vector_dim_groups: MATCHED_VECS.to_vec().iter().map(|x| x.to_vec()).collect(),
+    };
+}
 
 #[derive(Debug, PartialEq)]
 pub struct SndRecord {
@@ -119,14 +92,7 @@ pub struct SndRecord {
 
 impl Record for SndRecord {
     fn new(fields: &mut IndexMap<String, DmapField>) -> Result<SndRecord, DmapError> {
-        match Self::check_fields(
-            fields,
-            &SCALAR_FIELDS,
-            &SCALAR_FIELDS_OPT,
-            &VECTOR_FIELDS,
-            &VECTOR_FIELDS_OPT,
-            &SND_FIELDS,
-        ) {
+        match Self::check_fields(fields, &SND_FIELDS) {
             Ok(_) => {}
             Err(e) => Err(e)?,
         }
@@ -136,13 +102,8 @@ impl Record for SndRecord {
         })
     }
     fn to_bytes(&self) -> Result<Vec<u8>, DmapError> {
-        let (num_scalars, num_vectors, mut data_bytes) = Self::data_to_bytes(
-            &self.data,
-            &SCALAR_FIELDS,
-            &SCALAR_FIELDS_OPT,
-            &VECTOR_FIELDS,
-            &VECTOR_FIELDS_OPT,
-        )?;
+        let (num_scalars, num_vectors, mut data_bytes) =
+            Self::data_to_bytes(&self.data, &SND_FIELDS)?;
 
         let mut bytes: Vec<u8> = vec![];
         bytes.extend((65537_i32).as_bytes()); // No idea why this is what it is, copied from backscatter
@@ -158,13 +119,6 @@ impl TryFrom<&mut IndexMap<String, DmapField>> for SndRecord {
     type Error = DmapError;
 
     fn try_from(value: &mut IndexMap<String, DmapField>) -> Result<Self, Self::Error> {
-        Ok(Self::coerce::<SndRecord>(
-            value,
-            &SCALAR_FIELDS,
-            &SCALAR_FIELDS_OPT,
-            &VECTOR_FIELDS,
-            &VECTOR_FIELDS_OPT,
-            &SND_FIELDS,
-        )?)
+        Ok(Self::coerce::<SndRecord>(value, &SND_FIELDS)?)
     }
 }

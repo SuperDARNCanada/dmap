@@ -1,7 +1,8 @@
 use crate::error::DmapError;
 use crate::formats::dmap::Record;
-use crate::types::{DmapField, DmapType, Type};
+use crate::types::{DmapField, DmapType, Fields, Type};
 use indexmap::IndexMap;
+use lazy_static::lazy_static;
 use std::convert::TryFrom;
 
 static SCALAR_FIELDS: [(&str, Type); 12] = [
@@ -56,50 +57,59 @@ static VECTOR_FIELDS: [(&str, Type); 30] = [
 
 static VECTOR_FIELDS_OPT: [(&str, Type); 0] = [];
 
-static GRID_FIELDS: [&str; 42] = [
-    "start.year",
-    "start.month",
-    "start.day",
-    "start.hour",
-    "start.minute",
-    "start.second",
-    "end.year",
-    "end.month",
-    "end.day",
-    "end.hour",
-    "end.minute",
-    "end.second",
-    "stid",
-    "channel",
-    "nvec",
-    "freq",
-    "major.revision",
-    "minor.revision",
-    "program.id",
-    "noise.mean",
-    "noise.sd",
-    "gsct",
-    "v.min",
-    "v.max",
-    "p.min",
-    "p.max",
-    "w.min",
-    "w.max",
-    "ve.min",
-    "ve.max",
-    "vector.mlat",
-    "vector.mlon",
-    "vector.kvect",
-    "vector.stid",
-    "vector.channel",
-    "vector.index",
-    "vector.vel.median",
-    "vector.vel.sd",
-    "vector.pwr.median",
-    "vector.pwr.sd",
-    "vector.wdt.median",
-    "vector.wdt.sd",
-];
+lazy_static! {
+    static ref MATCHED_VECS: Vec<Vec<&'static str>> = vec![
+        vec![
+            "stid",
+            "channel",
+            "nvec",
+            "freq",
+            "major.revision",
+            "minor.revision",
+            "program.id",
+            "noise.mean",
+            "noise.sd",
+            "gsct",
+            "v.min",
+            "v.max",
+            "p.min",
+            "p.max",
+            "w.min",
+            "w.max",
+            "ve.min",
+            "ve.max",
+        ],
+        vec![
+            "vector.mlat",
+            "vector.mlon",
+            "vector.kvect",
+            "vector.stid",
+            "vector.channel",
+            "vector.index",
+            "vector.vel.median",
+            "vector.vel.sd",
+            "vector.pwr.median",
+            "vector.pwr.sd",
+            "vector.wdt.median",
+            "vector.wdt.sd",
+        ],
+    ];
+    static ref GRID_FIELDS: Fields<'static> = Fields {
+        all_fields: {
+            let mut fields: Vec<&str> = vec![];
+            fields.extend(SCALAR_FIELDS.clone().into_iter().map(|x| x.0));
+            fields.extend(SCALAR_FIELDS_OPT.clone().into_iter().map(|x| x.0));
+            fields.extend(VECTOR_FIELDS.clone().into_iter().map(|x| x.0));
+            fields.extend(VECTOR_FIELDS_OPT.clone().into_iter().map(|x| x.0));
+            fields
+        },
+        scalars_required: SCALAR_FIELDS.to_vec(),
+        scalars_optional: SCALAR_FIELDS_OPT.to_vec(),
+        vectors_required: VECTOR_FIELDS.to_vec(),
+        vectors_optional: VECTOR_FIELDS_OPT.to_vec(),
+        vector_dim_groups: MATCHED_VECS.clone(),
+    };
+}
 
 #[derive(Debug, PartialEq)]
 pub struct GridRecord {
@@ -108,14 +118,7 @@ pub struct GridRecord {
 
 impl Record for GridRecord {
     fn new(fields: &mut IndexMap<String, DmapField>) -> Result<GridRecord, DmapError> {
-        match Self::check_fields(
-            fields,
-            &SCALAR_FIELDS,
-            &SCALAR_FIELDS_OPT,
-            &VECTOR_FIELDS,
-            &VECTOR_FIELDS_OPT,
-            &GRID_FIELDS,
-        ) {
+        match Self::check_fields(fields, &GRID_FIELDS) {
             Ok(_) => {}
             Err(e) => Err(e)?,
         }
@@ -125,13 +128,8 @@ impl Record for GridRecord {
         })
     }
     fn to_bytes(&self) -> Result<Vec<u8>, DmapError> {
-        let (num_scalars, num_vectors, mut data_bytes) = Self::data_to_bytes(
-            &self.data,
-            &SCALAR_FIELDS,
-            &SCALAR_FIELDS_OPT,
-            &VECTOR_FIELDS,
-            &VECTOR_FIELDS_OPT,
-        )?;
+        let (num_scalars, num_vectors, mut data_bytes) =
+            Self::data_to_bytes(&self.data, &GRID_FIELDS)?;
 
         let mut bytes: Vec<u8> = vec![];
         bytes.extend((65537_i32).as_bytes()); // No idea why this is what it is, copied from backscatter
@@ -147,13 +145,6 @@ impl TryFrom<&mut IndexMap<String, DmapField>> for GridRecord {
     type Error = DmapError;
 
     fn try_from(value: &mut IndexMap<String, DmapField>) -> Result<Self, Self::Error> {
-        Ok(Self::coerce::<GridRecord>(
-            value,
-            &SCALAR_FIELDS,
-            &SCALAR_FIELDS_OPT,
-            &VECTOR_FIELDS,
-            &VECTOR_FIELDS_OPT,
-            &GRID_FIELDS,
-        )?)
+        Ok(Self::coerce::<GridRecord>(value, &GRID_FIELDS)?)
     }
 }

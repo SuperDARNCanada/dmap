@@ -4,7 +4,7 @@ use numpy::array::PyArray;
 use numpy::ndarray::ArrayD;
 use numpy::PyArrayMethods;
 use pyo3::exceptions::PyValueError;
-use pyo3::prelude::PyAnyMethods;
+use pyo3::prelude::*;
 use pyo3::{Bound, FromPyObject, IntoPy, PyAny, PyObject, PyResult, Python};
 use std::cmp::PartialEq;
 use std::fmt::{Display, Formatter};
@@ -13,7 +13,16 @@ use zerocopy::{AsBytes, ByteOrder, FromBytes, LittleEndian};
 
 type Result<T> = std::result::Result<T, DmapError>;
 
-#[derive(Debug, PartialEq)]
+pub struct Fields<'a> {
+    pub all_fields: Vec<&'a str>,
+    pub scalars_required: Vec<(&'a str, Type)>,
+    pub scalars_optional: Vec<(&'a str, Type)>,
+    pub vectors_required: Vec<(&'a str, Type)>,
+    pub vectors_optional: Vec<(&'a str, Type)>,
+    pub vector_dim_groups: Vec<Vec<&'a str>>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Type {
     Char,
     Short,
@@ -320,6 +329,20 @@ impl DmapVec {
             }
         };
         bytes
+    }
+    pub(crate) fn shape(&self) -> &[usize] {
+        match self {
+            DmapVec::Char(x) => x.shape(),
+            DmapVec::Short(x) => x.shape(),
+            DmapVec::Int(x) => x.shape(),
+            DmapVec::Long(x) => x.shape(),
+            DmapVec::Uchar(x) => x.shape(),
+            DmapVec::Ushort(x) => x.shape(),
+            DmapVec::Uint(x) => x.shape(),
+            DmapVec::Ulong(x) => x.shape(),
+            DmapVec::Float(x) => x.shape(),
+            DmapVec::Double(x) => x.shape(),
+        }
     }
 }
 impl IntoPy<PyObject> for DmapVec {
@@ -854,7 +877,9 @@ pub fn check_scalar(
             data.get_type(),
             expected_type
         ))),
-        Some(_) => Err(DmapError::InvalidScalar(format!("{name} is a vector field"))),
+        Some(_) => Err(DmapError::InvalidScalar(format!(
+            "{name} is a vector field"
+        ))),
         None => Err(DmapError::InvalidScalar(format!("{name} is not in record"))),
     }
 }
@@ -871,7 +896,9 @@ pub fn check_scalar_opt(
             data.get_type(),
             expected_type
         ))),
-        Some(_) => Err(DmapError::InvalidScalar(format!("{name} is a vector field"))),
+        Some(_) => Err(DmapError::InvalidScalar(format!(
+            "{name} is a vector field"
+        ))),
         None => Ok(()),
     }
 }
@@ -889,9 +916,9 @@ pub fn check_vector(
                 expected_type
             )))
         }
-        Some(DmapField::Scalar(_)) => {
-            Err(DmapError::InvalidVector(format!("{name} is a scalar field")))
-        }
+        Some(DmapField::Scalar(_)) => Err(DmapError::InvalidVector(format!(
+            "{name} is a scalar field"
+        ))),
         None => Err(DmapError::InvalidVector(format!("{name} not in record"))),
         _ => Ok(()),
     }
@@ -910,9 +937,9 @@ pub fn check_vector_opt(
                 expected_type
             )))
         }
-        Some(DmapField::Scalar(_)) => {
-            Err(DmapError::InvalidVector(format!("{name} is a scalar field")))
-        }
+        Some(DmapField::Scalar(_)) => Err(DmapError::InvalidVector(format!(
+            "{name} is a scalar field"
+        ))),
         _ => Ok(()),
     }
 }
@@ -1132,9 +1159,7 @@ pub(crate) fn read_data<T: DmapType>(cursor: &mut Cursor<Vec<u8>>) -> Result<T> 
             while stream[position + byte_counter] != 0 {
                 byte_counter += 1;
                 if position + byte_counter >= stream.len() {
-                    return Err(DmapError::CorruptStream(
-                        "String is improperly terminated",
-                    ));
+                    return Err(DmapError::CorruptStream("String is improperly terminated"));
                 }
             }
             byte_counter + 1
