@@ -1,3 +1,5 @@
+//! Defines the `Record` trait, which contains the shared behaviour that all
+//! DMAP record types must have.
 use crate::error::DmapError;
 use crate::types::{parse_scalar, parse_vector, read_data, DmapField, DmapType, Fields, DmapVec};
 use indexmap::IndexMap;
@@ -8,8 +10,7 @@ use std::io::{Cursor, Read};
 pub trait Record: Debug {
     /// Reads from dmap_data and parses into a collection of Records.
     ///
-    /// # Failures
-    /// If dmap_data cannot be read or contains invalid data.
+    /// Returns `DmapError` if dmap_data cannot be read or contains invalid data.
     fn read_records(mut dmap_data: impl Read) -> Result<Vec<Self>, DmapError>
     where
         Self: Sized,
@@ -131,6 +132,12 @@ pub trait Record: Debug {
     where
         Self: Sized;
 
+    /// Checks the validity of an `IndexMap` as a representation of a DMAP record.
+    ///
+    /// Validity checks include ensuring that no unfamiliar entries exist, that all required
+    /// scalar and vector fields exist, that all scalar and vector fields are of the expected
+    /// type, and that vector fields which are expected to have the same dimensions do indeed
+    /// have the same dimensions.
     fn check_fields(
         field_dict: &mut IndexMap<String, DmapField>,
         fields_for_type: &Fields,
@@ -237,6 +244,7 @@ pub trait Record: Debug {
         Ok(())
     }
 
+    /// Attempts to massage the entries of an `IndexMap` into the proper types for a DMAP record.
     fn coerce<T: Record>(
         fields_dict: &mut IndexMap<String, DmapField>,
         fields_for_type: &Fields,
@@ -323,9 +331,16 @@ pub trait Record: Debug {
         Ok(T::new(fields_dict)?)
     }
 
-    /// Converts a DmapRecord with metadata to a vector of raw bytes for writing
+    /// Attempts to copy `self` to a raw byte representation.
     fn to_bytes(&self) -> Result<Vec<u8>, DmapError>;
 
+    /// Converts the entries of an `IndexMap` into a raw byte representation, including metadata
+    /// about the entries (DMAP key, name\[, dimensions\])
+    ///
+    /// If all is good, returns a tuple containing:
+    /// * the number of scalar fields
+    /// * the number of vector fields
+    /// * the raw bytes
     fn data_to_bytes(
         data: &IndexMap<String, DmapField>,
         fields_for_type: &Fields,

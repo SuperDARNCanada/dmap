@@ -14,7 +14,7 @@ use zerocopy::{AsBytes, ByteOrder, FromBytes, LittleEndian};
 
 type Result<T> = std::result::Result<T, DmapError>;
 
-/// Defines the fields of a record and their Type
+/// Defines the fields of a record and their `Type`.
 pub struct Fields<'a> {
     /// The names of all fields of the record type
     pub all_fields: Vec<&'a str>,
@@ -117,7 +117,7 @@ impl Type {
         }
     }
 }
-/// Enum of the different data types supported by the DMAP format.
+/// A scalar field in a DMAP record.
 #[derive(Debug, Clone, PartialEq, FromPyObject)]
 #[repr(C)]
 pub enum DmapScalar {
@@ -223,7 +223,7 @@ impl IntoPy<PyObject> for DmapScalar {
     }
 }
 
-/// A DMAP vector
+/// A vector field in a DMAP record.
 #[derive(Clone, Debug, PartialEq)]
 pub enum DmapVec {
     Char(ArrayD<i8>),
@@ -411,6 +411,9 @@ impl<'py> FromPyObject<'py> for DmapVec {
 }
 
 /// A generic field of a DMAP record.
+///
+/// This is the type that is stored in a DMAP record, representing either a scalar or
+/// vector field.
 #[derive(Debug, Clone, PartialEq, FromPyObject)]
 #[repr(C)]
 pub enum DmapField {
@@ -447,7 +450,7 @@ pub trait DmapType: std::fmt::Debug {
     fn from_bytes(bytes: &[u8]) -> Result<Self>
     where
         Self: Sized;
-    /// Get the `Type` variant that represents `Self`
+    /// Get the `Type` variant that represents `self`
     fn dmap_type(&self) -> Type;
 }
 impl DmapType for i8 {

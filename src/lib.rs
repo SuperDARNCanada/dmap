@@ -1,5 +1,3 @@
-//! # dmap
-//!
 //! `dmap` is an I/O library for SuperDARN DMAP files.
 //! This library has a Python API using pyo3 that supports
 //! reading and writing whole files.
