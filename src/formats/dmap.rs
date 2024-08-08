@@ -234,9 +234,10 @@ pub trait Record: Debug {
                 let mut vec_iter = vecs.iter();
                 let first = vec_iter.next().expect("Iterator broken");
                 if !vec_iter.all(|(_, ref v)| v.shape() == first.1.shape()) {
+                    let error_vec: Vec<(&str, &[usize])> = vecs.iter().map(|(k, v)| (*k, v.shape())).collect();
                     Err(DmapError::InvalidRecord(format!(
                         "Vector fields have inconsistent dimensions: {:?}",
-                        vecs
+                        error_vec
                     )))?
                 }
             }
