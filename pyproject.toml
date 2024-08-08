@@ -1,0 +1,23 @@
+[build-system]
+requires = ["maturin>=1,<2", "numpy<2"]
+build-backend = "maturin"
+
+[project]
+name = "darn-dmap"
+version = "0.1.1"
+requires-python = ">=3.8"
+authors = [
+    { name = "Remington Rohel" }
+]
+classifiers = [
+    "Programming Language :: Python",
+    "Programming Language :: Rust"
+]
+dependencies = ["numpy<2"]
+
+[tool.maturin]
+bindings = "pyo3"
+profile = "release"
+compatibility = "manylinux2014"
+auditwheel = "repair"
+strip = true
