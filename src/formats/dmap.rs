@@ -1,11 +1,13 @@
 //! Defines the `Record` trait, which contains the shared behaviour that all
 //! DMAP record types must have.
 use crate::error::DmapError;
-use crate::types::{parse_scalar, parse_vector, read_data, DmapField, DmapType, Fields, DmapVec};
+use crate::types::{parse_scalar, parse_vector, read_data, DmapField, DmapType, DmapVec, Fields};
 use indexmap::IndexMap;
 use rayon::prelude::*;
 use std::fmt::Debug;
+use std::fs::File;
 use std::io::{Cursor, Read};
+use std::path::PathBuf;
 
 pub trait Record: Debug {
     /// Reads from dmap_data and parses into a collection of Records.
@@ -46,6 +48,16 @@ pub trait Record: Debug {
         }
 
         Ok(dmap_records)
+    }
+
+    /// Read a DMAP file of type `Self`
+    fn read_dmap(infile: PathBuf) -> Result<Vec<Self>, DmapError>
+    where
+        Self: Sized,
+        Self: Send,
+    {
+        let file = File::open(infile)?;
+        Self::read_records(file)
     }
 
     /// Reads a record starting from cursor position
@@ -234,7 +246,8 @@ pub trait Record: Debug {
                 let mut vec_iter = vecs.iter();
                 let first = vec_iter.next().expect("Iterator broken");
                 if !vec_iter.all(|(_, ref v)| v.shape() == first.1.shape()) {
-                    let error_vec: Vec<(&str, &[usize])> = vecs.iter().map(|(k, v)| (*k, v.shape())).collect();
+                    let error_vec: Vec<(&str, &[usize])> =
+                        vecs.iter().map(|(k, v)| (*k, v.shape())).collect();
                     Err(DmapError::InvalidRecord(format!(
                         "Vector fields have inconsistent dimensions: {:?}",
                         error_vec
