@@ -8,7 +8,9 @@
 pub mod error;
 pub mod formats;
 pub mod types;
+mod bz2;
 
+use std::ffi::OsStr;
 use crate::error::DmapError;
 use crate::formats::dmap::Record;
 use crate::formats::fitacf::FitacfRecord;
@@ -23,8 +25,27 @@ use pyo3::prelude::*;
 use rayon::iter::Either;
 use rayon::prelude::*;
 use std::fs::File;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::PathBuf;
+use bzip2::Compression;
+use bzip2::read::BzEncoder;
+
+/// Write bytes to file.
+///
+/// If the extension of `outfile` is `.bz2`, the bytes will be compressed using
+/// bzip2 before being written.
+fn write_to_file(bytes: Vec<u8>, outfile: PathBuf) -> Result<(), std::io::Error> {
+    let mut file = File::create(&outfile)?;
+    let mut out_bytes: Vec<u8> = vec![];
+    match outfile.extension() {
+        Some(ext) if ext == OsStr::new("bz2") => {
+            let mut compressor = BzEncoder::new(bytes.as_slice(), Compression::best());
+            compressor.read_to_end(&mut out_bytes)?;
+        }
+        _ => { out_bytes = bytes }
+    }
+    file.write_all(&out_bytes)
+}
 
 /// Write IQDAT records to `outfile`.
 pub fn write_iqdat(mut recs: Vec<IqdatRecord>, outfile: PathBuf) -> Result<(), DmapError> {
@@ -42,8 +63,7 @@ pub fn write_iqdat(mut recs: Vec<IqdatRecord>, outfile: PathBuf) -> Result<(), D
         )))?
     }
     bytes.par_extend(rec_bytes.into_par_iter().flatten());
-    let mut file = File::create(outfile)?;
-    file.write_all(&bytes)?;
+    write_to_file(bytes, outfile)?;
     Ok(())
 }
 
@@ -69,8 +89,7 @@ pub fn try_write_iqdat(
         )))?
     }
     bytes.par_extend(rec_bytes.into_par_iter().flatten());
-    let mut file = File::create(outfile)?;
-    file.write_all(&bytes)?;
+    write_to_file(bytes, outfile)?;
     Ok(())
 }
 
@@ -90,8 +109,7 @@ pub fn write_rawacf(mut recs: Vec<RawacfRecord>, outfile: PathBuf) -> Result<(),
         )))?
     }
     bytes.par_extend(rec_bytes.into_par_iter().flatten());
-    let mut file = File::create(outfile)?;
-    file.write_all(&bytes)?;
+    write_to_file(bytes, outfile)?;
     Ok(())
 }
 
@@ -117,8 +135,7 @@ pub fn try_write_rawacf(
         )))?
     }
     bytes.par_extend(rec_bytes.into_par_iter().flatten());
-    let mut file = File::create(outfile)?;
-    file.write_all(&bytes)?;
+    write_to_file(bytes, outfile)?;
     Ok(())
 }
 
@@ -138,8 +155,7 @@ pub fn write_fitacf(mut recs: Vec<FitacfRecord>, outfile: PathBuf) -> Result<(),
         )))?
     }
     bytes.par_extend(rec_bytes.into_par_iter().flatten());
-    let mut file = File::create(outfile)?;
-    file.write_all(&bytes)?;
+    write_to_file(bytes, outfile)?;
     Ok(())
 }
 
@@ -165,8 +181,7 @@ pub fn try_write_fitacf(
         )))?
     }
     bytes.par_extend(rec_bytes.into_par_iter().flatten());
-    let mut file = File::create(outfile)?;
-    file.write_all(&bytes)?;
+    write_to_file(bytes, outfile)?;
     Ok(())
 }
 
@@ -186,8 +201,7 @@ pub fn write_grid(mut recs: Vec<IqdatRecord>, outfile: PathBuf) -> Result<(), Dm
         )))?
     }
     bytes.par_extend(rec_bytes.into_par_iter().flatten());
-    let mut file = File::create(outfile)?;
-    file.write_all(&bytes)?;
+    write_to_file(bytes, outfile)?;
     Ok(())
 }
 
@@ -213,8 +227,7 @@ pub fn try_write_grid(
         )))?
     }
     bytes.par_extend(rec_bytes.into_par_iter().flatten());
-    let mut file = File::create(outfile)?;
-    file.write_all(&bytes)?;
+    write_to_file(bytes, outfile)?;
     Ok(())
 }
 
@@ -234,8 +247,7 @@ pub fn write_map(mut recs: Vec<MapRecord>, outfile: PathBuf) -> Result<(), DmapE
         )))?
     }
     bytes.par_extend(rec_bytes.into_par_iter().flatten());
-    let mut file = File::create(outfile)?;
-    file.write_all(&bytes)?;
+    write_to_file(bytes, outfile)?;
     Ok(())
 }
 
@@ -261,8 +273,7 @@ pub fn try_write_map(
         )))?
     }
     bytes.par_extend(rec_bytes.into_par_iter().flatten());
-    let mut file = File::create(outfile)?;
-    file.write_all(&bytes)?;
+    write_to_file(bytes, outfile)?;
     Ok(())
 }
 
@@ -282,8 +293,7 @@ pub fn write_snd(mut recs: Vec<SndRecord>, outfile: PathBuf) -> Result<(), DmapE
         )))?
     }
     bytes.par_extend(rec_bytes.into_par_iter().flatten());
-    let mut file = File::create(outfile)?;
-    file.write_all(&bytes)?;
+    write_to_file(bytes, outfile)?;
     Ok(())
 }
 
@@ -309,8 +319,7 @@ pub fn try_write_snd(
         )))?
     }
     bytes.par_extend(rec_bytes.into_par_iter().flatten());
-    let mut file = File::create(outfile)?;
-    file.write_all(&bytes)?;
+    write_to_file(bytes, outfile)?;
     Ok(())
 }
 

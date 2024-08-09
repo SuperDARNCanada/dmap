@@ -8,7 +8,13 @@ use dmap::formats::snd::SndRecord;
 use itertools::izip;
 use std::fs::{remove_file, File};
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+#[test]
+fn read_iqdat_bz2() {
+    let infile = PathBuf::from("tests/test_files/test.iqdat.bz2");
+    let data = IqdatRecord::read_dmap(infile).expect("unable to read iqdat bz2");
+}
 
 #[test]
 fn read_write_iqdat() {

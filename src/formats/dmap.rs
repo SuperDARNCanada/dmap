@@ -1,5 +1,7 @@
 //! Defines the `Record` trait, which contains the shared behaviour that all
 //! DMAP record types must have.
+
+use std::ffi::OsStr;
 use crate::error::DmapError;
 use crate::types::{parse_scalar, parse_vector, read_data, DmapField, DmapType, DmapVec, Fields};
 use indexmap::IndexMap;
@@ -8,6 +10,7 @@ use std::fmt::Debug;
 use std::fs::File;
 use std::io::{Cursor, Read};
 use std::path::PathBuf;
+use bzip2::read::BzDecoder;
 
 pub trait Record: Debug {
     /// Reads from dmap_data and parses into a collection of Records.
@@ -56,8 +59,14 @@ pub trait Record: Debug {
         Self: Sized,
         Self: Send,
     {
-        let file = File::open(infile)?;
-        Self::read_records(file)
+        let file = File::open(&infile)?;
+        match infile.extension() {
+            Some(ext) if ext == OsStr::new("bz2") => {
+                let compressor = BzDecoder::new(file);
+                Self::read_records(compressor)
+            }
+            _ => { Self::read_records(file) }
+        }
     }
 
     /// Reads a record starting from cursor position
