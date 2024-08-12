@@ -54,12 +54,12 @@ pub trait Record: Debug {
     }
 
     /// Read a DMAP file of type `Self`
-    fn read_dmap(infile: PathBuf) -> Result<Vec<Self>, DmapError>
+    fn read_dmap(infile: &PathBuf) -> Result<Vec<Self>, DmapError>
     where
         Self: Sized,
         Self: Send,
     {
-        let file = File::open(&infile)?;
+        let file = File::open(infile)?;
         match infile.extension() {
             Some(ext) if ext == OsStr::new("bz2") => {
                 let compressor = BzDecoder::new(file);

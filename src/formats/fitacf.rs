@@ -179,7 +179,7 @@ lazy_static! {
     };
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct FitacfRecord {
     pub(crate) data: IndexMap<String, DmapField>,
 }

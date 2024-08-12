@@ -166,7 +166,7 @@ lazy_static! {
     };
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct MapRecord {
     pub(crate) data: IndexMap<String, DmapField>,
 }
