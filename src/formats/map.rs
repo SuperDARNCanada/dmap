@@ -87,7 +87,7 @@ static VECTOR_FIELDS: [(&str, Type); 26] = [
     ("vector.vel.sd", Type::Float),
 ];
 
-static VECTOR_FIELDS_OPT: [(&str, Type); 14] = [
+static VECTOR_FIELDS_OPT: [(&str, Type); 15] = [
     ("vector.pwr.median", Type::Float),
     ("vector.pwr.sd", Type::Float),
     ("vector.wdt.median", Type::Float),
@@ -102,6 +102,7 @@ static VECTOR_FIELDS_OPT: [(&str, Type); 14] = [
     ("model.vel.median", Type::Float),
     ("boundary.mlat", Type::Float),
     ("boundary.mlon", Type::Float),
+    ("vector.srng", Type::Float),
 ];
 
 lazy_static! {

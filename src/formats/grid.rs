@@ -55,7 +55,7 @@ static VECTOR_FIELDS: [(&str, Type); 30] = [
     ("vector.wdt.sd", Type::Float),
 ];
 
-static VECTOR_FIELDS_OPT: [(&str, Type); 0] = [];
+static VECTOR_FIELDS_OPT: [(&str, Type); 1] = [("vector.srng", Type::Float)];
 
 lazy_static! {
     static ref MATCHED_VECS: Vec<Vec<&'static str>> = vec![
