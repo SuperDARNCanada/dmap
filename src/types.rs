@@ -417,8 +417,8 @@ impl<'py> FromPyObject<'py> for DmapVec {
 #[derive(Debug, Clone, PartialEq, FromPyObject)]
 #[repr(C)]
 pub enum DmapField {
-    Scalar(DmapScalar),
     Vector(DmapVec),
+    Scalar(DmapScalar),
 }
 impl DmapField {
     /// Converts the field and metadata (`Type` key and dimensions if applicable) to raw bytes.

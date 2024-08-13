@@ -50,7 +50,7 @@ static SCALAR_FIELDS_OPT: [(&str, Type); 13] = [
     ("IMF.Bz", Type::Double),
     ("IMF.Vx", Type::Double),
     ("IMF.tilt", Type::Double),
-    ("IMT.Kp", Type::Double),
+    ("IMF.Kp", Type::Double),
     ("model.angle", Type::String),
     ("model.level", Type::String),
     ("model.tilt", Type::String),
