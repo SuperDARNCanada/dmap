@@ -95,7 +95,7 @@ lazy_static! {
     };
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct IqdatRecord {
     pub(crate) data: IndexMap<String, DmapField>,
 }
