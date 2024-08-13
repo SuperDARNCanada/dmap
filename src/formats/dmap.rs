@@ -1,6 +1,7 @@
 //! Defines the `Record` trait, which contains the shared behaviour that all
-//! DMAP record types must have.
-
+//! DMAP record types must have. Also defines the `GenericRecord` struct which
+//! implements `Record`, which can be used for reading/writing DMAP files without
+//! checking that certain fields are or are not present, or have a given type.
 use std::ffi::OsStr;
 use crate::error::DmapError;
 use crate::types::{parse_scalar, parse_vector, read_data, DmapField, DmapType, DmapVec, Fields};
@@ -54,7 +55,7 @@ pub trait Record: Debug {
     }
 
     /// Read a DMAP file of type `Self`
-    fn read_dmap(infile: &PathBuf) -> Result<Vec<Self>, DmapError>
+    fn read_file(infile: &PathBuf) -> Result<Vec<Self>, DmapError>
     where
         Self: Sized,
         Self: Send,
@@ -436,5 +437,64 @@ pub trait Record: Debug {
         }
 
         Ok((num_scalars, num_vectors, data_bytes))
+    }
+}
+
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct GenericRecord {
+    pub(crate) data: IndexMap<String, DmapField>,
+}
+
+impl Record for GenericRecord {
+    fn new(fields: &mut IndexMap<String, DmapField>) -> Result<GenericRecord, DmapError> {
+        Ok(GenericRecord {
+            data: fields.to_owned(),
+        })
+    }
+    fn to_bytes(&self) -> Result<Vec<u8>, DmapError> {
+        let mut data_bytes: Vec<u8> = vec![];
+        let mut num_scalars: i32 = 0;
+        let mut num_vectors: i32 = 0;
+
+        // Do a first pass, to get all the scalar fields
+        for (name, val) in self.data.iter() {
+            match val {
+                x @ DmapField::Scalar(_) => {
+                    data_bytes.extend(name.as_bytes());
+                    data_bytes.extend([0]); // null-terminate string
+                    data_bytes.append(&mut x.as_bytes());
+                    num_scalars += 1;
+                }
+                _ => {} // skip vectors on the first pass
+            }
+        }
+        // Do a second pass to convert all the vector fields
+        for (name, val) in self.data.iter() {
+            match val {
+                x @ DmapField::Vector(_) => {
+                    data_bytes.extend(name.as_bytes());
+                    data_bytes.extend([0]); // null-terminate string
+                    data_bytes.append(&mut x.as_bytes());
+                    num_vectors += 1;
+                }
+                _ => {} // skip scalars on the second pass
+            }
+        }
+        let mut bytes: Vec<u8> = vec![];
+        bytes.extend((65537_i32).as_bytes()); // No idea why this is what it is, copied from backscatter
+        bytes.extend((data_bytes.len() as i32 + 16).as_bytes()); // +16 for code, length, num_scalars, num_vectors
+        bytes.extend(num_scalars.as_bytes());
+        bytes.extend(num_vectors.as_bytes());
+        bytes.append(&mut data_bytes); // consumes data_bytes
+        Ok(bytes)
+    }
+}
+
+impl TryFrom<&mut IndexMap<String, DmapField>> for GenericRecord {
+    type Error = DmapError;
+
+    fn try_from(value: &mut IndexMap<String, DmapField>) -> Result<Self, Self::Error> {
+        Ok(GenericRecord::new(value)?)
     }
 }
