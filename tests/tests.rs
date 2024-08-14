@@ -13,11 +13,11 @@ use dmap::{write_iqdat, write_rawacf, write_fitacf, write_grid, write_map, write
 #[test]
 fn read_write_generic() {
     let path = PathBuf::from("tests/test_files/test.rawacf");
-    let tempfile = PathBuf::from("tests/test_files/tmp.rawacf");
+    let tempfile = PathBuf::from("tests/test_files/generic.rawacf");
     let mut path_bz2: PathBuf = path.clone();
     path_bz2.set_file_name("test.rawacf.bz2");
     let mut temp_bz2: PathBuf = tempfile.clone();
-    temp_bz2.set_file_name("tmp.rawacf.bz2");
+    temp_bz2.set_file_name("generic.rawacf.bz2");
 
     // Read in test files and verify they have the same contents (both regular and zipped versions)
     let data = GenericRecord::read_file(&path).expect("Unable to read test.rawacf");
@@ -41,8 +41,8 @@ fn read_write_generic() {
     }
 
     // Clean up the temp files
-    remove_file(&tempfile).expect("Unable to delete tmp.rawacf");
-    remove_file(&temp_bz2).expect("Unable to delete tmp.rawacf.bz2");
+    remove_file(&tempfile).expect("Unable to delete generic.rawacf");
+    remove_file(&temp_bz2).expect("Unable to delete generic.rawacf.bz2");
 }
 
 #[test]
