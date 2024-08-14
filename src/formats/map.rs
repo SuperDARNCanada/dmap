@@ -58,7 +58,7 @@ static SCALAR_FIELDS_OPT: [(&str, Type); 13] = [
     ("noigrf", Type::Short),
 ];
 
-static VECTOR_FIELDS: [(&str, Type); 26] = [
+static VECTOR_FIELDS: [(&str, Type); 18] = [
     ("stid", Type::Short),
     ("channel", Type::Short),
     ("nvec", Type::Short),
@@ -77,17 +77,18 @@ static VECTOR_FIELDS: [(&str, Type); 26] = [
     ("w.max", Type::Float),
     ("ve.min", Type::Float),
     ("ve.max", Type::Float),
+];
+
+static VECTOR_FIELDS_OPT: [(&str, Type); 23] = [
     ("vector.mlat", Type::Float),
     ("vector.mlon", Type::Float),
     ("vector.kvect", Type::Float),
     ("vector.stid", Type::Short),
     ("vector.channel", Type::Short),
     ("vector.index", Type::Int),
+    ("vector.srng", Type::Float),
     ("vector.vel.median", Type::Float),
     ("vector.vel.sd", Type::Float),
-];
-
-static VECTOR_FIELDS_OPT: [(&str, Type); 15] = [
     ("vector.pwr.median", Type::Float),
     ("vector.pwr.sd", Type::Float),
     ("vector.wdt.median", Type::Float),
@@ -102,7 +103,6 @@ static VECTOR_FIELDS_OPT: [(&str, Type); 15] = [
     ("model.vel.median", Type::Float),
     ("boundary.mlat", Type::Float),
     ("boundary.mlon", Type::Float),
-    ("vector.srng", Type::Float),
 ];
 
 lazy_static! {

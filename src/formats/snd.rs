@@ -47,7 +47,9 @@ static SCALAR_FIELDS: [(&str, Type); 37] = [
 
 static SCALAR_FIELDS_OPT: [(&str, Type); 0] = [];
 
-static VECTOR_FIELDS: [(&str, Type); 7] = [
+static VECTOR_FIELDS: [(&str, Type); 0] = [];
+
+static VECTOR_FIELDS_OPT: [(&str, Type); 10] = [
     ("slist", Type::Short),
     ("qflg", Type::Char),
     ("gflg", Type::Char),
@@ -55,9 +57,6 @@ static VECTOR_FIELDS: [(&str, Type); 7] = [
     ("v_e", Type::Float),
     ("p_l", Type::Float),
     ("w_l", Type::Float),
-];
-
-static VECTOR_FIELDS_OPT: [(&str, Type); 3] = [
     ("x_qflg", Type::Char),
     ("phi0", Type::Float),
     ("phi0_e", Type::Float),
