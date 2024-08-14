@@ -22,7 +22,7 @@ static SCALAR_FIELDS: [(&str, Type); 12] = [
 
 static SCALAR_FIELDS_OPT: [(&str, Type); 0] = [];
 
-static VECTOR_FIELDS: [(&str, Type); 30] = [
+static VECTOR_FIELDS: [(&str, Type); 18] = [
     ("stid", Type::Short),
     ("channel", Type::Short),
     ("nvec", Type::Short),
@@ -41,6 +41,9 @@ static VECTOR_FIELDS: [(&str, Type); 30] = [
     ("w.max", Type::Float),
     ("ve.min", Type::Float),
     ("ve.max", Type::Float),
+];
+
+static VECTOR_FIELDS_OPT: [(&str, Type); 13] = [
     ("vector.mlat", Type::Float),
     ("vector.mlon", Type::Float),
     ("vector.kvect", Type::Float),
@@ -53,9 +56,8 @@ static VECTOR_FIELDS: [(&str, Type); 30] = [
     ("vector.pwr.sd", Type::Float),
     ("vector.wdt.median", Type::Float),
     ("vector.wdt.sd", Type::Float),
+    ("vector.srng", Type::Float)
 ];
-
-static VECTOR_FIELDS_OPT: [(&str, Type); 1] = [("vector.srng", Type::Float)];
 
 lazy_static! {
     static ref MATCHED_VECS: Vec<Vec<&'static str>> = vec![
