@@ -169,7 +169,7 @@ impl DmapScalar {
         }
     }
     /// Copies the data and metadata (`Type` key) to raw bytes
-    fn as_bytes(&self) -> Vec<u8> {
+    pub(crate) fn as_bytes(&self) -> Vec<u8> {
         let mut bytes: Vec<u8> = DmapType::as_bytes(&self.get_type().key()).to_vec();
         let mut data_bytes: Vec<u8> = match self {
             Self::Char(x) => DmapType::as_bytes(x),
@@ -254,7 +254,7 @@ impl DmapVec {
         }
     }
     /// Copies the data and metadata (dimensions, `Type` key) to raw bytes
-    fn as_bytes(&self) -> Vec<u8> {
+    pub(crate) fn as_bytes(&self) -> Vec<u8> {
         let mut bytes: Vec<u8> = DmapType::as_bytes(&self.get_type().key()).to_vec();
         match self {
             DmapVec::Char(x) => {
@@ -417,8 +417,8 @@ impl<'py> FromPyObject<'py> for DmapVec {
 #[derive(Debug, Clone, PartialEq, FromPyObject)]
 #[repr(C)]
 pub enum DmapField {
-    Scalar(DmapScalar),
     Vector(DmapVec),
+    Scalar(DmapScalar),
 }
 impl DmapField {
     /// Converts the field and metadata (`Type` key and dimensions if applicable) to raw bytes.

@@ -50,7 +50,7 @@ static SCALAR_FIELDS_OPT: [(&str, Type); 13] = [
     ("IMF.Bz", Type::Double),
     ("IMF.Vx", Type::Double),
     ("IMF.tilt", Type::Double),
-    ("IMT.Kp", Type::Double),
+    ("IMF.Kp", Type::Double),
     ("model.angle", Type::String),
     ("model.level", Type::String),
     ("model.tilt", Type::String),
@@ -87,7 +87,7 @@ static VECTOR_FIELDS: [(&str, Type); 26] = [
     ("vector.vel.sd", Type::Float),
 ];
 
-static VECTOR_FIELDS_OPT: [(&str, Type); 14] = [
+static VECTOR_FIELDS_OPT: [(&str, Type); 15] = [
     ("vector.pwr.median", Type::Float),
     ("vector.pwr.sd", Type::Float),
     ("vector.wdt.median", Type::Float),
@@ -102,6 +102,7 @@ static VECTOR_FIELDS_OPT: [(&str, Type); 14] = [
     ("model.vel.median", Type::Float),
     ("boundary.mlat", Type::Float),
     ("boundary.mlon", Type::Float),
+    ("vector.srng", Type::Float),
 ];
 
 lazy_static! {
@@ -166,7 +167,7 @@ lazy_static! {
     };
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct MapRecord {
     pub(crate) data: IndexMap<String, DmapField>,
 }
