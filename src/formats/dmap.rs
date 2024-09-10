@@ -2,16 +2,16 @@
 //! DMAP record types must have. Also defines the `GenericRecord` struct which
 //! implements `Record`, which can be used for reading/writing DMAP files without
 //! checking that certain fields are or are not present, or have a given type.
-use std::ffi::OsStr;
 use crate::error::DmapError;
 use crate::types::{parse_scalar, parse_vector, read_data, DmapField, DmapType, DmapVec, Fields};
+use bzip2::read::BzDecoder;
 use indexmap::IndexMap;
 use rayon::prelude::*;
+use std::ffi::OsStr;
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::{Cursor, Read};
 use std::path::PathBuf;
-use bzip2::read::BzDecoder;
 
 pub trait Record: Debug {
     /// Reads from dmap_data and parses into a collection of Records.
@@ -66,7 +66,7 @@ pub trait Record: Debug {
                 let compressor = BzDecoder::new(file);
                 Self::read_records(compressor)
             }
-            _ => { Self::read_records(file) }
+            _ => Self::read_records(file),
         }
     }
 
@@ -439,7 +439,6 @@ pub trait Record: Debug {
         Ok((num_scalars, num_vectors, data_bytes))
     }
 }
-
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct GenericRecord {
