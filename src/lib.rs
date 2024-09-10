@@ -9,7 +9,6 @@ pub mod error;
 pub mod formats;
 pub mod types;
 
-use std::ffi::OsStr;
 use crate::error::DmapError;
 use crate::formats::dmap::{GenericRecord, Record};
 use crate::formats::fitacf::FitacfRecord;
@@ -19,29 +18,38 @@ use crate::formats::map::MapRecord;
 use crate::formats::rawacf::RawacfRecord;
 use crate::formats::snd::SndRecord;
 use crate::types::DmapField;
+use bzip2::read::BzEncoder;
+use bzip2::Compression;
 use indexmap::IndexMap;
 use pyo3::prelude::*;
 use rayon::iter::Either;
 use rayon::prelude::*;
-use std::fs::File;
+use std::ffi::OsStr;
+use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::PathBuf;
-use bzip2::Compression;
-use bzip2::read::BzEncoder;
 
 /// Write bytes to file.
 ///
-/// If the extension of `outfile` is `.bz2`, the bytes will be compressed using
-/// bzip2 before being written.
+/// Ordinarily, this function opens the file in `append` mode. If the extension of `outfile` is
+/// `.bz2`, the bytes will be compressed using bzip2 before being written, and the file is instead
+/// opened in `create_new` mode, meaning it will fail if a file already exists at the given path.
 fn write_to_file(bytes: Vec<u8>, outfile: &PathBuf) -> Result<(), std::io::Error> {
-    let mut file = File::create(outfile)?;
     let mut out_bytes: Vec<u8> = vec![];
+    let mut file: File;
     match outfile.extension() {
         Some(ext) if ext == OsStr::new("bz2") => {
             let mut compressor = BzEncoder::new(bytes.as_slice(), Compression::best());
             compressor.read_to_end(&mut out_bytes)?;
+            file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(outfile)?;
         }
-        _ => { out_bytes = bytes }
+        _ => {
+            out_bytes = bytes;
+            file = OpenOptions::new().append(true).create(true).open(outfile)?;
+        }
     }
     file.write_all(&out_bytes)
 }
@@ -467,8 +475,13 @@ fn read_snd_py(infile: PathBuf) -> PyResult<Vec<IndexMap<String, DmapField>>> {
 }
 
 /// Checks that a list of dictionaries contains DMAP records, then writes to outfile.
+///
+/// Ordinarily, this function opens the file in `append` mode. If the extension of `outfile` is
+/// `.bz2`, the bytes will be compressed using bzip2 before being written, and the file is instead
+/// opened in `create_new` mode, meaning it will fail if a file already exists at the given path.
+///
 /// **NOTE:** No type checking is done, so the fields may not be written as the expected
-/// DMAP type, e.g. `stid` might be written as n `i8` instead of a `i16` as this function
+/// DMAP type, e.g. `stid` might be written as an `i8` instead of an `i16` as this function
 /// does not know that typically `stid` is an `i16`.
 #[pyfunction]
 #[pyo3(name = "write_dmap")]
@@ -478,6 +491,10 @@ fn write_dmap_py(recs: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -> Py
 }
 
 /// Checks that a list of dictionaries contains valid IQDAT records, then writes to outfile.
+///
+/// Ordinarily, this function opens the file in `append` mode. If the extension of `outfile` is
+/// `.bz2`, the bytes will be compressed using bzip2 before being written, and the file is instead
+/// opened in `create_new` mode, meaning it will fail if a file already exists at the given path.
 #[pyfunction]
 #[pyo3(name = "write_iqdat")]
 #[pyo3(text_signature = "(recs: list[dict], outfile: str, /)")]
@@ -486,6 +503,10 @@ fn write_iqdat_py(recs: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -> P
 }
 
 /// Checks that a list of dictionaries contains valid RAWACF records, then writes to outfile.
+///
+/// Ordinarily, this function opens the file in `append` mode. If the extension of `outfile` is
+/// `.bz2`, the bytes will be compressed using bzip2 before being written, and the file is instead
+/// opened in `create_new` mode, meaning it will fail if a file already exists at the given path.
 #[pyfunction]
 #[pyo3(name = "write_rawacf")]
 #[pyo3(text_signature = "(recs: list[dict], outfile: str, /)")]
@@ -494,6 +515,10 @@ fn write_rawacf_py(recs: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -> 
 }
 
 /// Checks that a list of dictionaries contains valid FITACF records, then writes to outfile.
+///
+/// Ordinarily, this function opens the file in `append` mode. If the extension of `outfile` is
+/// `.bz2`, the bytes will be compressed using bzip2 before being written, and the file is instead
+/// opened in `create_new` mode, meaning it will fail if a file already exists at the given path.
 #[pyfunction]
 #[pyo3(name = "write_fitacf")]
 #[pyo3(text_signature = "(recs: list[dict], outfile: str, /)")]
@@ -502,6 +527,10 @@ fn write_fitacf_py(recs: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -> 
 }
 
 /// Checks that a list of dictionaries contains valid GRID records, then writes to outfile.
+///
+/// Ordinarily, this function opens the file in `append` mode. If the extension of `outfile` is
+/// `.bz2`, the bytes will be compressed using bzip2 before being written, and the file is instead
+/// opened in `create_new` mode, meaning it will fail if a file already exists at the given path.
 #[pyfunction]
 #[pyo3(name = "write_grid")]
 #[pyo3(text_signature = "(recs: list[dict], outfile: str, /)")]
@@ -510,6 +539,10 @@ fn write_grid_py(recs: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -> Py
 }
 
 /// Checks that a list of dictionaries contains valid MAP records, then writes to outfile.
+///
+/// Ordinarily, this function opens the file in `append` mode. If the extension of `outfile` is
+/// `.bz2`, the bytes will be compressed using bzip2 before being written, and the file is instead
+/// opened in `create_new` mode, meaning it will fail if a file already exists at the given path.
 #[pyfunction]
 #[pyo3(name = "write_map")]
 #[pyo3(text_signature = "(recs: list[dict], outfile: str, /)")]
@@ -518,6 +551,10 @@ fn write_map_py(recs: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -> PyR
 }
 
 /// Checks that a list of dictionaries contains valid SND records, then writes to outfile.
+///
+/// Ordinarily, this function opens the file in `append` mode. If the extension of `outfile` is
+/// `.bz2`, the bytes will be compressed using bzip2 before being written, and the file is instead
+/// opened in `create_new` mode, meaning it will fail if a file already exists at the given path.
 #[pyfunction]
 #[pyo3(name = "write_snd")]
 #[pyo3(text_signature = "(recs: list[dict], outfile: str, /)")]

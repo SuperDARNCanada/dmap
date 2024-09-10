@@ -56,7 +56,7 @@ static VECTOR_FIELDS_OPT: [(&str, Type); 13] = [
     ("vector.pwr.sd", Type::Float),
     ("vector.wdt.median", Type::Float),
     ("vector.wdt.sd", Type::Float),
-    ("vector.srng", Type::Float)
+    ("vector.srng", Type::Float),
 ];
 
 lazy_static! {
