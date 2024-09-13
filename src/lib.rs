@@ -36,19 +36,14 @@ use std::path::PathBuf;
 /// opened in `create_new` mode, meaning it will fail if a file already exists at the given path.
 fn write_to_file(bytes: Vec<u8>, outfile: &PathBuf) -> Result<(), std::io::Error> {
     let mut out_bytes: Vec<u8> = vec![];
-    let mut file: File;
+    let mut file: File = OpenOptions::new().append(true).create(true).open(outfile)?;
     match outfile.extension() {
         Some(ext) if ext == OsStr::new("bz2") => {
             let mut compressor = BzEncoder::new(bytes.as_slice(), Compression::best());
             compressor.read_to_end(&mut out_bytes)?;
-            file = OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(outfile)?;
         }
         _ => {
             out_bytes = bytes;
-            file = OpenOptions::new().append(true).create(true).open(outfile)?;
         }
     }
     file.write_all(&out_bytes)
