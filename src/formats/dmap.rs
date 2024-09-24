@@ -442,7 +442,7 @@ pub trait Record: Debug {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct GenericRecord {
-    pub(crate) data: IndexMap<String, DmapField>,
+    pub data: IndexMap<String, DmapField>,
 }
 
 impl Record for GenericRecord {

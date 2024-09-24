@@ -86,7 +86,7 @@ lazy_static! {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct SndRecord {
-    pub(crate) data: IndexMap<String, DmapField>,
+    pub data: IndexMap<String, DmapField>,
 }
 
 impl Record for SndRecord {
