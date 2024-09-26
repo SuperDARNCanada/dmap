@@ -89,6 +89,14 @@ pub struct SndRecord {
     pub data: IndexMap<String, DmapField>,
 }
 
+impl SndRecord {
+    pub fn get(&self, key: &String) -> Option<&DmapField> {
+        self.data.get(key)
+    }
+    pub fn keys(&self) -> Vec<&String> {
+        self.data.keys().collect()
+    }
+}
 impl Record for SndRecord {
     fn new(fields: &mut IndexMap<String, DmapField>) -> Result<SndRecord, DmapError> {
         match Self::check_fields(fields, &SND_FIELDS) {

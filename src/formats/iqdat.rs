@@ -100,6 +100,15 @@ pub struct IqdatRecord {
     pub data: IndexMap<String, DmapField>,
 }
 
+impl IqdatRecord {
+    pub fn get(&self, key: &String) -> Option<&DmapField> {
+        self.data.get(key)
+    }
+    pub fn keys(&self) -> Vec<&String> {
+        self.data.keys().collect()
+    }
+}
+
 impl Record for IqdatRecord {
     fn new(fields: &mut IndexMap<String, DmapField>) -> Result<IqdatRecord, DmapError> {
         match Self::check_fields(fields, &IQDAT_FIELDS) {

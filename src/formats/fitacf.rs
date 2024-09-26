@@ -184,6 +184,14 @@ pub struct FitacfRecord {
     pub data: IndexMap<String, DmapField>,
 }
 
+impl FitacfRecord {
+    pub fn get(&self, key: &String) -> Option<&DmapField> {
+        self.data.get(key)
+    }
+    pub fn keys(&self) -> Vec<&String> {
+        self.data.keys().collect()
+    }
+}
 impl Record for FitacfRecord {
     fn new(fields: &mut IndexMap<String, DmapField>) -> Result<FitacfRecord, DmapError> {
         match Self::check_fields(fields, &FITACF_FIELDS) {

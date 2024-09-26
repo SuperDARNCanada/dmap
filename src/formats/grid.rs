@@ -118,6 +118,15 @@ pub struct GridRecord {
     pub data: IndexMap<String, DmapField>,
 }
 
+impl GridRecord {
+    pub fn get(&self, key: &String) -> Option<&DmapField> {
+        self.data.get(key)
+    }
+    pub fn keys(&self) -> Vec<&String> {
+        self.data.keys().collect()
+    }
+}
+
 impl Record for GridRecord {
     fn new(fields: &mut IndexMap<String, DmapField>) -> Result<GridRecord, DmapError> {
         match Self::check_fields(fields, &GRID_FIELDS) {

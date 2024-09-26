@@ -89,6 +89,15 @@ pub struct RawacfRecord {
     pub data: IndexMap<String, DmapField>,
 }
 
+impl RawacfRecord {
+    pub fn get(&self, key: &String) -> Option<&DmapField> {
+        self.data.get(key)
+    }
+    pub fn keys(&self) -> Vec<&String> {
+        self.data.keys().collect()
+    }
+}
+
 impl Record for RawacfRecord {
     fn new(fields: &mut IndexMap<String, DmapField>) -> Result<RawacfRecord, DmapError> {
         match Self::check_fields(fields, &RAWACF_FIELDS) {
