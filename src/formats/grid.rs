@@ -56,7 +56,7 @@ static VECTOR_FIELDS_OPT: [(&str, Type); 13] = [
     ("vector.pwr.sd", Type::Float),
     ("vector.wdt.median", Type::Float),
     ("vector.wdt.sd", Type::Float),
-    ("vector.srng", Type::Float)
+    ("vector.srng", Type::Float),
 ];
 
 lazy_static! {
@@ -113,12 +113,26 @@ lazy_static! {
     };
 }
 
+/// Struct containing the checked fields of a single GRID record.
 #[derive(Debug, PartialEq, Clone)]
 pub struct GridRecord {
-    pub(crate) data: IndexMap<String, DmapField>,
+    pub data: IndexMap<String, DmapField>,
 }
 
-impl Record for GridRecord {
+impl GridRecord {
+    pub fn get(&self, key: &String) -> Option<&DmapField> {
+        self.data.get(key)
+    }
+    pub fn keys(&self) -> Vec<&String> {
+        self.data.keys().collect()
+    }
+}
+
+impl Record<'_> for GridRecord {
+    fn inner(self) -> IndexMap<String, DmapField> {
+        self.data
+    }
+
     fn new(fields: &mut IndexMap<String, DmapField>) -> Result<GridRecord, DmapError> {
         match Self::check_fields(fields, &GRID_FIELDS) {
             Ok(_) => {}
@@ -147,6 +161,6 @@ impl TryFrom<&mut IndexMap<String, DmapField>> for GridRecord {
     type Error = DmapError;
 
     fn try_from(value: &mut IndexMap<String, DmapField>) -> Result<Self, Self::Error> {
-        Ok(Self::coerce::<GridRecord>(value, &GRID_FIELDS)?)
+        Self::coerce::<GridRecord>(value, &GRID_FIELDS)
     }
 }

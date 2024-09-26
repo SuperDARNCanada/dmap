@@ -47,7 +47,7 @@ jobs:
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist --zig
-          sccache: 'true'
+#          sccache: 'true'
           manylinux: auto
       - name: Upload wheels
         uses: actions/upload-artifact@v4
@@ -79,7 +79,7 @@ jobs:
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist
-          sccache: 'true'
+#          sccache: 'true'
           manylinux: musllinux_1_2
       - name: Upload wheels
         uses: actions/upload-artifact@v4
@@ -108,7 +108,7 @@ jobs:
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist
-          sccache: 'true'
+#          sccache: 'true'
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -135,7 +135,7 @@ jobs:
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist
-          sccache: 'true'
+#          sccache: 'true'
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:

@@ -181,10 +181,22 @@ lazy_static! {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct FitacfRecord {
-    pub(crate) data: IndexMap<String, DmapField>,
+    pub data: IndexMap<String, DmapField>,
 }
 
-impl Record for FitacfRecord {
+impl FitacfRecord {
+    pub fn get(&self, key: &String) -> Option<&DmapField> {
+        self.data.get(key)
+    }
+    pub fn keys(&self) -> Vec<&String> {
+        self.data.keys().collect()
+    }
+}
+impl Record<'_> for FitacfRecord {
+    fn inner(self) -> IndexMap<String, DmapField> {
+        self.data
+    }
+
     fn new(fields: &mut IndexMap<String, DmapField>) -> Result<FitacfRecord, DmapError> {
         match Self::check_fields(fields, &FITACF_FIELDS) {
             Ok(_) => {}
@@ -213,6 +225,6 @@ impl TryFrom<&mut IndexMap<String, DmapField>> for FitacfRecord {
     type Error = DmapError;
 
     fn try_from(value: &mut IndexMap<String, DmapField>) -> Result<Self, Self::Error> {
-        Ok(Self::coerce::<FitacfRecord>(value, &FITACF_FIELDS)?)
+        Self::coerce::<FitacfRecord>(value, &FITACF_FIELDS)
     }
 }

@@ -169,10 +169,23 @@ lazy_static! {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct MapRecord {
-    pub(crate) data: IndexMap<String, DmapField>,
+    pub data: IndexMap<String, DmapField>,
 }
 
-impl Record for MapRecord {
+impl MapRecord {
+    pub fn get(&self, key: &String) -> Option<&DmapField> {
+        self.data.get(key)
+    }
+    pub fn keys(&self) -> Vec<&String> {
+        self.data.keys().collect()
+    }
+}
+
+impl Record<'_> for MapRecord {
+    fn inner(self) -> IndexMap<String, DmapField> {
+        self.data
+    }
+
     fn new(fields: &mut IndexMap<String, DmapField>) -> Result<MapRecord, DmapError> {
         match Self::check_fields(fields, &MAP_FIELDS) {
             Ok(_) => {}
@@ -201,6 +214,6 @@ impl TryFrom<&mut IndexMap<String, DmapField>> for MapRecord {
     type Error = DmapError;
 
     fn try_from(value: &mut IndexMap<String, DmapField>) -> Result<Self, Self::Error> {
-        Ok(Self::coerce::<MapRecord>(value, &MAP_FIELDS)?)
+        Self::coerce::<MapRecord>(value, &MAP_FIELDS)
     }
 }
