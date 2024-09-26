@@ -464,80 +464,130 @@ impl TryFrom<DmapVec> for ArrayD<i8> {
     type Error = DmapError;
 
     fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Char(x) = value { Ok(x) }
-        else { Err(DmapError::InvalidVector("Cannot convert to ArrayD<i8>".to_string())) }
+        if let DmapVec::Char(x) = value {
+            Ok(x)
+        } else {
+            Err(DmapError::InvalidVector(
+                "Cannot convert to ArrayD<i8>".to_string(),
+            ))
+        }
     }
 }
 impl TryFrom<DmapVec> for ArrayD<i16> {
     type Error = DmapError;
 
     fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Short(x) = value { Ok(x) }
-        else { Err(DmapError::InvalidVector("Cannot convert to ArrayD<i16>".to_string())) }
+        if let DmapVec::Short(x) = value {
+            Ok(x)
+        } else {
+            Err(DmapError::InvalidVector(
+                "Cannot convert to ArrayD<i16>".to_string(),
+            ))
+        }
     }
 }
 impl TryFrom<DmapVec> for ArrayD<i32> {
     type Error = DmapError;
 
     fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Int(x) = value { Ok(x) }
-        else { Err(DmapError::InvalidVector("Cannot convert to ArrayD<i32>".to_string())) }
+        if let DmapVec::Int(x) = value {
+            Ok(x)
+        } else {
+            Err(DmapError::InvalidVector(
+                "Cannot convert to ArrayD<i32>".to_string(),
+            ))
+        }
     }
 }
 impl TryFrom<DmapVec> for ArrayD<i64> {
     type Error = DmapError;
 
     fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Long(x) = value { Ok(x) }
-        else { Err(DmapError::InvalidVector("Cannot convert to ArrayD<i64>".to_string())) }
+        if let DmapVec::Long(x) = value {
+            Ok(x)
+        } else {
+            Err(DmapError::InvalidVector(
+                "Cannot convert to ArrayD<i64>".to_string(),
+            ))
+        }
     }
 }
 impl TryFrom<DmapVec> for ArrayD<u8> {
     type Error = DmapError;
 
     fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Uchar(x) = value { Ok(x) }
-        else { Err(DmapError::InvalidVector("Cannot convert to ArrayD<u8>".to_string())) }
+        if let DmapVec::Uchar(x) = value {
+            Ok(x)
+        } else {
+            Err(DmapError::InvalidVector(
+                "Cannot convert to ArrayD<u8>".to_string(),
+            ))
+        }
     }
 }
 impl TryFrom<DmapVec> for ArrayD<u16> {
     type Error = DmapError;
 
     fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Ushort(x) = value { Ok(x) }
-        else { Err(DmapError::InvalidVector("Cannot convert to ArrayD<u16>".to_string())) }
+        if let DmapVec::Ushort(x) = value {
+            Ok(x)
+        } else {
+            Err(DmapError::InvalidVector(
+                "Cannot convert to ArrayD<u16>".to_string(),
+            ))
+        }
     }
 }
 impl TryFrom<DmapVec> for ArrayD<u32> {
     type Error = DmapError;
 
     fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Uint(x) = value { Ok(x) }
-        else { Err(DmapError::InvalidVector("Cannot convert to ArrayD<u32>".to_string())) }
+        if let DmapVec::Uint(x) = value {
+            Ok(x)
+        } else {
+            Err(DmapError::InvalidVector(
+                "Cannot convert to ArrayD<u32>".to_string(),
+            ))
+        }
     }
 }
 impl TryFrom<DmapVec> for ArrayD<u64> {
     type Error = DmapError;
 
     fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Ulong(x) = value { Ok(x) }
-        else { Err(DmapError::InvalidVector("Cannot convert to ArrayD<u64>".to_string())) }
+        if let DmapVec::Ulong(x) = value {
+            Ok(x)
+        } else {
+            Err(DmapError::InvalidVector(
+                "Cannot convert to ArrayD<u64>".to_string(),
+            ))
+        }
     }
 }
 impl TryFrom<DmapVec> for ArrayD<f32> {
     type Error = DmapError;
 
     fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Float(x) = value { Ok(x) }
-        else { Err(DmapError::InvalidVector("Cannot convert to ArrayD<f32>".to_string())) }
+        if let DmapVec::Float(x) = value {
+            Ok(x)
+        } else {
+            Err(DmapError::InvalidVector(
+                "Cannot convert to ArrayD<f32>".to_string(),
+            ))
+        }
     }
 }
 impl TryFrom<DmapVec> for ArrayD<f64> {
     type Error = DmapError;
 
     fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Double(x) = value { Ok(x) }
-        else { Err(DmapError::InvalidVector("Cannot convert to ArrayD<f64>".to_string())) }
+        if let DmapVec::Double(x) = value {
+            Ok(x)
+        } else {
+            Err(DmapError::InvalidVector(
+                "Cannot convert to ArrayD<f64>".to_string(),
+            ))
+        }
     }
 }
 
@@ -679,7 +729,9 @@ impl TryFrom<DmapField> for i8 {
     fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
         match value {
             DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar("Cannot interpret as i8".to_string()))
+            _ => Err(Self::Error::InvalidScalar(
+                "Cannot interpret as i8".to_string(),
+            )),
         }
     }
 }
@@ -689,7 +741,9 @@ impl TryFrom<DmapField> for i16 {
     fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
         match value {
             DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar("Cannot interpret as i16".to_string()))
+            _ => Err(Self::Error::InvalidScalar(
+                "Cannot interpret as i16".to_string(),
+            )),
         }
     }
 }
@@ -699,7 +753,9 @@ impl TryFrom<DmapField> for i32 {
     fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
         match value {
             DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar("Cannot interpret as i32".to_string()))
+            _ => Err(Self::Error::InvalidScalar(
+                "Cannot interpret as i32".to_string(),
+            )),
         }
     }
 }
@@ -709,7 +765,9 @@ impl TryFrom<DmapField> for i64 {
     fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
         match value {
             DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar("Cannot interpret as i64".to_string()))
+            _ => Err(Self::Error::InvalidScalar(
+                "Cannot interpret as i64".to_string(),
+            )),
         }
     }
 }
@@ -719,7 +777,9 @@ impl TryFrom<DmapField> for u8 {
     fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
         match value {
             DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar("Cannot interpret as u8".to_string()))
+            _ => Err(Self::Error::InvalidScalar(
+                "Cannot interpret as u8".to_string(),
+            )),
         }
     }
 }
@@ -729,7 +789,9 @@ impl TryFrom<DmapField> for u16 {
     fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
         match value {
             DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar("Cannot interpret as u16".to_string()))
+            _ => Err(Self::Error::InvalidScalar(
+                "Cannot interpret as u16".to_string(),
+            )),
         }
     }
 }
@@ -739,7 +801,9 @@ impl TryFrom<DmapField> for u32 {
     fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
         match value {
             DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar("Cannot interpret as u32".to_string()))
+            _ => Err(Self::Error::InvalidScalar(
+                "Cannot interpret as u32".to_string(),
+            )),
         }
     }
 }
@@ -749,7 +813,9 @@ impl TryFrom<DmapField> for u64 {
     fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
         match value {
             DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar("Cannot interpret as u64".to_string()))
+            _ => Err(Self::Error::InvalidScalar(
+                "Cannot interpret as u64".to_string(),
+            )),
         }
     }
 }
@@ -759,7 +825,9 @@ impl TryFrom<DmapField> for f32 {
     fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
         match value {
             DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar("Cannot interpret as f32".to_string()))
+            _ => Err(Self::Error::InvalidScalar(
+                "Cannot interpret as f32".to_string(),
+            )),
         }
     }
 }
@@ -769,7 +837,9 @@ impl TryFrom<DmapField> for f64 {
     fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
         match value {
             DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar("Cannot interpret as f64".to_string()))
+            _ => Err(Self::Error::InvalidScalar(
+                "Cannot interpret as f64".to_string(),
+            )),
         }
     }
 }
@@ -779,7 +849,9 @@ impl TryFrom<DmapField> for String {
     fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
         match value {
             DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar("Cannot interpret vector as String".to_string()))
+            _ => Err(Self::Error::InvalidScalar(
+                "Cannot interpret vector as String".to_string(),
+            )),
         }
     }
 }
@@ -789,7 +861,9 @@ impl TryFrom<DmapField> for ArrayD<i8> {
     fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
         match value {
             DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector("Cannot interpret as ArrayD<i8>".to_string()))
+            _ => Err(Self::Error::InvalidVector(
+                "Cannot interpret as ArrayD<i8>".to_string(),
+            )),
         }
     }
 }
@@ -799,7 +873,9 @@ impl TryFrom<DmapField> for ArrayD<i16> {
     fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
         match value {
             DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector("Cannot interpret as ArrayD<i16>".to_string()))
+            _ => Err(Self::Error::InvalidVector(
+                "Cannot interpret as ArrayD<i16>".to_string(),
+            )),
         }
     }
 }
@@ -809,7 +885,9 @@ impl TryFrom<DmapField> for ArrayD<i32> {
     fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
         match value {
             DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector("Cannot interpret as ArrayD<i32>".to_string()))
+            _ => Err(Self::Error::InvalidVector(
+                "Cannot interpret as ArrayD<i32>".to_string(),
+            )),
         }
     }
 }
@@ -819,7 +897,9 @@ impl TryFrom<DmapField> for ArrayD<i64> {
     fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
         match value {
             DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector("Cannot interpret as ArrayD<i64>".to_string()))
+            _ => Err(Self::Error::InvalidVector(
+                "Cannot interpret as ArrayD<i64>".to_string(),
+            )),
         }
     }
 }
@@ -829,7 +909,9 @@ impl TryFrom<DmapField> for ArrayD<u8> {
     fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
         match value {
             DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector("Cannot interpret as ArrayD<u8>".to_string()))
+            _ => Err(Self::Error::InvalidVector(
+                "Cannot interpret as ArrayD<u8>".to_string(),
+            )),
         }
     }
 }
@@ -839,7 +921,9 @@ impl TryFrom<DmapField> for ArrayD<u16> {
     fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
         match value {
             DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector("Cannot interpret as ArrayD<u16>".to_string()))
+            _ => Err(Self::Error::InvalidVector(
+                "Cannot interpret as ArrayD<u16>".to_string(),
+            )),
         }
     }
 }
@@ -849,7 +933,9 @@ impl TryFrom<DmapField> for ArrayD<u32> {
     fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
         match value {
             DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector("Cannot interpret as ArrayD<u32>".to_string()))
+            _ => Err(Self::Error::InvalidVector(
+                "Cannot interpret as ArrayD<u32>".to_string(),
+            )),
         }
     }
 }
@@ -859,7 +945,9 @@ impl TryFrom<DmapField> for ArrayD<u64> {
     fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
         match value {
             DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector("Cannot interpret as ArrayD<u64>".to_string()))
+            _ => Err(Self::Error::InvalidVector(
+                "Cannot interpret as ArrayD<u64>".to_string(),
+            )),
         }
     }
 }
@@ -869,7 +957,9 @@ impl TryFrom<DmapField> for ArrayD<f32> {
     fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
         match value {
             DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector("Cannot interpret as ArrayD<f32>".to_string()))
+            _ => Err(Self::Error::InvalidVector(
+                "Cannot interpret as ArrayD<f32>".to_string(),
+            )),
         }
     }
 }
@@ -879,7 +969,9 @@ impl TryFrom<DmapField> for ArrayD<f64> {
     fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
         match value {
             DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector("Cannot interpret as ArrayD<f64>".to_string()))
+            _ => Err(Self::Error::InvalidVector(
+                "Cannot interpret as ArrayD<f64>".to_string(),
+            )),
         }
     }
 }
@@ -1096,7 +1188,7 @@ impl DmapType for String {
     }
     fn from_bytes(bytes: &[u8]) -> Result<Self> {
         let data = String::from_utf8(bytes.to_owned())
-            .map_err(|_| DmapError::InvalidScalar(format!("Cannot convert bytes to String")))?;
+            .map_err(|_| DmapError::InvalidScalar("Cannot convert bytes to String".to_string()))?;
         Ok(data.trim_end_matches(char::from(0)).to_string())
     }
     fn dmap_type(&self) -> Type {
@@ -1322,8 +1414,8 @@ pub fn check_scalar(
     expected_type: Type,
 ) -> Result<()> {
     match fields.get(name) {
-        Some(&DmapField::Scalar(ref data)) if data.get_type() == expected_type => Ok(()),
-        Some(&DmapField::Scalar(ref data)) => Err(DmapError::InvalidScalar(format!(
+        Some(DmapField::Scalar(data)) if data.get_type() == expected_type => Ok(()),
+        Some(DmapField::Scalar(data)) => Err(DmapError::InvalidScalar(format!(
             "{name} is of type {}, expected {}",
             data.get_type(),
             expected_type
@@ -1342,8 +1434,8 @@ pub fn check_scalar_opt(
     expected_type: Type,
 ) -> Result<()> {
     match fields.get(name) {
-        Some(&DmapField::Scalar(ref data)) if data.get_type() == expected_type => Ok(()),
-        Some(&DmapField::Scalar(ref data)) => Err(DmapError::InvalidScalar(format!(
+        Some(DmapField::Scalar(data)) if data.get_type() == expected_type => Ok(()),
+        Some(DmapField::Scalar(data)) => Err(DmapError::InvalidScalar(format!(
             "{name} is of type {}, expected {}",
             data.get_type(),
             expected_type

@@ -109,7 +109,11 @@ impl IqdatRecord {
     }
 }
 
-impl Record for IqdatRecord {
+impl Record<'_> for IqdatRecord {
+    fn inner(self) -> IndexMap<String, DmapField> {
+        self.data
+    }
+
     fn new(fields: &mut IndexMap<String, DmapField>) -> Result<IqdatRecord, DmapError> {
         match Self::check_fields(fields, &IQDAT_FIELDS) {
             Ok(_) => {}
@@ -138,6 +142,6 @@ impl TryFrom<&mut IndexMap<String, DmapField>> for IqdatRecord {
     type Error = DmapError;
 
     fn try_from(value: &mut IndexMap<String, DmapField>) -> Result<Self, Self::Error> {
-        Ok(Self::coerce::<IqdatRecord>(value, &IQDAT_FIELDS)?)
+        Self::coerce::<IqdatRecord>(value, &IQDAT_FIELDS)
     }
 }

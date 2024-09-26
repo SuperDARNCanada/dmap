@@ -84,21 +84,28 @@ lazy_static! {
     };
 }
 
+/// Struct containing the checked fields of a single RAWACF record.
 #[derive(Debug, PartialEq, Clone)]
 pub struct RawacfRecord {
     pub data: IndexMap<String, DmapField>,
 }
 
 impl RawacfRecord {
+    /// Returns the field with name `key`, if it exists in the record.
     pub fn get(&self, key: &String) -> Option<&DmapField> {
         self.data.get(key)
     }
+
+    /// Returns the names of all fields stored in the record.
     pub fn keys(&self) -> Vec<&String> {
         self.data.keys().collect()
     }
 }
 
-impl Record for RawacfRecord {
+impl Record<'_> for RawacfRecord {
+    fn inner(self) -> IndexMap<String, DmapField> {
+        self.data
+    }
     fn new(fields: &mut IndexMap<String, DmapField>) -> Result<RawacfRecord, DmapError> {
         match Self::check_fields(fields, &RAWACF_FIELDS) {
             Ok(_) => {}
@@ -127,6 +134,6 @@ impl TryFrom<&mut IndexMap<String, DmapField>> for RawacfRecord {
     type Error = DmapError;
 
     fn try_from(value: &mut IndexMap<String, DmapField>) -> Result<Self, Self::Error> {
-        Ok(Self::coerce::<RawacfRecord>(value, &RAWACF_FIELDS)?)
+        Self::coerce::<RawacfRecord>(value, &RAWACF_FIELDS)
     }
 }

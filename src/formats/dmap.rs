@@ -2,6 +2,7 @@
 //! DMAP record types must have. Also defines the `GenericRecord` struct which
 //! implements `Record`, which can be used for reading/writing DMAP files without
 //! checking that certain fields are or are not present, or have a given type.
+
 use crate::error::DmapError;
 use crate::types::{parse_scalar, parse_vector, read_data, DmapField, DmapType, DmapVec, Fields};
 use bzip2::read::BzDecoder;
@@ -13,7 +14,12 @@ use std::fs::File;
 use std::io::{Cursor, Read};
 use std::path::PathBuf;
 
-pub trait Record: Debug {
+pub trait Record<'a>:
+    Debug + Send + TryFrom<&'a mut IndexMap<String, DmapField>, Error = DmapError>
+{
+    /// Gets the underlying data of the Record.
+    fn inner(self) -> IndexMap<String, DmapField>;
+
     /// Reads from dmap_data and parses into a collection of Records.
     ///
     /// Returns `DmapError` if dmap_data cannot be read or contains invalid data.
@@ -168,7 +174,7 @@ pub trait Record: Debug {
             .keys()
             .filter(|&k| !fields_for_type.all_fields.contains(&&**k))
             .collect();
-        if unsupported_keys.len() > 0 {
+        if !unsupported_keys.is_empty() {
             Err(DmapError::InvalidRecord(format!(
                 "Unsupported fields {:?}, fields supported are {:?}",
                 unsupported_keys, fields_for_type.all_fields
@@ -177,8 +183,8 @@ pub trait Record: Debug {
 
         for (field, expected_type) in fields_for_type.scalars_required.iter() {
             match field_dict.get(&field.to_string()) {
-                Some(&DmapField::Scalar(ref x)) if &x.get_type() == expected_type => {}
-                Some(&DmapField::Scalar(ref x)) => Err(DmapError::InvalidRecord(format!(
+                Some(DmapField::Scalar(x)) if &x.get_type() == expected_type => {}
+                Some(DmapField::Scalar(x)) => Err(DmapError::InvalidRecord(format!(
                     "Field {} has incorrect type {}, expected {}",
                     field,
                     x.get_type(),
@@ -197,8 +203,8 @@ pub trait Record: Debug {
         }
         for (field, expected_type) in fields_for_type.scalars_optional.iter() {
             match field_dict.get(&field.to_string()) {
-                Some(&DmapField::Scalar(ref x)) if &x.get_type() == expected_type => {}
-                Some(&DmapField::Scalar(ref x)) => Err(DmapError::InvalidRecord(format!(
+                Some(DmapField::Scalar(x)) if &x.get_type() == expected_type => {}
+                Some(DmapField::Scalar(x)) => Err(DmapError::InvalidRecord(format!(
                     "Field {} has incorrect type {}, expected {}",
                     field,
                     x.get_type(),
@@ -213,11 +219,11 @@ pub trait Record: Debug {
         }
         for (field, expected_type) in fields_for_type.vectors_required.iter() {
             match field_dict.get(&field.to_string()) {
-                Some(&DmapField::Scalar(_)) => Err(DmapError::InvalidRecord(format!(
+                Some(DmapField::Scalar(_)) => Err(DmapError::InvalidRecord(format!(
                     "Field {} is a scalar, expected vector",
                     field
                 )))?,
-                Some(&DmapField::Vector(ref x)) if &x.get_type() != expected_type => {
+                Some(DmapField::Vector(x)) if &x.get_type() != expected_type => {
                     Err(DmapError::InvalidRecord(format!(
                         "Field {field} has incorrect type {:?}, expected {expected_type:?}",
                         x.get_type()
@@ -233,7 +239,7 @@ pub trait Record: Debug {
                     "Field {} is a scalar, expected vector",
                     field
                 )))?,
-                Some(&DmapField::Vector(ref x)) if &x.get_type() != expected_type => {
+                Some(DmapField::Vector(x)) if &x.get_type() != expected_type => {
                     Err(DmapError::InvalidRecord(format!(
                         "Field {field} has incorrect type {}, expected {expected_type}",
                         x.get_type()
@@ -255,7 +261,7 @@ pub trait Record: Debug {
             if vecs.len() > 1 {
                 let mut vec_iter = vecs.iter();
                 let first = vec_iter.next().expect("Iterator broken");
-                if !vec_iter.all(|(_, ref v)| v.shape() == first.1.shape()) {
+                if !vec_iter.all(|(_, v)| v.shape() == first.1.shape()) {
                     let error_vec: Vec<(&str, &[usize])> =
                         vecs.iter().map(|(k, v)| (*k, v.shape())).collect();
                     Err(DmapError::InvalidRecord(format!(
@@ -269,7 +275,7 @@ pub trait Record: Debug {
     }
 
     /// Attempts to massage the entries of an `IndexMap` into the proper types for a DMAP record.
-    fn coerce<T: Record>(
+    fn coerce<T: Record<'a>>(
         fields_dict: &mut IndexMap<String, DmapField>,
         fields_for_type: &Fields,
     ) -> Result<T, DmapError> {
@@ -277,7 +283,7 @@ pub trait Record: Debug {
             .keys()
             .filter(|&k| !fields_for_type.all_fields.contains(&&**k))
             .collect();
-        if unsupported_keys.len() > 0 {
+        if !unsupported_keys.is_empty() {
             Err(DmapError::InvalidRecord(format!(
                 "Unsupported fields {:?}, fields supported are {:?}",
                 unsupported_keys, fields_for_type.all_fields
@@ -286,7 +292,7 @@ pub trait Record: Debug {
 
         for (field, expected_type) in fields_for_type.scalars_required.iter() {
             match fields_dict.get(&field.to_string()) {
-                Some(&DmapField::Scalar(ref x)) if &x.get_type() != expected_type => {
+                Some(DmapField::Scalar(x)) if &x.get_type() != expected_type => {
                     fields_dict.insert(
                         field.to_string(),
                         DmapField::Scalar(x.cast_as(expected_type)?),
@@ -306,8 +312,8 @@ pub trait Record: Debug {
         }
         for (field, expected_type) in fields_for_type.scalars_optional.iter() {
             match fields_dict.get(&field.to_string()) {
-                Some(&DmapField::Scalar(ref x)) if &x.get_type() == expected_type => {}
-                Some(&DmapField::Scalar(ref x)) => {
+                Some(DmapField::Scalar(x)) if &x.get_type() == expected_type => {}
+                Some(DmapField::Scalar(x)) => {
                     fields_dict.insert(
                         field.to_string(),
                         DmapField::Scalar(x.cast_as(expected_type)?),
@@ -326,7 +332,7 @@ pub trait Record: Debug {
                     "Field {} is a scalar, expected vector",
                     field
                 )))?,
-                Some(&DmapField::Vector(ref x)) if &x.get_type() != expected_type => {
+                Some(DmapField::Vector(x)) if &x.get_type() != expected_type => {
                     Err(DmapError::InvalidRecord(format!(
                         "Field {field} has incorrect type {:?}, expected {expected_type:?}",
                         x.get_type()
@@ -342,7 +348,7 @@ pub trait Record: Debug {
                     "Field {} is a scalar, expected vector",
                     field
                 )))?,
-                Some(&DmapField::Vector(ref x)) if &x.get_type() != expected_type => {
+                Some(DmapField::Vector(x)) if &x.get_type() != expected_type => {
                     Err(DmapError::InvalidRecord(format!(
                         "Field {field} has incorrect type {}, expected {expected_type}",
                         x.get_type()
@@ -352,7 +358,7 @@ pub trait Record: Debug {
             }
         }
 
-        Ok(T::new(fields_dict)?)
+        T::new(fields_dict)
     }
 
     /// Attempts to copy `self` to a raw byte representation.
@@ -454,7 +460,11 @@ impl GenericRecord {
     }
 }
 
-impl Record for GenericRecord {
+impl Record<'_> for GenericRecord {
+    fn inner(self) -> IndexMap<String, DmapField> {
+        self.data
+    }
+
     fn new(fields: &mut IndexMap<String, DmapField>) -> Result<GenericRecord, DmapError> {
         Ok(GenericRecord {
             data: fields.to_owned(),
@@ -467,26 +477,20 @@ impl Record for GenericRecord {
 
         // Do a first pass, to get all the scalar fields
         for (name, val) in self.data.iter() {
-            match val {
-                x @ DmapField::Scalar(_) => {
-                    data_bytes.extend(name.as_bytes());
-                    data_bytes.extend([0]); // null-terminate string
-                    data_bytes.append(&mut x.as_bytes());
-                    num_scalars += 1;
-                }
-                _ => {} // skip vectors on the first pass
+            if let x @ DmapField::Scalar(_) = val {
+                data_bytes.extend(name.as_bytes());
+                data_bytes.extend([0]); // null-terminate string
+                data_bytes.append(&mut x.as_bytes());
+                num_scalars += 1;
             }
         }
         // Do a second pass to convert all the vector fields
         for (name, val) in self.data.iter() {
-            match val {
-                x @ DmapField::Vector(_) => {
-                    data_bytes.extend(name.as_bytes());
-                    data_bytes.extend([0]); // null-terminate string
-                    data_bytes.append(&mut x.as_bytes());
-                    num_vectors += 1;
-                }
-                _ => {} // skip scalars on the second pass
+            if let x @ DmapField::Vector(_) = val {
+                data_bytes.extend(name.as_bytes());
+                data_bytes.extend([0]); // null-terminate string
+                data_bytes.append(&mut x.as_bytes());
+                num_vectors += 1;
             }
         }
         let mut bytes: Vec<u8> = vec![];
@@ -503,6 +507,6 @@ impl TryFrom<&mut IndexMap<String, DmapField>> for GenericRecord {
     type Error = DmapError;
 
     fn try_from(value: &mut IndexMap<String, DmapField>) -> Result<Self, Self::Error> {
-        Ok(GenericRecord::new(value)?)
+        GenericRecord::new(value)
     }
 }

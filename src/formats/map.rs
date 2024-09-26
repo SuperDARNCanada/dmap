@@ -181,7 +181,11 @@ impl MapRecord {
     }
 }
 
-impl Record for MapRecord {
+impl Record<'_> for MapRecord {
+    fn inner(self) -> IndexMap<String, DmapField> {
+        self.data
+    }
+
     fn new(fields: &mut IndexMap<String, DmapField>) -> Result<MapRecord, DmapError> {
         match Self::check_fields(fields, &MAP_FIELDS) {
             Ok(_) => {}
@@ -210,6 +214,6 @@ impl TryFrom<&mut IndexMap<String, DmapField>> for MapRecord {
     type Error = DmapError;
 
     fn try_from(value: &mut IndexMap<String, DmapField>) -> Result<Self, Self::Error> {
-        Ok(Self::coerce::<MapRecord>(value, &MAP_FIELDS)?)
+        Self::coerce::<MapRecord>(value, &MAP_FIELDS)
     }
 }

@@ -97,7 +97,11 @@ impl SndRecord {
         self.data.keys().collect()
     }
 }
-impl Record for SndRecord {
+impl Record<'_> for SndRecord {
+    fn inner(self) -> IndexMap<String, DmapField> {
+        self.data
+    }
+
     fn new(fields: &mut IndexMap<String, DmapField>) -> Result<SndRecord, DmapError> {
         match Self::check_fields(fields, &SND_FIELDS) {
             Ok(_) => {}
@@ -126,6 +130,6 @@ impl TryFrom<&mut IndexMap<String, DmapField>> for SndRecord {
     type Error = DmapError;
 
     fn try_from(value: &mut IndexMap<String, DmapField>) -> Result<Self, Self::Error> {
-        Ok(Self::coerce::<SndRecord>(value, &SND_FIELDS)?)
+        Self::coerce::<SndRecord>(value, &SND_FIELDS)
     }
 }

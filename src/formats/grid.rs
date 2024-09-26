@@ -113,6 +113,7 @@ lazy_static! {
     };
 }
 
+/// Struct containing the checked fields of a single GRID record.
 #[derive(Debug, PartialEq, Clone)]
 pub struct GridRecord {
     pub data: IndexMap<String, DmapField>,
@@ -127,7 +128,11 @@ impl GridRecord {
     }
 }
 
-impl Record for GridRecord {
+impl Record<'_> for GridRecord {
+    fn inner(self) -> IndexMap<String, DmapField> {
+        self.data
+    }
+
     fn new(fields: &mut IndexMap<String, DmapField>) -> Result<GridRecord, DmapError> {
         match Self::check_fields(fields, &GRID_FIELDS) {
             Ok(_) => {}
@@ -156,6 +161,6 @@ impl TryFrom<&mut IndexMap<String, DmapField>> for GridRecord {
     type Error = DmapError;
 
     fn try_from(value: &mut IndexMap<String, DmapField>) -> Result<Self, Self::Error> {
-        Ok(Self::coerce::<GridRecord>(value, &GRID_FIELDS)?)
+        Self::coerce::<GridRecord>(value, &GRID_FIELDS)
     }
 }

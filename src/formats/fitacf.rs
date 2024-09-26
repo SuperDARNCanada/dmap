@@ -192,7 +192,11 @@ impl FitacfRecord {
         self.data.keys().collect()
     }
 }
-impl Record for FitacfRecord {
+impl Record<'_> for FitacfRecord {
+    fn inner(self) -> IndexMap<String, DmapField> {
+        self.data
+    }
+
     fn new(fields: &mut IndexMap<String, DmapField>) -> Result<FitacfRecord, DmapError> {
         match Self::check_fields(fields, &FITACF_FIELDS) {
             Ok(_) => {}
@@ -221,6 +225,6 @@ impl TryFrom<&mut IndexMap<String, DmapField>> for FitacfRecord {
     type Error = DmapError;
 
     fn try_from(value: &mut IndexMap<String, DmapField>) -> Result<Self, Self::Error> {
-        Ok(Self::coerce::<FitacfRecord>(value, &FITACF_FIELDS)?)
+        Self::coerce::<FitacfRecord>(value, &FITACF_FIELDS)
     }
 }
