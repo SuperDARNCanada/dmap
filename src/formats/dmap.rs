@@ -58,11 +58,11 @@ pub trait Record<'a>:
                 Err(e) => {
                     dmap_errors.push(e);
                     bad_recs.push(i);
-                },
+                }
             }
         }
         if dmap_errors.len() > 0 {
-            return Err(DmapError::BadRecords(bad_recs, dmap_errors[0].to_string()))
+            return Err(DmapError::BadRecords(bad_recs, dmap_errors[0].to_string()));
         }
         Ok(dmap_records)
     }
