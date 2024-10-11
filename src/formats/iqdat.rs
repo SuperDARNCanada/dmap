@@ -97,23 +97,10 @@ lazy_static! {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct IqdatRecord {
-    pub data: IndexMap<String, DmapField>,
+    pub(crate) data: IndexMap<String, DmapField>,
 }
 
-impl IqdatRecord {
-    pub fn get(&self, key: &String) -> Option<&DmapField> {
-        self.data.get(key)
-    }
-    pub fn keys(&self) -> Vec<&String> {
-        self.data.keys().collect()
-    }
-}
-
-impl Record<'_> for IqdatRecord {
-    fn inner(self) -> IndexMap<String, DmapField> {
-        self.data
-    }
-
+impl Record for IqdatRecord {
     fn new(fields: &mut IndexMap<String, DmapField>) -> Result<IqdatRecord, DmapError> {
         match Self::check_fields(fields, &IQDAT_FIELDS) {
             Ok(_) => {}
@@ -142,6 +129,6 @@ impl TryFrom<&mut IndexMap<String, DmapField>> for IqdatRecord {
     type Error = DmapError;
 
     fn try_from(value: &mut IndexMap<String, DmapField>) -> Result<Self, Self::Error> {
-        Self::coerce::<IqdatRecord>(value, &IQDAT_FIELDS)
+        Ok(Self::coerce::<IqdatRecord>(value, &IQDAT_FIELDS)?)
     }
 }
