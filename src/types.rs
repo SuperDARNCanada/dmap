@@ -117,7 +117,6 @@ impl Type {
         }
     }
 }
-
 /// A scalar field in a DMAP record.
 #[derive(Debug, Clone, PartialEq, FromPyObject)]
 #[repr(C)]
@@ -154,16 +153,16 @@ impl DmapScalar {
     /// Converts `self` into a new `Type`, if possible.
     pub(crate) fn cast_as(&self, new_type: &Type) -> Result<Self> {
         match new_type {
-            Type::Char => Ok(Self::Char(i8::try_from(self.clone())?)),
-            Type::Short => Ok(Self::Short(i16::try_from(self.clone())?)),
-            Type::Int => Ok(Self::Int(i32::try_from(self.clone())?)),
-            Type::Long => Ok(Self::Long(i64::try_from(self.clone())?)),
-            Type::Uchar => Ok(Self::Uchar(u8::try_from(self.clone())?)),
-            Type::Ushort => Ok(Self::Ushort(u16::try_from(self.clone())?)),
-            Type::Uint => Ok(Self::Uint(u32::try_from(self.clone())?)),
-            Type::Ulong => Ok(Self::Ulong(u64::try_from(self.clone())?)),
-            Type::Float => Ok(Self::Float(f32::try_from(self.clone())?)),
-            Type::Double => Ok(Self::Double(f64::try_from(self.clone())?)),
+            Type::Char => Ok(Self::Char(i8::try_from(self)?)),
+            Type::Short => Ok(Self::Short(i16::try_from(self)?)),
+            Type::Int => Ok(Self::Int(i32::try_from(self)?)),
+            Type::Long => Ok(Self::Long(i64::try_from(self)?)),
+            Type::Uchar => Ok(Self::Uchar(u8::try_from(self)?)),
+            Type::Ushort => Ok(Self::Ushort(u16::try_from(self)?)),
+            Type::Uint => Ok(Self::Uint(u32::try_from(self)?)),
+            Type::Ulong => Ok(Self::Ulong(u64::try_from(self)?)),
+            Type::Float => Ok(Self::Float(f32::try_from(self)?)),
+            Type::Double => Ok(Self::Double(f64::try_from(self)?)),
             Type::String => Err(DmapError::InvalidScalar(
                 "Unable to cast value to String".to_string(),
             )),
@@ -352,7 +351,7 @@ impl DmapVec {
         bytes
     }
     /// Gets the dimensions of the vector.
-    pub fn shape(&self) -> &[usize] {
+    pub(crate) fn shape(&self) -> &[usize] {
         match self {
             DmapVec::Char(x) => x.shape(),
             DmapVec::Short(x) => x.shape(),
@@ -410,186 +409,6 @@ impl<'py> FromPyObject<'py> for DmapVec {
         }
     }
 }
-impl From<ArrayD<i8>> for DmapVec {
-    fn from(value: ArrayD<i8>) -> Self {
-        DmapVec::Char(value)
-    }
-}
-impl From<ArrayD<i16>> for DmapVec {
-    fn from(value: ArrayD<i16>) -> Self {
-        DmapVec::Short(value)
-    }
-}
-impl From<ArrayD<i32>> for DmapVec {
-    fn from(value: ArrayD<i32>) -> Self {
-        DmapVec::Int(value)
-    }
-}
-impl From<ArrayD<i64>> for DmapVec {
-    fn from(value: ArrayD<i64>) -> Self {
-        DmapVec::Long(value)
-    }
-}
-impl From<ArrayD<u8>> for DmapVec {
-    fn from(value: ArrayD<u8>) -> Self {
-        DmapVec::Uchar(value)
-    }
-}
-impl From<ArrayD<u16>> for DmapVec {
-    fn from(value: ArrayD<u16>) -> Self {
-        DmapVec::Ushort(value)
-    }
-}
-impl From<ArrayD<u32>> for DmapVec {
-    fn from(value: ArrayD<u32>) -> Self {
-        DmapVec::Uint(value)
-    }
-}
-impl From<ArrayD<u64>> for DmapVec {
-    fn from(value: ArrayD<u64>) -> Self {
-        DmapVec::Ulong(value)
-    }
-}
-impl From<ArrayD<f32>> for DmapVec {
-    fn from(value: ArrayD<f32>) -> Self {
-        DmapVec::Float(value)
-    }
-}
-impl From<ArrayD<f64>> for DmapVec {
-    fn from(value: ArrayD<f64>) -> Self {
-        DmapVec::Double(value)
-    }
-}
-impl TryFrom<DmapVec> for ArrayD<i8> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Char(x) = value {
-            Ok(x)
-        } else {
-            Err(DmapError::InvalidVector(
-                "Cannot convert to ArrayD<i8>".to_string(),
-            ))
-        }
-    }
-}
-impl TryFrom<DmapVec> for ArrayD<i16> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Short(x) = value {
-            Ok(x)
-        } else {
-            Err(DmapError::InvalidVector(
-                "Cannot convert to ArrayD<i16>".to_string(),
-            ))
-        }
-    }
-}
-impl TryFrom<DmapVec> for ArrayD<i32> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Int(x) = value {
-            Ok(x)
-        } else {
-            Err(DmapError::InvalidVector(
-                "Cannot convert to ArrayD<i32>".to_string(),
-            ))
-        }
-    }
-}
-impl TryFrom<DmapVec> for ArrayD<i64> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Long(x) = value {
-            Ok(x)
-        } else {
-            Err(DmapError::InvalidVector(
-                "Cannot convert to ArrayD<i64>".to_string(),
-            ))
-        }
-    }
-}
-impl TryFrom<DmapVec> for ArrayD<u8> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Uchar(x) = value {
-            Ok(x)
-        } else {
-            Err(DmapError::InvalidVector(
-                "Cannot convert to ArrayD<u8>".to_string(),
-            ))
-        }
-    }
-}
-impl TryFrom<DmapVec> for ArrayD<u16> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Ushort(x) = value {
-            Ok(x)
-        } else {
-            Err(DmapError::InvalidVector(
-                "Cannot convert to ArrayD<u16>".to_string(),
-            ))
-        }
-    }
-}
-impl TryFrom<DmapVec> for ArrayD<u32> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Uint(x) = value {
-            Ok(x)
-        } else {
-            Err(DmapError::InvalidVector(
-                "Cannot convert to ArrayD<u32>".to_string(),
-            ))
-        }
-    }
-}
-impl TryFrom<DmapVec> for ArrayD<u64> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Ulong(x) = value {
-            Ok(x)
-        } else {
-            Err(DmapError::InvalidVector(
-                "Cannot convert to ArrayD<u64>".to_string(),
-            ))
-        }
-    }
-}
-impl TryFrom<DmapVec> for ArrayD<f32> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Float(x) = value {
-            Ok(x)
-        } else {
-            Err(DmapError::InvalidVector(
-                "Cannot convert to ArrayD<f32>".to_string(),
-            ))
-        }
-    }
-}
-impl TryFrom<DmapVec> for ArrayD<f64> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Double(x) = value {
-            Ok(x)
-        } else {
-            Err(DmapError::InvalidVector(
-                "Cannot convert to ArrayD<f64>".to_string(),
-            ))
-        }
-    }
-}
 
 /// A generic field of a DMAP record.
 ///
@@ -615,363 +434,6 @@ impl IntoPy<PyObject> for DmapField {
         match self {
             DmapField::Scalar(x) => x.into_py(py),
             DmapField::Vector(x) => x.into_py(py),
-        }
-    }
-}
-impl From<i8> for DmapField {
-    fn from(value: i8) -> Self {
-        DmapField::Scalar(DmapScalar::Char(value))
-    }
-}
-impl From<i16> for DmapField {
-    fn from(value: i16) -> Self {
-        DmapField::Scalar(DmapScalar::Short(value))
-    }
-}
-impl From<i32> for DmapField {
-    fn from(value: i32) -> Self {
-        DmapField::Scalar(DmapScalar::Int(value))
-    }
-}
-impl From<i64> for DmapField {
-    fn from(value: i64) -> Self {
-        DmapField::Scalar(DmapScalar::Long(value))
-    }
-}
-impl From<u8> for DmapField {
-    fn from(value: u8) -> Self {
-        DmapField::Scalar(DmapScalar::Uchar(value))
-    }
-}
-impl From<u16> for DmapField {
-    fn from(value: u16) -> Self {
-        DmapField::Scalar(DmapScalar::Ushort(value))
-    }
-}
-impl From<u32> for DmapField {
-    fn from(value: u32) -> Self {
-        DmapField::Scalar(DmapScalar::Uint(value))
-    }
-}
-impl From<u64> for DmapField {
-    fn from(value: u64) -> Self {
-        DmapField::Scalar(DmapScalar::Ulong(value))
-    }
-}
-impl From<f32> for DmapField {
-    fn from(value: f32) -> Self {
-        DmapField::Scalar(DmapScalar::Float(value))
-    }
-}
-impl From<f64> for DmapField {
-    fn from(value: f64) -> Self {
-        DmapField::Scalar(DmapScalar::Double(value))
-    }
-}
-impl From<String> for DmapField {
-    fn from(value: String) -> Self {
-        DmapField::Scalar(DmapScalar::String(value))
-    }
-}
-impl From<ArrayD<i8>> for DmapField {
-    fn from(value: ArrayD<i8>) -> Self {
-        DmapField::Vector(DmapVec::Char(value))
-    }
-}
-impl From<ArrayD<i16>> for DmapField {
-    fn from(value: ArrayD<i16>) -> Self {
-        DmapField::Vector(DmapVec::Short(value))
-    }
-}
-impl From<ArrayD<i32>> for DmapField {
-    fn from(value: ArrayD<i32>) -> Self {
-        DmapField::Vector(DmapVec::Int(value))
-    }
-}
-impl From<ArrayD<i64>> for DmapField {
-    fn from(value: ArrayD<i64>) -> Self {
-        DmapField::Vector(DmapVec::Long(value))
-    }
-}
-impl From<ArrayD<u8>> for DmapField {
-    fn from(value: ArrayD<u8>) -> Self {
-        DmapField::Vector(DmapVec::Uchar(value))
-    }
-}
-impl From<ArrayD<u16>> for DmapField {
-    fn from(value: ArrayD<u16>) -> Self {
-        DmapField::Vector(DmapVec::Ushort(value))
-    }
-}
-impl From<ArrayD<u32>> for DmapField {
-    fn from(value: ArrayD<u32>) -> Self {
-        DmapField::Vector(DmapVec::Uint(value))
-    }
-}
-impl From<ArrayD<u64>> for DmapField {
-    fn from(value: ArrayD<u64>) -> Self {
-        DmapField::Vector(DmapVec::Ulong(value))
-    }
-}
-impl From<ArrayD<f32>> for DmapField {
-    fn from(value: ArrayD<f32>) -> Self {
-        DmapField::Vector(DmapVec::Float(value))
-    }
-}
-impl From<ArrayD<f64>> for DmapField {
-    fn from(value: ArrayD<f64>) -> Self {
-        DmapField::Vector(DmapVec::Double(value))
-    }
-}
-impl TryFrom<DmapField> for i8 {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar(
-                "Cannot interpret as i8".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for i16 {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar(
-                "Cannot interpret as i16".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for i32 {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar(
-                "Cannot interpret as i32".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for i64 {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar(
-                "Cannot interpret as i64".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for u8 {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar(
-                "Cannot interpret as u8".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for u16 {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar(
-                "Cannot interpret as u16".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for u32 {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar(
-                "Cannot interpret as u32".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for u64 {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar(
-                "Cannot interpret as u64".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for f32 {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar(
-                "Cannot interpret as f32".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for f64 {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar(
-                "Cannot interpret as f64".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for String {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar(
-                "Cannot interpret vector as String".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for ArrayD<i8> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector(
-                "Cannot interpret as ArrayD<i8>".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for ArrayD<i16> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector(
-                "Cannot interpret as ArrayD<i16>".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for ArrayD<i32> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector(
-                "Cannot interpret as ArrayD<i32>".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for ArrayD<i64> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector(
-                "Cannot interpret as ArrayD<i64>".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for ArrayD<u8> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector(
-                "Cannot interpret as ArrayD<u8>".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for ArrayD<u16> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector(
-                "Cannot interpret as ArrayD<u16>".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for ArrayD<u32> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector(
-                "Cannot interpret as ArrayD<u32>".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for ArrayD<u64> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector(
-                "Cannot interpret as ArrayD<u64>".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for ArrayD<f32> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector(
-                "Cannot interpret as ArrayD<f32>".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for ArrayD<f64> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector(
-                "Cannot interpret as ArrayD<f64>".to_string(),
-            )),
         }
     }
 }
@@ -1188,220 +650,209 @@ impl DmapType for String {
     }
     fn from_bytes(bytes: &[u8]) -> Result<Self> {
         let data = String::from_utf8(bytes.to_owned())
-            .map_err(|_| DmapError::InvalidScalar("Cannot convert bytes to String".to_string()))?;
+            .map_err(|_| DmapError::InvalidScalar(format!("Cannot convert bytes to String")))?;
         Ok(data.trim_end_matches(char::from(0)).to_string())
     }
     fn dmap_type(&self) -> Type {
         Type::String
     }
 }
-impl TryFrom<DmapScalar> for u8 {
+impl TryFrom<&DmapScalar> for u8 {
     type Error = DmapError;
-    fn try_from(value: DmapScalar) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: &DmapScalar) -> std::result::Result<Self, Self::Error> {
         match value {
-            DmapScalar::Char(x) => Ok(x as u8),
-            DmapScalar::Short(x) => Ok(x as u8),
-            DmapScalar::Int(x) => Ok(x as u8),
-            DmapScalar::Long(x) => Ok(x as u8),
-            DmapScalar::Uchar(x) => Ok(x),
-            DmapScalar::Ushort(x) => Ok(x as u8),
-            DmapScalar::Uint(x) => Ok(x as u8),
-            DmapScalar::Ulong(x) => Ok(x as u8),
-            DmapScalar::Float(x) => Ok(x as u8),
-            DmapScalar::Double(x) => Ok(x as u8),
+            DmapScalar::Char(x) => Ok(x.clone() as u8),
+            DmapScalar::Short(x) => Ok(x.clone() as u8),
+            DmapScalar::Int(x) => Ok(x.clone() as u8),
+            DmapScalar::Long(x) => Ok(x.clone() as u8),
+            DmapScalar::Uchar(x) => Ok(x.clone()),
+            DmapScalar::Ushort(x) => Ok(x.clone() as u8),
+            DmapScalar::Uint(x) => Ok(x.clone() as u8),
+            DmapScalar::Ulong(x) => Ok(x.clone() as u8),
+            DmapScalar::Float(x) => Ok(x.clone() as u8),
+            DmapScalar::Double(x) => Ok(x.clone() as u8),
             DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to u8"
             ))),
         }
     }
 }
-impl TryFrom<DmapScalar> for u16 {
+impl TryFrom<&DmapScalar> for u16 {
     type Error = DmapError;
-    fn try_from(value: DmapScalar) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: &DmapScalar) -> std::result::Result<Self, Self::Error> {
         match value {
-            DmapScalar::Char(x) => Ok(x as u16),
-            DmapScalar::Short(x) => Ok(x as u16),
-            DmapScalar::Int(x) => Ok(x as u16),
-            DmapScalar::Long(x) => Ok(x as u16),
-            DmapScalar::Uchar(x) => Ok(x as u16),
-            DmapScalar::Ushort(x) => Ok(x),
-            DmapScalar::Uint(x) => Ok(x as u16),
-            DmapScalar::Ulong(x) => Ok(x as u16),
-            DmapScalar::Float(x) => Ok(x as u16),
-            DmapScalar::Double(x) => Ok(x as u16),
+            DmapScalar::Char(x) => Ok(x.clone() as u16),
+            DmapScalar::Short(x) => Ok(x.clone() as u16),
+            DmapScalar::Int(x) => Ok(x.clone() as u16),
+            DmapScalar::Long(x) => Ok(x.clone() as u16),
+            DmapScalar::Uchar(x) => Ok(x.clone() as u16),
+            DmapScalar::Ushort(x) => Ok(x.clone()),
+            DmapScalar::Uint(x) => Ok(x.clone() as u16),
+            DmapScalar::Ulong(x) => Ok(x.clone() as u16),
+            DmapScalar::Float(x) => Ok(x.clone() as u16),
+            DmapScalar::Double(x) => Ok(x.clone() as u16),
             DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to u16"
             ))),
         }
     }
 }
-impl TryFrom<DmapScalar> for u32 {
+impl TryFrom<&DmapScalar> for u32 {
     type Error = DmapError;
-    fn try_from(value: DmapScalar) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: &DmapScalar) -> std::result::Result<Self, Self::Error> {
         match value {
-            DmapScalar::Char(x) => Ok(x as u32),
-            DmapScalar::Short(x) => Ok(x as u32),
-            DmapScalar::Int(x) => Ok(x as u32),
-            DmapScalar::Long(x) => Ok(x as u32),
-            DmapScalar::Uchar(x) => Ok(x as u32),
-            DmapScalar::Ushort(x) => Ok(x as u32),
-            DmapScalar::Uint(x) => Ok(x),
-            DmapScalar::Ulong(x) => Ok(x as u32),
-            DmapScalar::Float(x) => Ok(x as u32),
-            DmapScalar::Double(x) => Ok(x as u32),
+            DmapScalar::Char(x) => Ok(x.clone() as u32),
+            DmapScalar::Short(x) => Ok(x.clone() as u32),
+            DmapScalar::Int(x) => Ok(x.clone() as u32),
+            DmapScalar::Long(x) => Ok(x.clone() as u32),
+            DmapScalar::Uchar(x) => Ok(x.clone() as u32),
+            DmapScalar::Ushort(x) => Ok(x.clone() as u32),
+            DmapScalar::Uint(x) => Ok(x.clone()),
+            DmapScalar::Ulong(x) => Ok(x.clone() as u32),
+            DmapScalar::Float(x) => Ok(x.clone() as u32),
+            DmapScalar::Double(x) => Ok(x.clone() as u32),
             DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to u32"
             ))),
         }
     }
 }
-impl TryFrom<DmapScalar> for u64 {
+impl TryFrom<&DmapScalar> for u64 {
     type Error = DmapError;
-    fn try_from(value: DmapScalar) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: &DmapScalar) -> std::result::Result<Self, Self::Error> {
         match value {
-            DmapScalar::Char(x) => Ok(x as u64),
-            DmapScalar::Short(x) => Ok(x as u64),
-            DmapScalar::Int(x) => Ok(x as u64),
-            DmapScalar::Long(x) => Ok(x as u64),
-            DmapScalar::Uchar(x) => Ok(x as u64),
-            DmapScalar::Ushort(x) => Ok(x as u64),
-            DmapScalar::Uint(x) => Ok(x as u64),
-            DmapScalar::Ulong(x) => Ok(x),
-            DmapScalar::Float(x) => Ok(x as u64),
-            DmapScalar::Double(x) => Ok(x as u64),
+            DmapScalar::Char(x) => Ok(x.clone() as u64),
+            DmapScalar::Short(x) => Ok(x.clone() as u64),
+            DmapScalar::Int(x) => Ok(x.clone() as u64),
+            DmapScalar::Long(x) => Ok(x.clone() as u64),
+            DmapScalar::Uchar(x) => Ok(x.clone() as u64),
+            DmapScalar::Ushort(x) => Ok(x.clone() as u64),
+            DmapScalar::Uint(x) => Ok(x.clone() as u64),
+            DmapScalar::Ulong(x) => Ok(x.clone()),
+            DmapScalar::Float(x) => Ok(x.clone() as u64),
+            DmapScalar::Double(x) => Ok(x.clone() as u64),
             DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to u64"
             ))),
         }
     }
 }
-impl TryFrom<DmapScalar> for i8 {
+impl TryFrom<&DmapScalar> for i8 {
     type Error = DmapError;
-    fn try_from(value: DmapScalar) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: &DmapScalar) -> std::result::Result<Self, Self::Error> {
         match value {
-            DmapScalar::Char(x) => Ok(x),
-            DmapScalar::Short(x) => Ok(x as i8),
-            DmapScalar::Int(x) => Ok(x as i8),
-            DmapScalar::Long(x) => Ok(x as i8),
-            DmapScalar::Uchar(x) => Ok(x as i8),
-            DmapScalar::Ushort(x) => Ok(x as i8),
-            DmapScalar::Uint(x) => Ok(x as i8),
-            DmapScalar::Ulong(x) => Ok(x as i8),
-            DmapScalar::Float(x) => Ok(x as i8),
-            DmapScalar::Double(x) => Ok(x as i8),
+            DmapScalar::Char(x) => Ok(x.clone()),
+            DmapScalar::Short(x) => Ok(x.clone() as i8),
+            DmapScalar::Int(x) => Ok(x.clone() as i8),
+            DmapScalar::Long(x) => Ok(x.clone() as i8),
+            DmapScalar::Uchar(x) => Ok(x.clone() as i8),
+            DmapScalar::Ushort(x) => Ok(x.clone() as i8),
+            DmapScalar::Uint(x) => Ok(x.clone() as i8),
+            DmapScalar::Ulong(x) => Ok(x.clone() as i8),
+            DmapScalar::Float(x) => Ok(x.clone() as i8),
+            DmapScalar::Double(x) => Ok(x.clone() as i8),
             DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to i8"
             ))),
         }
     }
 }
-impl TryFrom<DmapScalar> for i16 {
+impl TryFrom<&DmapScalar> for i16 {
     type Error = DmapError;
-    fn try_from(value: DmapScalar) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: &DmapScalar) -> std::result::Result<Self, Self::Error> {
         match value {
-            DmapScalar::Char(x) => Ok(x as i16),
-            DmapScalar::Short(x) => Ok(x),
-            DmapScalar::Int(x) => Ok(x as i16),
-            DmapScalar::Long(x) => Ok(x as i16),
-            DmapScalar::Uchar(x) => Ok(x as i16),
-            DmapScalar::Ushort(x) => Ok(x as i16),
-            DmapScalar::Uint(x) => Ok(x as i16),
-            DmapScalar::Ulong(x) => Ok(x as i16),
-            DmapScalar::Float(x) => Ok(x as i16),
-            DmapScalar::Double(x) => Ok(x as i16),
+            DmapScalar::Char(x) => Ok(x.clone() as i16),
+            DmapScalar::Short(x) => Ok(x.clone()),
+            DmapScalar::Int(x) => Ok(x.clone() as i16),
+            DmapScalar::Long(x) => Ok(x.clone() as i16),
+            DmapScalar::Uchar(x) => Ok(x.clone() as i16),
+            DmapScalar::Ushort(x) => Ok(x.clone() as i16),
+            DmapScalar::Uint(x) => Ok(x.clone() as i16),
+            DmapScalar::Ulong(x) => Ok(x.clone() as i16),
+            DmapScalar::Float(x) => Ok(x.clone() as i16),
+            DmapScalar::Double(x) => Ok(x.clone() as i16),
             DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to i16"
             ))),
         }
     }
 }
-impl TryFrom<DmapScalar> for i32 {
+impl TryFrom<&DmapScalar> for i32 {
     type Error = DmapError;
-    fn try_from(value: DmapScalar) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: &DmapScalar) -> std::result::Result<Self, Self::Error> {
         match value {
-            DmapScalar::Char(x) => Ok(x as i32),
-            DmapScalar::Short(x) => Ok(x as i32),
-            DmapScalar::Int(x) => Ok(x),
-            DmapScalar::Long(x) => Ok(x as i32),
-            DmapScalar::Uchar(x) => Ok(x as i32),
-            DmapScalar::Ushort(x) => Ok(x as i32),
-            DmapScalar::Uint(x) => Ok(x as i32),
-            DmapScalar::Ulong(x) => Ok(x as i32),
-            DmapScalar::Float(x) => Ok(x as i32),
-            DmapScalar::Double(x) => Ok(x as i32),
+            DmapScalar::Char(x) => Ok(x.clone() as i32),
+            DmapScalar::Short(x) => Ok(x.clone() as i32),
+            DmapScalar::Int(x) => Ok(x.clone()),
+            DmapScalar::Long(x) => Ok(x.clone() as i32),
+            DmapScalar::Uchar(x) => Ok(x.clone() as i32),
+            DmapScalar::Ushort(x) => Ok(x.clone() as i32),
+            DmapScalar::Uint(x) => Ok(x.clone() as i32),
+            DmapScalar::Ulong(x) => Ok(x.clone() as i32),
+            DmapScalar::Float(x) => Ok(x.clone() as i32),
+            DmapScalar::Double(x) => Ok(x.clone() as i32),
             DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to i32"
             ))),
         }
     }
 }
-impl TryFrom<DmapScalar> for i64 {
+impl TryFrom<&DmapScalar> for i64 {
     type Error = DmapError;
-    fn try_from(value: DmapScalar) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: &DmapScalar) -> std::result::Result<Self, Self::Error> {
         match value {
-            DmapScalar::Char(x) => Ok(x as i64),
-            DmapScalar::Short(x) => Ok(x as i64),
-            DmapScalar::Int(x) => Ok(x as i64),
-            DmapScalar::Long(x) => Ok(x),
-            DmapScalar::Uchar(x) => Ok(x as i64),
-            DmapScalar::Ushort(x) => Ok(x as i64),
-            DmapScalar::Uint(x) => Ok(x as i64),
-            DmapScalar::Ulong(x) => Ok(x as i64),
-            DmapScalar::Float(x) => Ok(x as i64),
-            DmapScalar::Double(x) => Ok(x as i64),
+            DmapScalar::Char(x) => Ok(x.clone() as i64),
+            DmapScalar::Short(x) => Ok(x.clone() as i64),
+            DmapScalar::Int(x) => Ok(x.clone() as i64),
+            DmapScalar::Long(x) => Ok(x.clone()),
+            DmapScalar::Uchar(x) => Ok(x.clone() as i64),
+            DmapScalar::Ushort(x) => Ok(x.clone() as i64),
+            DmapScalar::Uint(x) => Ok(x.clone() as i64),
+            DmapScalar::Ulong(x) => Ok(x.clone() as i64),
+            DmapScalar::Float(x) => Ok(x.clone() as i64),
+            DmapScalar::Double(x) => Ok(x.clone() as i64),
             DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to i64"
             ))),
         }
     }
 }
-impl TryFrom<DmapScalar> for f32 {
+impl TryFrom<&DmapScalar> for f32 {
     type Error = DmapError;
-    fn try_from(value: DmapScalar) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: &DmapScalar) -> std::result::Result<Self, Self::Error> {
         match value {
-            DmapScalar::Char(x) => Ok(x as f32),
-            DmapScalar::Short(x) => Ok(x as f32),
-            DmapScalar::Int(x) => Ok(x as f32),
-            DmapScalar::Long(x) => Ok(x as f32),
-            DmapScalar::Uchar(x) => Ok(x as f32),
-            DmapScalar::Ushort(x) => Ok(x as f32),
-            DmapScalar::Uint(x) => Ok(x as f32),
-            DmapScalar::Ulong(x) => Ok(x as f32),
-            DmapScalar::Float(x) => Ok(x),
-            DmapScalar::Double(x) => Ok(x as f32),
+            DmapScalar::Char(x) => Ok(x.clone() as f32),
+            DmapScalar::Short(x) => Ok(x.clone() as f32),
+            DmapScalar::Int(x) => Ok(x.clone() as f32),
+            DmapScalar::Long(x) => Ok(x.clone() as f32),
+            DmapScalar::Uchar(x) => Ok(x.clone() as f32),
+            DmapScalar::Ushort(x) => Ok(x.clone() as f32),
+            DmapScalar::Uint(x) => Ok(x.clone() as f32),
+            DmapScalar::Ulong(x) => Ok(x.clone() as f32),
+            DmapScalar::Float(x) => Ok(x.clone()),
+            DmapScalar::Double(x) => Ok(x.clone() as f32),
             DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to f32"
             ))),
         }
     }
 }
-impl TryFrom<DmapScalar> for f64 {
+impl TryFrom<&DmapScalar> for f64 {
     type Error = DmapError;
-    fn try_from(value: DmapScalar) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: &DmapScalar) -> std::result::Result<Self, Self::Error> {
         match value {
-            DmapScalar::Char(x) => Ok(x as f64),
-            DmapScalar::Short(x) => Ok(x as f64),
-            DmapScalar::Int(x) => Ok(x as f64),
-            DmapScalar::Long(x) => Ok(x as f64),
-            DmapScalar::Uchar(x) => Ok(x as f64),
-            DmapScalar::Ushort(x) => Ok(x as f64),
-            DmapScalar::Uint(x) => Ok(x as f64),
-            DmapScalar::Ulong(x) => Ok(x as f64),
-            DmapScalar::Float(x) => Ok(x as f64),
-            DmapScalar::Double(x) => Ok(x),
+            DmapScalar::Char(x) => Ok(x.clone() as f64),
+            DmapScalar::Short(x) => Ok(x.clone() as f64),
+            DmapScalar::Int(x) => Ok(x.clone() as f64),
+            DmapScalar::Long(x) => Ok(x.clone() as f64),
+            DmapScalar::Uchar(x) => Ok(x.clone() as f64),
+            DmapScalar::Ushort(x) => Ok(x.clone() as f64),
+            DmapScalar::Uint(x) => Ok(x.clone() as f64),
+            DmapScalar::Ulong(x) => Ok(x.clone() as f64),
+            DmapScalar::Float(x) => Ok(x.clone() as f64),
+            DmapScalar::Double(x) => Ok(x.clone()),
             DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to f64"
-            ))),
-        }
-    }
-}
-impl TryFrom<DmapScalar> for String {
-    type Error = DmapError;
-    fn try_from(value: DmapScalar) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapScalar::String(x) => Ok(x),
-            x => Err(DmapError::InvalidScalar(format!(
-                "Unable to convert {x} to String"
             ))),
         }
     }
@@ -1414,8 +865,8 @@ pub fn check_scalar(
     expected_type: Type,
 ) -> Result<()> {
     match fields.get(name) {
-        Some(DmapField::Scalar(data)) if data.get_type() == expected_type => Ok(()),
-        Some(DmapField::Scalar(data)) => Err(DmapError::InvalidScalar(format!(
+        Some(&DmapField::Scalar(ref data)) if data.get_type() == expected_type => Ok(()),
+        Some(&DmapField::Scalar(ref data)) => Err(DmapError::InvalidScalar(format!(
             "{name} is of type {}, expected {}",
             data.get_type(),
             expected_type
@@ -1434,8 +885,8 @@ pub fn check_scalar_opt(
     expected_type: Type,
 ) -> Result<()> {
     match fields.get(name) {
-        Some(DmapField::Scalar(data)) if data.get_type() == expected_type => Ok(()),
-        Some(DmapField::Scalar(data)) => Err(DmapError::InvalidScalar(format!(
+        Some(&DmapField::Scalar(ref data)) if data.get_type() == expected_type => Ok(()),
+        Some(&DmapField::Scalar(ref data)) => Err(DmapError::InvalidScalar(format!(
             "{name} is of type {}, expected {}",
             data.get_type(),
             expected_type
