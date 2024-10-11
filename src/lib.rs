@@ -125,9 +125,10 @@ where
                 },
             });
     if !errors.is_empty() {
-        Err(DmapError::InvalidRecord(format!(
-            "Corrupted records: {errors:?}"
-        )))?
+        Err(DmapError::BadRecords(
+            errors.iter().map(|(i, _)| *i).collect(),
+            errors[0].1.to_string(),
+        ))?
     }
     bytes.par_extend(rec_bytes.into_par_iter().flatten());
     write_to_file(bytes, outfile)?;

@@ -30,6 +30,10 @@ pub enum DmapError {
     /// Error interpreting data as a valid DMAP vector.
     #[error("{0}")]
     InvalidVector(String),
+
+    /// Errors when reading in multiple records
+    #[error("First error: {1}\nRecords with errors: {0:?}")]
+    BadRecords(Vec<usize>, String),
 }
 
 impl From<DmapError> for PyErr {

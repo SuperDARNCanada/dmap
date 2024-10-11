@@ -50,13 +50,20 @@ pub trait Record<'a>:
         );
 
         let mut dmap_records: Vec<Self> = vec![];
+        let mut bad_recs: Vec<usize> = vec![];
+        let mut dmap_errors: Vec<DmapError> = vec![];
         for (i, rec) in dmap_results.into_iter().enumerate() {
-            dmap_records.push(match rec {
-                Err(e) => Err(DmapError::InvalidRecord(format!("{e}: record {i}")))?,
-                Ok(x) => x,
-            });
+            match rec {
+                Ok(x) => dmap_records.push(x),
+                Err(e) => {
+                    dmap_errors.push(e);
+                    bad_recs.push(i);
+                }
+            }
         }
-
+        if dmap_errors.len() > 0 {
+            return Err(DmapError::BadRecords(bad_recs, dmap_errors[0].to_string()));
+        }
         Ok(dmap_records)
     }
 
