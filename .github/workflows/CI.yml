@@ -47,8 +47,10 @@ jobs:
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist --zig
-          sccache: 'true'
+          sccache: 'false'
           manylinux: auto
+          before-script-linux: |
+            sudo apt update -y && sudo apt-get install -y libssl-dev openssl pkg-config
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -79,7 +81,7 @@ jobs:
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist
-          sccache: 'true'
+          sccache: 'false'
           manylinux: musllinux_1_2
       - name: Upload wheels
         uses: actions/upload-artifact@v4
@@ -108,7 +110,7 @@ jobs:
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist
-          sccache: 'true'
+          sccache: 'false'
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -135,7 +137,7 @@ jobs:
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist
-          sccache: 'true'
+          sccache: 'false'
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -146,6 +148,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         with:
@@ -167,6 +172,9 @@ jobs:
     environment: release
     steps:
       - uses: actions/download-artifact@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
       - name: Publish to PyPI
         uses: PyO3/maturin-action@v1
         with:

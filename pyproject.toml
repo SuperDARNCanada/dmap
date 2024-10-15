@@ -13,7 +13,7 @@ classifiers = [
     "Programming Language :: Python",
     "Programming Language :: Rust"
 ]
-dependencies = ["numpy<2"]
+dependencies = ["numpy<3"]
 
 [tool.maturin]
 bindings = "pyo3"
