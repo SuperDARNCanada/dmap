@@ -5,10 +5,10 @@ use dmap::formats::iqdat::IqdatRecord;
 use dmap::formats::map::MapRecord;
 use dmap::formats::rawacf::RawacfRecord;
 use dmap::formats::snd::SndRecord;
-use dmap::{write_dmap, write_fitacf, write_grid, write_iqdat, write_map, write_rawacf, write_snd};
 use itertools::izip;
 use std::fs::remove_file;
 use std::path::PathBuf;
+use dmap::{write_iqdat, write_rawacf, write_fitacf, write_grid, write_map, write_snd, write_dmap};
 
 #[test]
 fn read_write_generic() {
