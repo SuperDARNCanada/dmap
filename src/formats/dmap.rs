@@ -39,6 +39,11 @@ pub trait Record<'a>:
             rec_size = i32::from_le_bytes(buffer[rec_start + 4..rec_start + 8].try_into().unwrap())
                 as usize; // advance 4 bytes, skipping the "code" field
             rec_end = rec_start + rec_size; // error-checking the size is conducted in Self::parse_record()
+            if rec_end > buffer.len() {
+                return Err(DmapError::InvalidRecord(format!("Record {} starting at byte {} has size greater than remaining length of buffer ({} > {})", slices.len(), rec_start, rec_size, buffer.len() - rec_start)))
+            } else if rec_size <= 0 {
+                return Err(DmapError::InvalidRecord(format!("Record {} starting at byte {} has non-positive size {} <= 0", slices.len(), rec_start, rec_size)))
+            }
             slices.push(Cursor::new(buffer[rec_start..rec_end].to_vec()));
             rec_start = rec_end;
         }
