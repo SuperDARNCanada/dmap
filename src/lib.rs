@@ -126,7 +126,8 @@ where
             });
     if !errors.is_empty() {
         Err(DmapError::BadRecords(
-            errors.iter().map(|(i, _)| *i).collect(), errors[0].1.to_string()
+            errors.iter().map(|(i, _)| *i).collect(),
+            errors[0].1.to_string(),
         ))?
     }
     bytes.par_extend(rec_bytes.into_par_iter().flatten());
@@ -225,17 +226,16 @@ pub fn read_snd(infile: PathBuf) -> Result<Vec<SndRecord>, DmapError> {
     SndRecord::read_file(&infile)
 }
 
-/// Reads the data from infile into a collection of `IndexMap`s
+/// Reads the data from infile into `Vec<IndexMap>`.
+///
+/// Returns `Err` if any records are corrupted.
 fn read_generic<T: for<'a> Record<'a> + Send>(
     infile: PathBuf,
 ) -> Result<Vec<IndexMap<String, DmapField>>, DmapError> {
-    match T::read_file(&infile) {
-        Ok(recs) => {
-            let new_recs = recs.into_iter().map(|rec| rec.inner()).collect();
-            Ok(new_recs)
-        }
-        Err(e) => Err(e),
-    }
+    Ok(T::read_file(&infile)?
+        .into_iter()
+        .map(|rec| rec.inner())
+        .collect())
 }
 
 /// Reads a generic DMAP file, returning a list of dictionaries containing the fields.
@@ -292,6 +292,92 @@ fn read_map_py(infile: PathBuf) -> PyResult<Vec<IndexMap<String, DmapField>>> {
 #[pyo3(text_signature = "(infile: str, /)")]
 fn read_snd_py(infile: PathBuf) -> PyResult<Vec<IndexMap<String, DmapField>>> {
     read_generic::<SndRecord>(infile).map_err(PyErr::from)
+}
+
+/// Reads the data from infile into a tuple of `([IndexMap], int|None)`, where
+/// all valid records are returned, plus optionally the byte of the first record
+/// with a corruption within the file. Compatible with RST behaviour.
+fn read_generic_lax<T: for<'a> Record<'a> + Send>(
+    infile: PathBuf,
+) -> Result<(Vec<IndexMap<String, DmapField>>, Option<usize>), DmapError> {
+    let result = T::read_file_partial(&infile)?;
+    Ok((
+        result.0.into_iter().map(|rec| rec.inner()).collect(),
+        result.1,
+    ))
+}
+
+/// Reads a generic DMAP file, returning a tuple of
+/// (list of dictionaries containing the fields, byte where first corrupted record starts).
+#[pyfunction]
+#[pyo3(name = "read_dmap_lax")]
+#[pyo3(text_signature = "(infile: str, /)")]
+fn read_dmap_lax_py(
+    infile: PathBuf,
+) -> PyResult<(Vec<IndexMap<String, DmapField>>, Option<usize>)> {
+    read_generic_lax::<GenericRecord>(infile).map_err(PyErr::from)
+}
+
+/// Reads an IQDAT file, returning a tuple of
+/// (list of dictionaries containing the fields, byte where first corrupted record starts).
+#[pyfunction]
+#[pyo3(name = "read_iqdat_lax")]
+#[pyo3(text_signature = "(infile: str, /)")]
+fn read_iqdat_lax_py(
+    infile: PathBuf,
+) -> PyResult<(Vec<IndexMap<String, DmapField>>, Option<usize>)> {
+    read_generic_lax::<IqdatRecord>(infile).map_err(PyErr::from)
+}
+
+/// Reads a RAWACF file, returning a tuple of
+/// (list of dictionaries containing the fields, byte where first corrupted record starts).
+#[pyfunction]
+#[pyo3(name = "read_rawacf_lax")]
+#[pyo3(text_signature = "(infile: str, /)")]
+fn read_rawacf_lax_py(
+    infile: PathBuf,
+) -> PyResult<(Vec<IndexMap<String, DmapField>>, Option<usize>)> {
+    read_generic_lax::<RawacfRecord>(infile).map_err(PyErr::from)
+}
+
+/// Reads a FITACF file, returning a tuple of
+/// (list of dictionaries containing the fields, byte where first corrupted record starts).
+#[pyfunction]
+#[pyo3(name = "read_fitacf_lax")]
+#[pyo3(text_signature = "(infile: str, /)")]
+fn read_fitacf_lax_py(
+    infile: PathBuf,
+) -> PyResult<(Vec<IndexMap<String, DmapField>>, Option<usize>)> {
+    read_generic_lax::<FitacfRecord>(infile).map_err(PyErr::from)
+}
+
+/// Reads a GRID file, returning a tuple of
+/// (list of dictionaries containing the fields, byte where first corrupted record starts).
+#[pyfunction]
+#[pyo3(name = "read_grid_lax")]
+#[pyo3(text_signature = "(infile: str, /)")]
+fn read_grid_lax_py(
+    infile: PathBuf,
+) -> PyResult<(Vec<IndexMap<String, DmapField>>, Option<usize>)> {
+    read_generic_lax::<GridRecord>(infile).map_err(PyErr::from)
+}
+
+/// Reads a MAP file, returning a tuple of
+/// (list of dictionaries containing the fields, byte where first corrupted record starts).
+#[pyfunction]
+#[pyo3(name = "read_map_lax")]
+#[pyo3(text_signature = "(infile: str, /)")]
+fn read_map_lax_py(infile: PathBuf) -> PyResult<(Vec<IndexMap<String, DmapField>>, Option<usize>)> {
+    read_generic_lax::<MapRecord>(infile).map_err(PyErr::from)
+}
+
+/// Reads an SND file, returning a tuple of
+/// (list of dictionaries containing the fields, byte where first corrupted record starts).
+#[pyfunction]
+#[pyo3(name = "read_snd_lax")]
+#[pyo3(text_signature = "(infile: str, /)")]
+fn read_snd_lax_py(infile: PathBuf) -> PyResult<(Vec<IndexMap<String, DmapField>>, Option<usize>)> {
+    read_generic_lax::<SndRecord>(infile).map_err(PyErr::from)
 }
 
 /// Checks that a list of dictionaries contains DMAP records, then appends to outfile.
@@ -357,6 +443,7 @@ fn write_snd_py(recs: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -> PyR
 /// Functions for SuperDARN DMAP file format I/O.
 #[pymodule]
 fn dmap(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Strict read functions
     m.add_function(wrap_pyfunction!(read_dmap_py, m)?)?;
     m.add_function(wrap_pyfunction!(read_iqdat_py, m)?)?;
     m.add_function(wrap_pyfunction!(read_rawacf_py, m)?)?;
@@ -364,6 +451,17 @@ fn dmap(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(read_snd_py, m)?)?;
     m.add_function(wrap_pyfunction!(read_grid_py, m)?)?;
     m.add_function(wrap_pyfunction!(read_map_py, m)?)?;
+
+    // Lax read functions
+    m.add_function(wrap_pyfunction!(read_dmap_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_iqdat_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_rawacf_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_fitacf_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_snd_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_grid_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_map_lax_py, m)?)?;
+
+    // Write functions
     m.add_function(wrap_pyfunction!(write_dmap_py, m)?)?;
     m.add_function(wrap_pyfunction!(write_iqdat_py, m)?)?;
     m.add_function(wrap_pyfunction!(write_rawacf_py, m)?)?;

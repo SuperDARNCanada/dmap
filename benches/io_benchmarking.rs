@@ -77,5 +77,10 @@ fn read_snd() -> Vec<SndRecord> {
     let file = File::open("tests/test_files/test.snd").expect("Test file not found");
     SndRecord::read_records(file).unwrap()
 }
-criterion_group!(benches, criterion_benchmark);
+
+criterion_group! {
+    name = benches;
+    config = Criterion::default();
+    targets = criterion_benchmark
+}
 criterion_main!(benches);

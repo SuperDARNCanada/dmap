@@ -40,9 +40,14 @@ pub trait Record<'a>:
                 as usize; // advance 4 bytes, skipping the "code" field
             rec_end = rec_start + rec_size; // error-checking the size is conducted in Self::parse_record()
             if rec_end > buffer.len() {
-                return Err(DmapError::InvalidRecord(format!("Record {} starting at byte {} has size greater than remaining length of buffer ({} > {})", slices.len(), rec_start, rec_size, buffer.len() - rec_start)))
+                return Err(DmapError::InvalidRecord(format!("Record {} starting at byte {} has size greater than remaining length of buffer ({} > {})", slices.len(), rec_start, rec_size, buffer.len() - rec_start)));
             } else if rec_size <= 0 {
-                return Err(DmapError::InvalidRecord(format!("Record {} starting at byte {} has non-positive size {} <= 0", slices.len(), rec_start, rec_size)))
+                return Err(DmapError::InvalidRecord(format!(
+                    "Record {} starting at byte {} has non-positive size {} <= 0",
+                    slices.len(),
+                    rec_start,
+                    rec_size
+                )));
             }
             slices.push(Cursor::new(buffer[rec_start..rec_end].to_vec()));
             rec_start = rec_end;
@@ -63,13 +68,66 @@ pub trait Record<'a>:
                 Err(e) => {
                     dmap_errors.push(e);
                     bad_recs.push(i);
-                },
+                }
             }
         }
         if dmap_errors.len() > 0 {
-            return Err(DmapError::BadRecords(bad_recs, dmap_errors[0].to_string()))
+            return Err(DmapError::BadRecords(bad_recs, dmap_errors[0].to_string()));
         }
         Ok(dmap_records)
+    }
+
+    /// Reads from dmap_data and parses into a collection of Records.
+    ///
+    /// Returns a tuple of `(good records, Option<byte where first corrupted record starts>)`.
+    fn read_records_partial(
+        mut dmap_data: impl Read,
+    ) -> Result<(Vec<Self>, Option<usize>), DmapError>
+    where
+        Self: Sized,
+        Self: Send,
+    {
+        let mut buffer: Vec<u8> = vec![];
+        dmap_data.read_to_end(&mut buffer)?;
+
+        let mut dmap_records: Vec<Self> = vec![];
+        let mut bad_byte: Option<usize> = None;
+
+        let mut slices: Vec<_> = vec![];
+        let mut rec_start: usize = 0;
+        let mut rec_size: usize;
+        let mut rec_end: usize;
+
+        let mut rec_starts = vec![];
+        while ((rec_start + 2 * i32::size()) as u64) < buffer.len() as u64 {
+            rec_size = i32::from_le_bytes(buffer[rec_start + 4..rec_start + 8].try_into().unwrap())
+                as usize; // advance 4 bytes, skipping the "code" field
+            rec_end = rec_start + rec_size; // error-checking the size is conducted in Self::parse_record()
+            if rec_end > buffer.len() || rec_size <= 0 {
+                bad_byte = Some(rec_start);
+                rec_start = buffer.len(); // break from loop
+            } else {
+                rec_starts.push(rec_start);
+                slices.push(Cursor::new(buffer[rec_start..rec_end].to_vec()));
+                rec_start = rec_end;
+            }
+        }
+        let mut dmap_results: Vec<Result<Self, DmapError>> = vec![];
+        dmap_results.par_extend(
+            slices
+                .par_iter_mut()
+                .map(|cursor| Self::parse_record(cursor)),
+        );
+
+        for (i, rec) in dmap_results.into_iter().enumerate() {
+            if let Ok(x) = rec {
+                dmap_records.push(x);
+            } else {
+                bad_byte = Some(rec_starts[i]);
+                break;
+            }
+        }
+        Ok((dmap_records, bad_byte))
     }
 
     /// Read a DMAP file of type `Self`
@@ -85,6 +143,22 @@ pub trait Record<'a>:
                 Self::read_records(compressor)
             }
             _ => Self::read_records(file),
+        }
+    }
+
+    /// Read a DMAP file of type `Self`,
+    fn read_file_partial(infile: &PathBuf) -> Result<(Vec<Self>, Option<usize>), DmapError>
+    where
+        Self: Sized,
+        Self: Send,
+    {
+        let file = File::open(infile)?;
+        match infile.extension() {
+            Some(ext) if ext == OsStr::new("bz2") => {
+                let compressor = BzDecoder::new(file);
+                Self::read_records_partial(compressor)
+            }
+            _ => Self::read_records_partial(file),
         }
     }
 
