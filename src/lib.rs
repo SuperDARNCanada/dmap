@@ -22,6 +22,7 @@ use crate::types::DmapField;
 use bzip2::read::BzEncoder;
 use bzip2::Compression;
 use indexmap::IndexMap;
+use paste::paste;
 use pyo3::prelude::*;
 use rayon::iter::Either;
 use rayon::prelude::*;
@@ -301,7 +302,7 @@ fn read_snd_py(infile: PathBuf) -> PyResult<Vec<IndexMap<String, DmapField>>> {
 /// Reads the data from infile into a tuple of `([IndexMap], int|None)`, where
 /// all valid records are returned, plus optionally the byte of the first record
 /// with a corruption within the file. Compatible with RST behaviour.
-fn read_generic_lax<T: for<'a> Record<'a> + Send>(
+fn read_lax<T: for<'a> Record<'a> + Send>(
     infile: PathBuf,
 ) -> Result<(Vec<IndexMap<String, DmapField>>, Option<usize>), DmapError> {
     let result = T::read_file_lax(&infile)?;
@@ -309,6 +310,23 @@ fn read_generic_lax<T: for<'a> Record<'a> + Send>(
         result.0.into_iter().map(|rec| rec.inner()).collect(),
         result.1,
     ))
+}
+
+macro_rules! read_lax_py {
+    ($name:ident, $py_name:literal) => { 
+        paste! {
+            /// Reads a [< $name:upper >] file, returning a tuple of
+            /// (list of dictionaries containing the fields, byte where first corrupted record starts).
+            #[pyfunction]
+            #[pyo3(name = $py_name)]
+            #[pyo3(text_signature = "(infile: str, /)")]
+            fn [< read_ $name _lax_py >](
+                infile: PathBuf,
+            ) -> PyResult<(Vec<IndexMap<String, DmapField>>, Option<usize>)> {
+                read_lax::<[< $name:camel Record >]>(infile).map_err(PyErr::from)
+            }
+        }
+    }
 }
 
 /// Reads a generic DMAP file, returning a tuple of
@@ -319,70 +337,15 @@ fn read_generic_lax<T: for<'a> Record<'a> + Send>(
 fn read_dmap_lax_py(
     infile: PathBuf,
 ) -> PyResult<(Vec<IndexMap<String, DmapField>>, Option<usize>)> {
-    read_generic_lax::<GenericRecord>(infile).map_err(PyErr::from)
+    read_lax::<GenericRecord>(infile).map_err(PyErr::from)
 }
 
-/// Reads an IQDAT file, returning a tuple of
-/// (list of dictionaries containing the fields, byte where first corrupted record starts).
-#[pyfunction]
-#[pyo3(name = "read_iqdat_lax")]
-#[pyo3(text_signature = "(infile: str, /)")]
-fn read_iqdat_lax_py(
-    infile: PathBuf,
-) -> PyResult<(Vec<IndexMap<String, DmapField>>, Option<usize>)> {
-    read_generic_lax::<IqdatRecord>(infile).map_err(PyErr::from)
-}
-
-/// Reads a RAWACF file, returning a tuple of
-/// (list of dictionaries containing the fields, byte where first corrupted record starts).
-#[pyfunction]
-#[pyo3(name = "read_rawacf_lax")]
-#[pyo3(text_signature = "(infile: str, /)")]
-fn read_rawacf_lax_py(
-    infile: PathBuf,
-) -> PyResult<(Vec<IndexMap<String, DmapField>>, Option<usize>)> {
-    read_generic_lax::<RawacfRecord>(infile).map_err(PyErr::from)
-}
-
-/// Reads a FITACF file, returning a tuple of
-/// (list of dictionaries containing the fields, byte where first corrupted record starts).
-#[pyfunction]
-#[pyo3(name = "read_fitacf_lax")]
-#[pyo3(text_signature = "(infile: str, /)")]
-fn read_fitacf_lax_py(
-    infile: PathBuf,
-) -> PyResult<(Vec<IndexMap<String, DmapField>>, Option<usize>)> {
-    read_generic_lax::<FitacfRecord>(infile).map_err(PyErr::from)
-}
-
-/// Reads a GRID file, returning a tuple of
-/// (list of dictionaries containing the fields, byte where first corrupted record starts).
-#[pyfunction]
-#[pyo3(name = "read_grid_lax")]
-#[pyo3(text_signature = "(infile: str, /)")]
-fn read_grid_lax_py(
-    infile: PathBuf,
-) -> PyResult<(Vec<IndexMap<String, DmapField>>, Option<usize>)> {
-    read_generic_lax::<GridRecord>(infile).map_err(PyErr::from)
-}
-
-/// Reads a MAP file, returning a tuple of
-/// (list of dictionaries containing the fields, byte where first corrupted record starts).
-#[pyfunction]
-#[pyo3(name = "read_map_lax")]
-#[pyo3(text_signature = "(infile: str, /)")]
-fn read_map_lax_py(infile: PathBuf) -> PyResult<(Vec<IndexMap<String, DmapField>>, Option<usize>)> {
-    read_generic_lax::<MapRecord>(infile).map_err(PyErr::from)
-}
-
-/// Reads an SND file, returning a tuple of
-/// (list of dictionaries containing the fields, byte where first corrupted record starts).
-#[pyfunction]
-#[pyo3(name = "read_snd_lax")]
-#[pyo3(text_signature = "(infile: str, /)")]
-fn read_snd_lax_py(infile: PathBuf) -> PyResult<(Vec<IndexMap<String, DmapField>>, Option<usize>)> {
-    read_generic_lax::<SndRecord>(infile).map_err(PyErr::from)
-}
+read_lax_py!(iqdat, "read_iqdat_py");
+read_lax_py!(rawacf, "read_rawacf_py");
+read_lax_py!(fitacf, "read_fitacf_py");
+read_lax_py!(grid, "read_grid_py");
+read_lax_py!(map, "read_map_py");
+read_lax_py!(snd, "read_snd_py");
 
 /// Checks that a list of dictionaries contains DMAP records, then appends to outfile.
 ///
