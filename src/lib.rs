@@ -10,13 +10,14 @@ pub mod formats;
 pub mod types;
 
 use crate::error::DmapError;
-use crate::formats::dmap::{GenericRecord, Record};
+use crate::formats::dmap::Record;
 use crate::formats::fitacf::FitacfRecord;
 use crate::formats::grid::GridRecord;
 use crate::formats::iqdat::IqdatRecord;
 use crate::formats::map::MapRecord;
 use crate::formats::rawacf::RawacfRecord;
 use crate::formats::snd::SndRecord;
+use crate::formats::generic::GenericRecord;
 use crate::types::DmapField;
 use bzip2::read::BzEncoder;
 use bzip2::Compression;
@@ -50,8 +51,11 @@ fn write_to_file(bytes: Vec<u8>, outfile: &PathBuf) -> Result<(), std::io::Error
     file.write_all(&out_bytes)
 }
 
-/// Writes a collection of `impl Record`s to `outfile`
-fn write_generic<'a>(mut recs: Vec<impl Record<'a>>, outfile: &PathBuf) -> Result<(), DmapError> {
+/// Writes a collection of `Record`s to `outfile`.
+///
+/// Prefer using the specific functions, e.g. `write_dmap`, `write_rawacf`, etc. for their
+/// specific field checks.
+pub fn write_records<'a>(mut recs: Vec<impl Record<'a>>, outfile: &PathBuf) -> Result<(), DmapError> {
     let mut bytes: Vec<u8> = vec![];
     let (errors, rec_bytes): (Vec<_>, Vec<_>) =
         recs.par_iter_mut()
@@ -72,37 +76,37 @@ fn write_generic<'a>(mut recs: Vec<impl Record<'a>>, outfile: &PathBuf) -> Resul
 
 /// Write generic DMAP to `outfile`
 pub fn write_dmap(recs: Vec<GenericRecord>, outfile: &PathBuf) -> Result<(), DmapError> {
-    write_generic(recs, outfile)
+    write_records(recs, outfile)
 }
 
 /// Write IQDAT records to `outfile`.
 pub fn write_iqdat(recs: Vec<IqdatRecord>, outfile: &PathBuf) -> Result<(), DmapError> {
-    write_generic(recs, outfile)
+    write_records(recs, outfile)
 }
 
 /// Write RAWACF records to `outfile`.
 pub fn write_rawacf(recs: Vec<RawacfRecord>, outfile: &PathBuf) -> Result<(), DmapError> {
-    write_generic(recs, outfile)
+    write_records(recs, outfile)
 }
 
 /// Write FITACF records to `outfile`.
 pub fn write_fitacf(recs: Vec<FitacfRecord>, outfile: &PathBuf) -> Result<(), DmapError> {
-    write_generic(recs, outfile)
+    write_records(recs, outfile)
 }
 
 /// Write GRID records to `outfile`.
 pub fn write_grid(recs: Vec<GridRecord>, outfile: &PathBuf) -> Result<(), DmapError> {
-    write_generic(recs, outfile)
+    write_records(recs, outfile)
 }
 
 /// Write MAP records to `outfile`.
 pub fn write_map(recs: Vec<MapRecord>, outfile: &PathBuf) -> Result<(), DmapError> {
-    write_generic(recs, outfile)
+    write_records(recs, outfile)
 }
 
 /// Write SND records to `outfile`.
 pub fn write_snd(recs: Vec<SndRecord>, outfile: &PathBuf) -> Result<(), DmapError> {
-    write_generic(recs, outfile)
+    write_records(recs, outfile)
 }
 
 /// Attempts to convert `recs` to `T` then append to `outfile`.
@@ -300,7 +304,7 @@ fn read_snd_py(infile: PathBuf) -> PyResult<Vec<IndexMap<String, DmapField>>> {
 fn read_generic_lax<T: for<'a> Record<'a> + Send>(
     infile: PathBuf,
 ) -> Result<(Vec<IndexMap<String, DmapField>>, Option<usize>), DmapError> {
-    let result = T::read_file_partial(&infile)?;
+    let result = T::read_file_lax(&infile)?;
     Ok((
         result.0.into_iter().map(|rec| rec.inner()).collect(),
         result.1,

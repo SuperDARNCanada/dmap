@@ -1,9 +1,6 @@
-use crate::error::DmapError;
-use crate::formats::dmap::Record;
-use crate::types::{DmapField, DmapType, Fields, Type};
-use indexmap::IndexMap;
+use crate::formats::dmap::create_record_type;
+use crate::types::{Fields, Type};
 use lazy_static::lazy_static;
-use std::convert::TryFrom;
 
 static SCALAR_FIELDS: [(&str, Type); 49] = [
     ("radar.revision.major", Type::Char),
@@ -179,52 +176,5 @@ lazy_static! {
     };
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct FitacfRecord {
-    pub data: IndexMap<String, DmapField>,
-}
+create_record_type!(fitacf, FITACF_FIELDS);
 
-impl FitacfRecord {
-    pub fn get(&self, key: &String) -> Option<&DmapField> {
-        self.data.get(key)
-    }
-    pub fn keys(&self) -> Vec<&String> {
-        self.data.keys().collect()
-    }
-}
-impl Record<'_> for FitacfRecord {
-    fn inner(self) -> IndexMap<String, DmapField> {
-        self.data
-    }
-
-    fn new(fields: &mut IndexMap<String, DmapField>) -> Result<FitacfRecord, DmapError> {
-        match Self::check_fields(fields, &FITACF_FIELDS) {
-            Ok(_) => {}
-            Err(e) => Err(e)?,
-        }
-
-        Ok(FitacfRecord {
-            data: fields.to_owned(),
-        })
-    }
-    fn to_bytes(&self) -> Result<Vec<u8>, DmapError> {
-        let (num_scalars, num_vectors, mut data_bytes) =
-            Self::data_to_bytes(&self.data, &FITACF_FIELDS)?;
-
-        let mut bytes: Vec<u8> = vec![];
-        bytes.extend((65537_i32).as_bytes()); // No idea why this is what it is, copied from backscatter
-        bytes.extend((data_bytes.len() as i32 + 16).as_bytes()); // +16 for code, length, num_scalars, num_vectors
-        bytes.extend(num_scalars.as_bytes());
-        bytes.extend(num_vectors.as_bytes());
-        bytes.append(&mut data_bytes); // consumes data_bytes
-        Ok(bytes)
-    }
-}
-
-impl TryFrom<&mut IndexMap<String, DmapField>> for FitacfRecord {
-    type Error = DmapError;
-
-    fn try_from(value: &mut IndexMap<String, DmapField>) -> Result<Self, Self::Error> {
-        Self::coerce::<FitacfRecord>(value, &FITACF_FIELDS)
-    }
-}
