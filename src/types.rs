@@ -854,3 +854,78 @@ pub(crate) fn read_data<T: DmapType>(cursor: &mut Cursor<Vec<u8>>) -> Result<T> 
 
     Ok(parsed_data)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_read_vec() {
+        let bytes: Vec<u8> = vec![1, 0, 1, 0];
+        let mut cursor = Cursor::new(bytes.clone());
+        let data = read_vector::<u8>(&mut cursor, 4);
+        assert!(data.is_ok());
+        assert_eq!(data.unwrap(), vec![1, 0, 1, 0]);
+
+        cursor.set_position(0);
+        let data = read_vector::<u16>(&mut cursor, 2);
+        assert!(data.is_ok());
+        assert_eq!(data.unwrap(), vec![1, 1]);
+
+        cursor.set_position(0);
+        let data = read_vector::<i8>(&mut cursor, 4);
+        assert!(data.is_ok());
+        assert_eq!(data.unwrap(), vec![1, 0, 1, 0]);
+
+        cursor.set_position(0);
+        let data = read_vector::<i16>(&mut cursor, 2);
+        assert!(data.is_ok());
+        assert_eq!(data.unwrap(), vec![1, 1]);
+    }
+
+    #[test]
+    fn test_read_data() {
+        // bytes are little-endian, so this will come out to 1 no matter if you interpret the first
+        // number of bytes as u8, u16, u32, u64, i8, i16, i32, or i64.
+        let bytes: Vec<u8> = vec![1, 0, 0, 0, 0, 0, 0, 0];
+        let mut cursor = Cursor::new(bytes);
+        let data = read_data::<u8>(&mut cursor);
+        assert!(data.is_ok());
+        assert_eq!(data.unwrap(), 1);
+
+        cursor.set_position(0);
+        let data = read_data::<u16>(&mut cursor);
+        assert!(data.is_ok());
+        assert_eq!(data.unwrap(), 1);
+
+        cursor.set_position(0);
+        let data = read_data::<u32>(&mut cursor);
+        assert!(data.is_ok());
+        assert_eq!(data.unwrap(), 1);
+
+        cursor.set_position(0);
+        let data = read_data::<u64>(&mut cursor);
+        assert!(data.is_ok());
+        assert_eq!(data.unwrap(), 1);
+
+        cursor.set_position(0);
+        let data = read_data::<i8>(&mut cursor);
+        assert!(data.is_ok());
+        assert_eq!(data.unwrap(), 1);
+
+        cursor.set_position(0);
+        let data = read_data::<i16>(&mut cursor);
+        assert!(data.is_ok());
+        assert_eq!(data.unwrap(), 1);
+
+        cursor.set_position(0);
+        let data = read_data::<i32>(&mut cursor);
+        assert!(data.is_ok());
+        assert_eq!(data.unwrap(), 1);
+
+        cursor.set_position(0);
+        let data = read_data::<i64>(&mut cursor);
+        assert!(data.is_ok());
+        assert_eq!(data.unwrap(), 1);
+    }
+}
