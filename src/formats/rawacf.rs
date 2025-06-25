@@ -1,4 +1,4 @@
-use crate::formats::dmap::create_record_type;
+use crate::record::create_record_type;
 use crate::types::{Fields, Type};
 use lazy_static::lazy_static;
 

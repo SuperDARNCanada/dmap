@@ -1,11 +1,11 @@
-use dmap::formats::dmap::Record;
+use dmap::record::Record;
 use dmap::formats::fitacf::FitacfRecord;
 use dmap::formats::grid::GridRecord;
 use dmap::formats::iqdat::IqdatRecord;
 use dmap::formats::map::MapRecord;
 use dmap::formats::rawacf::RawacfRecord;
 use dmap::formats::snd::SndRecord;
-use dmap::formats::generic::GenericRecord;
+use dmap::formats::dmap::DmapRecord;
 use dmap::{write_dmap, write_iqdat, write_rawacf, write_fitacf, write_grid, write_map, write_snd};
 use itertools::izip;
 use paste::paste;
@@ -82,9 +82,9 @@ macro_rules! make_test {
                 let mut tempfile: PathBuf = filename.clone();
                 tempfile.set_file_name(format!("tmp.{}.generic", stringify!($record_type)));
 
-                let gen_data = GenericRecord::read_file(&filename).expect("Unable to read file");
+                let gen_data = DmapRecord::read_file(&filename).expect("Unable to read file");
                 _ = write_dmap(gen_data.clone(), &tempfile).expect("Unable to write to file");
-                let new_recs = GenericRecord::read_file(&tempfile).expect("Cannot read tempfile");
+                let new_recs = DmapRecord::read_file(&tempfile).expect("Cannot read tempfile");
                 for (new_rec, ref_rec) in izip!(new_recs.iter(), gen_data.iter()) {
                     assert_eq!(new_rec, ref_rec)
                 }

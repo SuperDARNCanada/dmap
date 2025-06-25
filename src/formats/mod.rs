@@ -1,8 +1,5 @@
 //! The supported DMAP file formats.
 
-/// The shared functionality (Trait) common to all DMAP record types.
-pub mod dmap;
-
 /// The [FitACF file format](https://radar-software-toolkit-rst.readthedocs.io/en/latest/references/general/fitacf/)
 pub mod fitacf;
 
@@ -23,4 +20,4 @@ pub mod snd;
 
 /// The generic [Dmap file format](https://radar-software-toolkit-rst.readthedocs.io/en/latest/references/general/dmap_data/)
 
-pub mod generic;
+pub mod dmap;
