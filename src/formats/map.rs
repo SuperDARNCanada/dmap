@@ -166,4 +166,3 @@ lazy_static! {
 }
 
 create_record_type!(map, MAP_FIELDS);
-

@@ -51,7 +51,12 @@ pub trait Record<'a>:
             rec_start = rec_end;
         }
         if rec_start != buffer.len() {
-            return Err(DmapError::InvalidRecord(format!("Record {} starting at byte {} incomplete; has size of {} bytes", slices.len() + 1, rec_start, buffer.len() - rec_start)))
+            return Err(DmapError::InvalidRecord(format!(
+                "Record {} starting at byte {} incomplete; has size of {} bytes",
+                slices.len() + 1,
+                rec_start,
+                buffer.len() - rec_start
+            )));
         }
         let mut dmap_results: Vec<Result<Self, DmapError>> = vec![];
         dmap_results.par_extend(
@@ -81,9 +86,7 @@ pub trait Record<'a>:
     /// Reads from dmap_data and parses into a collection of Records.
     ///
     /// Returns a tuple of `(good records, Option<byte where first corrupted record starts>)`.
-    fn read_records_lax(
-        mut dmap_data: impl Read,
-    ) -> Result<(Vec<Self>, Option<usize>), DmapError>
+    fn read_records_lax(mut dmap_data: impl Read) -> Result<(Vec<Self>, Option<usize>), DmapError>
     where
         Self: Sized,
         Self: Send,
@@ -106,7 +109,7 @@ pub trait Record<'a>:
             rec_end = rec_start + rec_size; // error-checking the size is conducted in Self::parse_record()
             if rec_end > buffer.len() || rec_size <= 0 {
                 bad_byte = Some(rec_start);
-                break
+                break;
                 // rec_start = buffer.len(); // break from loop
             } else {
                 rec_starts.push(rec_start);
@@ -534,7 +537,6 @@ pub trait Record<'a>:
     }
 }
 
-
 macro_rules! create_record_type {
     ($format:ident, $fields:ident) => {
         paste::paste! {
@@ -601,4 +603,3 @@ macro_rules! create_record_type {
 }
 
 pub(crate) use create_record_type;
-

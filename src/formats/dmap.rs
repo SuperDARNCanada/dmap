@@ -1,11 +1,11 @@
-//! Defines the `DmapRecord` struct which implements `Record`, which can be used 
-//! for reading/writing DMAP files without checking that certain fields are or 
+//! Defines the `DmapRecord` struct which implements `Record`, which can be used
+//! for reading/writing DMAP files without checking that certain fields are or
 //! are not present, or have a given type.
 
-use indexmap::IndexMap;
 use crate::error::DmapError;
 use crate::record::Record;
 use crate::types::{DmapField, DmapType};
+use indexmap::IndexMap;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct DmapRecord {

@@ -83,4 +83,3 @@ lazy_static! {
 }
 
 create_record_type!(rawacf, RAWACF_FIELDS);
-

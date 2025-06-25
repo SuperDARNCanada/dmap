@@ -1,15 +1,15 @@
-use dmap::record::Record;
+use dmap::formats::dmap::DmapRecord;
 use dmap::formats::fitacf::FitacfRecord;
 use dmap::formats::grid::GridRecord;
 use dmap::formats::iqdat::IqdatRecord;
 use dmap::formats::map::MapRecord;
 use dmap::formats::rawacf::RawacfRecord;
 use dmap::formats::snd::SndRecord;
-use dmap::formats::dmap::DmapRecord;
-use dmap::{write_dmap, write_iqdat, write_rawacf, write_fitacf, write_grid, write_map, write_snd};
+use dmap::record::Record;
+use dmap::{write_dmap, write_fitacf, write_grid, write_iqdat, write_map, write_rawacf, write_snd};
 use itertools::izip;
 use paste::paste;
-use std::fs::{File, remove_file};
+use std::fs::{remove_file, File};
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -59,7 +59,7 @@ macro_rules! make_test {
                 let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($record_type)));
                 let mut tempfile: PathBuf = filename.clone();
                 tempfile.set_file_name(format!("tmp.{}.corrupt", stringify!($record_type)));
-                
+
                 let _ = std::fs::copy(filename.clone(), tempfile.clone()).expect("Could not copy to tempfile");
                 let mut file = File::options().append(true).open(tempfile.clone()).unwrap();
                 writeln!(&mut file, "not a valid record").expect("Could not write to tempfile");
@@ -102,4 +102,3 @@ make_test!(fitacf);
 make_test!(grid);
 make_test!(map);
 make_test!(snd);
-

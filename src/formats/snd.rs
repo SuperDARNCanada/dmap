@@ -82,4 +82,3 @@ lazy_static! {
 }
 
 create_record_type!(snd, SND_FIELDS);
-

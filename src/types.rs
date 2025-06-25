@@ -258,25 +258,23 @@ impl DmapVec {
     /// Copies the data and metadata (dimensions, `Type` key) to raw bytes
     pub(crate) fn as_bytes(&self) -> Vec<u8> {
         let mut bytes: Vec<u8> = DmapType::as_bytes(&self.get_type().key()).to_vec();
-        
+
         macro_rules! vec_to_bytes {
-            ($bytes:ident, $x:ident) => {
-                {
-                    $bytes.extend(($x.ndim() as i32).to_le_bytes());
-                    for &dim in $x.shape().iter().rev() {
-                        $bytes.extend((dim as i32).to_le_bytes());
-                    }
-                    for y in $x.iter() {
-                        $bytes.append(&mut DmapType::as_bytes(y).to_vec());
-                    }
+            ($bytes:ident, $x:ident) => {{
+                $bytes.extend(($x.ndim() as i32).to_le_bytes());
+                for &dim in $x.shape().iter().rev() {
+                    $bytes.extend((dim as i32).to_le_bytes());
                 }
-            }
+                for y in $x.iter() {
+                    $bytes.append(&mut DmapType::as_bytes(y).to_vec());
+                }
+            }};
         }
 
         match self {
             DmapVec::Char(x) => vec_to_bytes!(bytes, x),
             DmapVec::Short(x) => vec_to_bytes!(bytes, x),
-            DmapVec::Int(x) => vec_to_bytes!(bytes, x), 
+            DmapVec::Int(x) => vec_to_bytes!(bytes, x),
             DmapVec::Long(x) => vec_to_bytes!(bytes, x),
             DmapVec::Uchar(x) => vec_to_bytes!(bytes, x),
             DmapVec::Ushort(x) => vec_to_bytes!(bytes, x),
@@ -366,9 +364,10 @@ macro_rules! vec_impls {
                 if let $enum_var(x) = value {
                     Ok(x)
                 } else {
-                    Err(DmapError::InvalidVector(
-                        format!("Cannot convert to {}", stringify!($type))
-                    ))
+                    Err(DmapError::InvalidVector(format!(
+                        "Cannot convert to {}",
+                        stringify!($type)
+                    )))
                 }
             }
         }
@@ -385,13 +384,14 @@ macro_rules! vec_impls {
             fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
                 match value {
                     DmapField::Vector(x) => x.try_into(),
-                    _ => Err(Self::Error::InvalidVector(
-                        format!("Cannot interpret as {}", stringify!($type))
-                    )),
+                    _ => Err(Self::Error::InvalidVector(format!(
+                        "Cannot interpret as {}",
+                        stringify!($type)
+                    ))),
                 }
             }
         }
-    }
+    };
 }
 
 vec_impls!(ArrayD<i8>, DmapVec::Char);
@@ -453,9 +453,10 @@ macro_rules! scalar_impls {
             fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
                 match value {
                     DmapField::Scalar(x) => x.try_into(),
-                    _ => Err(Self::Error::InvalidScalar(
-                        format!("Cannot interpret as {}", stringify!($type)),
-                    )),
+                    _ => Err(Self::Error::InvalidScalar(format!(
+                        "Cannot interpret as {}",
+                        stringify!($type)
+                    ))),
                 }
             }
         }
@@ -466,12 +467,13 @@ macro_rules! scalar_impls {
                     Ok(x)
                 } else {
                     Err(DmapError::InvalidScalar(format!(
-                        "Unable to convert {value} to {}", stringify!($type)
+                        "Unable to convert {value} to {}",
+                        stringify!($type)
                     )))
                 }
             }
         }
-    }
+    };
 }
 
 scalar_impls!(i8, DmapScalar::Char);
@@ -513,7 +515,7 @@ macro_rules! type_impls {
                 AsBytes::as_bytes(self).to_vec()
             }
             fn from_bytes(bytes: &[u8]) -> Result<Self>
-            where 
+            where
                 Self: Sized,
             {
                 Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
@@ -532,7 +534,7 @@ macro_rules! type_impls {
                     bytes.to_vec()
                 }
                 fn from_bytes(bytes: &[u8]) -> Result<Self>
-                where 
+                where
                     Self: Sized,
                 {
                     Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
@@ -777,28 +779,75 @@ pub(crate) fn parse_vector(
             record_size
         )));
     }
-    
+
     macro_rules! dmapvec_from_cursor {
         ($type:ty, $enum_var:path, $dims:ident, $cursor:ident, $num_elements:ident, $name:ident) => {
             $enum_var(
                 ArrayD::from_shape_vec($dims, read_vector::<$type>($cursor, $num_elements)?)
                     .map_err(|e| {
-                        DmapError::InvalidVector(format!("Could not read in vector field {name}: {e}"))
-                    })?
+                        DmapError::InvalidVector(format!(
+                            "Could not read in vector field {name}: {e}"
+                        ))
+                    })?,
             )
-        }   
+        };
     }
     let vector: DmapVec = match data_type {
-        Type::Char => dmapvec_from_cursor!(i8, DmapVec::Char, dimensions, cursor, total_elements, name),
-        Type::Short => dmapvec_from_cursor!(i16, DmapVec::Short, dimensions, cursor, total_elements, name),
-        Type::Int => dmapvec_from_cursor!(i32, DmapVec::Int, dimensions, cursor, total_elements, name),
-        Type::Long => dmapvec_from_cursor!(i64, DmapVec::Long, dimensions, cursor, total_elements, name),
-        Type::Uchar => dmapvec_from_cursor!(u8, DmapVec::Uchar, dimensions, cursor, total_elements, name),
-        Type::Ushort => dmapvec_from_cursor!(u16, DmapVec::Ushort, dimensions, cursor, total_elements, name),
-        Type::Uint => dmapvec_from_cursor!(u32, DmapVec::Uint, dimensions, cursor, total_elements, name),
-        Type::Ulong => dmapvec_from_cursor!(u64, DmapVec::Ulong, dimensions, cursor, total_elements, name),
-        Type::Float => dmapvec_from_cursor!(f32, DmapVec::Float, dimensions, cursor, total_elements, name),
-        Type::Double => dmapvec_from_cursor!(f64, DmapVec::Double, dimensions, cursor, total_elements, name),
+        Type::Char => {
+            dmapvec_from_cursor!(i8, DmapVec::Char, dimensions, cursor, total_elements, name)
+        }
+        Type::Short => dmapvec_from_cursor!(
+            i16,
+            DmapVec::Short,
+            dimensions,
+            cursor,
+            total_elements,
+            name
+        ),
+        Type::Int => {
+            dmapvec_from_cursor!(i32, DmapVec::Int, dimensions, cursor, total_elements, name)
+        }
+        Type::Long => {
+            dmapvec_from_cursor!(i64, DmapVec::Long, dimensions, cursor, total_elements, name)
+        }
+        Type::Uchar => {
+            dmapvec_from_cursor!(u8, DmapVec::Uchar, dimensions, cursor, total_elements, name)
+        }
+        Type::Ushort => dmapvec_from_cursor!(
+            u16,
+            DmapVec::Ushort,
+            dimensions,
+            cursor,
+            total_elements,
+            name
+        ),
+        Type::Uint => {
+            dmapvec_from_cursor!(u32, DmapVec::Uint, dimensions, cursor, total_elements, name)
+        }
+        Type::Ulong => dmapvec_from_cursor!(
+            u64,
+            DmapVec::Ulong,
+            dimensions,
+            cursor,
+            total_elements,
+            name
+        ),
+        Type::Float => dmapvec_from_cursor!(
+            f32,
+            DmapVec::Float,
+            dimensions,
+            cursor,
+            total_elements,
+            name
+        ),
+        Type::Double => dmapvec_from_cursor!(
+            f64,
+            DmapVec::Double,
+            dimensions,
+            cursor,
+            total_elements,
+            name
+        ),
         _ => {
             return Err(DmapError::InvalidVector(format!(
                 "Invalid type {} for DMAP vector {}",

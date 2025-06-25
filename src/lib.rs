@@ -7,8 +7,8 @@
 
 pub mod error;
 pub mod formats;
-pub mod types;
 pub mod record;
+pub mod types;
 
 use crate::error::DmapError;
 use crate::formats::dmap::DmapRecord;
@@ -57,7 +57,10 @@ fn bytes_to_file(bytes: Vec<u8>, outfile: &PathBuf) -> Result<(), std::io::Error
 ///
 /// Prefer using the specific functions, e.g. `write_dmap`, `write_rawacf`, etc. for their
 /// specific field checks.
-pub fn write_records<'a>(mut recs: Vec<impl Record<'a>>, outfile: &PathBuf) -> Result<(), DmapError> {
+pub fn write_records<'a>(
+    mut recs: Vec<impl Record<'a>>,
+    outfile: &PathBuf,
+) -> Result<(), DmapError> {
     let mut bytes: Vec<u8> = vec![];
     let (errors, rec_bytes): (Vec<_>, Vec<_>) =
         recs.par_iter_mut()
@@ -111,7 +114,7 @@ where
 /// and attempts to coerce into `[Type]Record` then write to file.
 macro_rules! write_rust {
     ($type:ident) => {
-        paste! { 
+        paste! {
             /// Write $type:upper records to `outfile`.
             pub fn [< write_ $type >](recs: Vec<[< $type:camel Record >]>, outfile: &PathBuf) -> Result<(), DmapError> {
                 write_records(recs, outfile)
@@ -180,12 +183,12 @@ fn read_lax<T: for<'a> Record<'a> + Send>(
     ))
 }
 
-/// Creates functions for reading DMAP files for the Python API. 
-/// 
-/// Generates two functions: `read_[type]` and `read_[type]_lax`, for strict and lax 
+/// Creates functions for reading DMAP files for the Python API.
+///
+/// Generates two functions: `read_[type]` and `read_[type]_lax`, for strict and lax
 /// reading, respectively.
 macro_rules! read_py {
-    ($name:ident, $py_name:literal, $lax_name:literal) => { 
+    ($name:ident, $py_name:literal, $lax_name:literal) => {
         paste! {
             /// Reads a $name:upper file, returning a tuple of
             /// (list of dictionaries containing the fields, byte where first corrupted record starts).

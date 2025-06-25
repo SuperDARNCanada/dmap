@@ -111,4 +111,3 @@ lazy_static! {
 }
 
 create_record_type!(grid, GRID_FIELDS);
-

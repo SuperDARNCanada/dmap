@@ -19,5 +19,4 @@ pub mod rawacf;
 pub mod snd;
 
 /// The generic [Dmap file format](https://radar-software-toolkit-rst.readthedocs.io/en/latest/references/general/dmap_data/)
-
 pub mod dmap;

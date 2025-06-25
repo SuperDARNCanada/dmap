@@ -177,4 +177,3 @@ lazy_static! {
 }
 
 create_record_type!(fitacf, FITACF_FIELDS);
-

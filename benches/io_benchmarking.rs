@@ -1,11 +1,11 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use dmap::record::Record;
 use dmap::formats::fitacf::FitacfRecord;
 use dmap::formats::grid::GridRecord;
 use dmap::formats::iqdat::IqdatRecord;
 use dmap::formats::map::MapRecord;
 use dmap::formats::rawacf::RawacfRecord;
 use dmap::formats::snd::SndRecord;
+use dmap::record::Record;
 use paste::paste;
 use std::fs::File;
 

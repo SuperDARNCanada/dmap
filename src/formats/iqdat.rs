@@ -93,4 +93,3 @@ lazy_static! {
 }
 
 create_record_type!(iqdat, IQDAT_FIELDS);
-
