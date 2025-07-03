@@ -7,21 +7,25 @@
 
 pub mod error;
 pub mod formats;
+pub mod record;
 pub mod types;
 
 use crate::error::DmapError;
-use crate::formats::dmap::{GenericRecord, Record};
+use crate::formats::dmap::DmapRecord;
 use crate::formats::fitacf::FitacfRecord;
 use crate::formats::grid::GridRecord;
 use crate::formats::iqdat::IqdatRecord;
 use crate::formats::map::MapRecord;
 use crate::formats::rawacf::RawacfRecord;
 use crate::formats::snd::SndRecord;
+use crate::record::Record;
 use crate::types::DmapField;
 use bzip2::read::BzEncoder;
 use bzip2::Compression;
 use indexmap::IndexMap;
+use paste::paste;
 use pyo3::prelude::*;
+use pyo3::types::PyBytes;
 use rayon::iter::Either;
 use rayon::prelude::*;
 use std::ffi::OsStr;
@@ -35,7 +39,7 @@ use std::path::PathBuf;
 /// Ordinarily, this function opens the file in `append` mode. If the extension of `outfile` is
 /// `.bz2`, the bytes will be compressed using bzip2 before being written, and the file is instead
 /// opened in `create_new` mode, meaning it will fail if a file already exists at the given path.
-fn write_to_file(bytes: Vec<u8>, outfile: &PathBuf) -> Result<(), std::io::Error> {
+fn bytes_to_file(bytes: Vec<u8>, outfile: &PathBuf) -> Result<(), std::io::Error> {
     let mut out_bytes: Vec<u8> = vec![];
     let mut file: File = OpenOptions::new().append(true).create(true).open(outfile)?;
     match outfile.extension() {
@@ -50,8 +54,14 @@ fn write_to_file(bytes: Vec<u8>, outfile: &PathBuf) -> Result<(), std::io::Error
     file.write_all(&out_bytes)
 }
 
-/// Writes a collection of `impl Record`s to `outfile`
-fn write_generic<'a>(mut recs: Vec<impl Record<'a>>, outfile: &PathBuf) -> Result<(), DmapError> {
+/// Writes a collection of `Record`s to `outfile`.
+///
+/// Prefer using the specific functions, e.g. `write_dmap`, `write_rawacf`, etc. for their
+/// specific field checks.
+pub fn write_records<'a>(
+    mut recs: Vec<impl Record<'a>>,
+    outfile: &PathBuf,
+) -> Result<(), DmapError> {
     let mut bytes: Vec<u8> = vec![];
     let (errors, rec_bytes): (Vec<_>, Vec<_>) =
         recs.par_iter_mut()
@@ -66,50 +76,14 @@ fn write_generic<'a>(mut recs: Vec<impl Record<'a>>, outfile: &PathBuf) -> Resul
         )))?
     }
     bytes.par_extend(rec_bytes.into_par_iter().flatten());
-    write_to_file(bytes, outfile)?;
+    bytes_to_file(bytes, outfile)?;
     Ok(())
 }
 
-/// Write generic DMAP to `outfile`
-pub fn write_dmap(recs: Vec<GenericRecord>, outfile: &PathBuf) -> Result<(), DmapError> {
-    write_generic(recs, outfile)
-}
-
-/// Write IQDAT records to `outfile`.
-pub fn write_iqdat(recs: Vec<IqdatRecord>, outfile: &PathBuf) -> Result<(), DmapError> {
-    write_generic(recs, outfile)
-}
-
-/// Write RAWACF records to `outfile`.
-pub fn write_rawacf(recs: Vec<RawacfRecord>, outfile: &PathBuf) -> Result<(), DmapError> {
-    write_generic(recs, outfile)
-}
-
-/// Write FITACF records to `outfile`.
-pub fn write_fitacf(recs: Vec<FitacfRecord>, outfile: &PathBuf) -> Result<(), DmapError> {
-    write_generic(recs, outfile)
-}
-
-/// Write GRID records to `outfile`.
-pub fn write_grid(recs: Vec<GridRecord>, outfile: &PathBuf) -> Result<(), DmapError> {
-    write_generic(recs, outfile)
-}
-
-/// Write MAP records to `outfile`.
-pub fn write_map(recs: Vec<MapRecord>, outfile: &PathBuf) -> Result<(), DmapError> {
-    write_generic(recs, outfile)
-}
-
-/// Write SND records to `outfile`.
-pub fn write_snd(recs: Vec<SndRecord>, outfile: &PathBuf) -> Result<(), DmapError> {
-    write_generic(recs, outfile)
-}
-
-/// Attempts to convert `recs` to `T` then append to `outfile`.
-fn try_write_generic<T: for<'a> Record<'a>>(
+/// Attempts to convert `recs` to `T` then convert to bytes.
+fn try_to_bytes<T: for<'a> Record<'a>>(
     mut recs: Vec<IndexMap<String, DmapField>>,
-    outfile: &PathBuf,
-) -> Result<(), DmapError>
+) -> Result<Vec<u8>, DmapError>
 where
     for<'a> <T as TryFrom<&'a mut IndexMap<String, DmapField>>>::Error: Send + Debug,
 {
@@ -126,173 +100,131 @@ where
             });
     if !errors.is_empty() {
         Err(DmapError::BadRecords(
-            errors.iter().map(|(i, _)| *i).collect(), errors[0].1.to_string()
+            errors.iter().map(|(i, _)| *i).collect(),
+            errors[0].1.to_string(),
         ))?
     }
     bytes.par_extend(rec_bytes.into_par_iter().flatten());
-    write_to_file(bytes, outfile)?;
-    Ok(())
+    Ok(bytes)
 }
 
-/// Attempts to convert `recs` to `GenericRecord` then append to `outfile`.
-pub fn try_write_dmap(
-    recs: Vec<IndexMap<String, DmapField>>,
-    outfile: &PathBuf,
-) -> Result<(), DmapError> {
-    try_write_generic::<GenericRecord>(recs, outfile)
-}
+/// This macro generates two functions for writing to file. The first, `write_[type]`, takes in
+/// records of type `[Type]Record`, while the second, `try_write_[type]`, takes in `Vec<IndexMap>`
+/// and attempts to coerce into `[Type]Record` then write to file.
+macro_rules! write_rust {
+    ($type:ident) => {
+        paste! {
+            #[doc = "Write `" $type:upper "` records to `outfile`." ]
+            pub fn [< write_ $type >](recs: Vec<[< $type:camel Record >]>, outfile: &PathBuf) -> Result<(), DmapError> {
+                write_records(recs, outfile)
+            }
 
-/// Attempts to convert `recs` to `IqdatRecord` then append to `outfile`.
-pub fn try_write_iqdat(
-    recs: Vec<IndexMap<String, DmapField>>,
-    outfile: &PathBuf,
-) -> Result<(), DmapError> {
-    try_write_generic::<IqdatRecord>(recs, outfile)
-}
-
-/// Attempts to convert `recs` to `RawacfRecord` then append to `outfile`.
-pub fn try_write_rawacf(
-    recs: Vec<IndexMap<String, DmapField>>,
-    outfile: &PathBuf,
-) -> Result<(), DmapError> {
-    try_write_generic::<RawacfRecord>(recs, outfile)
-}
-
-/// Attempts to convert `recs` to `FitacfRecord` then append to `outfile`.
-pub fn try_write_fitacf(
-    recs: Vec<IndexMap<String, DmapField>>,
-    outfile: &PathBuf,
-) -> Result<(), DmapError> {
-    try_write_generic::<FitacfRecord>(recs, outfile)
-}
-
-/// Attempts to convert `recs` to `GridRecord` then append to `outfile`.
-pub fn try_write_grid(
-    recs: Vec<IndexMap<String, DmapField>>,
-    outfile: &PathBuf,
-) -> Result<(), DmapError> {
-    try_write_generic::<GridRecord>(recs, outfile)
-}
-
-/// Attempts to convert `recs` to `MapRecord` then append to `outfile`.
-pub fn try_write_map(
-    recs: Vec<IndexMap<String, DmapField>>,
-    outfile: &PathBuf,
-) -> Result<(), DmapError> {
-    try_write_generic::<MapRecord>(recs, outfile)
-}
-
-/// Attempts to convert `recs` to `SndRecord` then append to `outfile`.
-pub fn try_write_snd(
-    recs: Vec<IndexMap<String, DmapField>>,
-    outfile: &PathBuf,
-) -> Result<(), DmapError> {
-    try_write_generic::<SndRecord>(recs, outfile)
-}
-
-/// Read in a DMAP file
-pub fn read_dmap(infile: PathBuf) -> Result<Vec<GenericRecord>, DmapError> {
-    GenericRecord::read_file(&infile)
-}
-
-/// Read in an IQDAT file
-pub fn read_iqdat(infile: PathBuf) -> Result<Vec<IqdatRecord>, DmapError> {
-    IqdatRecord::read_file(&infile)
-}
-
-/// Read in a RAWACF file
-pub fn read_rawacf(infile: PathBuf) -> Result<Vec<RawacfRecord>, DmapError> {
-    RawacfRecord::read_file(&infile)
-}
-
-/// Read in a FITACF file
-pub fn read_fitacf(infile: PathBuf) -> Result<Vec<FitacfRecord>, DmapError> {
-    FitacfRecord::read_file(&infile)
-}
-
-/// Read in a GRID file
-pub fn read_grid(infile: PathBuf) -> Result<Vec<GridRecord>, DmapError> {
-    GridRecord::read_file(&infile)
-}
-
-/// Read in a MAP file
-pub fn read_map(infile: PathBuf) -> Result<Vec<MapRecord>, DmapError> {
-    MapRecord::read_file(&infile)
-}
-
-/// Read in an SND file
-pub fn read_snd(infile: PathBuf) -> Result<Vec<SndRecord>, DmapError> {
-    SndRecord::read_file(&infile)
-}
-
-/// Reads the data from infile into a collection of `IndexMap`s
-fn read_generic<T: for<'a> Record<'a> + Send>(
-    infile: PathBuf,
-) -> Result<Vec<IndexMap<String, DmapField>>, DmapError> {
-    match T::read_file(&infile) {
-        Ok(recs) => {
-            let new_recs = recs.into_iter().map(|rec| rec.inner()).collect();
-            Ok(new_recs)
+            #[doc = "Attempts to convert `recs` to `" $type:camel Record "` then append to `outfile`." ]
+            pub fn [< try_write_ $type >](
+                recs: Vec<IndexMap<String, DmapField>>,
+                outfile: &PathBuf,
+            ) -> Result<(), DmapError> {
+                let bytes = try_to_bytes::<[< $type:camel Record >]>(recs)?;
+                bytes_to_file(bytes, outfile).map_err(DmapError::from)
+            }
         }
-        Err(e) => Err(e),
     }
 }
 
-/// Reads a generic DMAP file, returning a list of dictionaries containing the fields.
-#[pyfunction]
-#[pyo3(name = "read_dmap")]
-#[pyo3(text_signature = "(infile: str, /)")]
-fn read_dmap_py(infile: PathBuf) -> PyResult<Vec<IndexMap<String, DmapField>>> {
-    read_generic::<GenericRecord>(infile).map_err(PyErr::from)
+write_rust!(iqdat);
+write_rust!(rawacf);
+write_rust!(fitacf);
+write_rust!(grid);
+write_rust!(map);
+write_rust!(snd);
+write_rust!(dmap);
+
+macro_rules! read_rust {
+    ($type:ident) => {
+        paste! {
+            #[doc = "Read in a `" $type:upper "` file" ]
+            pub fn [< read_ $type >](infile: PathBuf) -> Result<Vec<[< $type:camel Record >]>, DmapError> {
+                [< $type:camel Record >]::read_file(&infile)
+            }
+        }
+    }
 }
 
-/// Reads an IQDAT file, returning a list of dictionaries containing the fields.
-#[pyfunction]
-#[pyo3(name = "read_iqdat")]
-#[pyo3(text_signature = "(infile: str, /)")]
-fn read_iqdat_py(infile: PathBuf) -> PyResult<Vec<IndexMap<String, DmapField>>> {
-    read_generic::<IqdatRecord>(infile).map_err(PyErr::from)
+read_rust!(iqdat);
+read_rust!(rawacf);
+read_rust!(fitacf);
+read_rust!(grid);
+read_rust!(map);
+read_rust!(snd);
+read_rust!(dmap);
+
+/// Creates functions for reading DMAP files for the Python API.
+///
+/// Generates two functions: `read_[type]` and `read_[type]_lax`, for strict and lax
+/// reading, respectively.
+macro_rules! read_py {
+    ($name:ident, $py_name:literal, $lax_name:literal, $bytes_name:literal) => {
+        paste! {
+            #[doc = "Reads a `" $name:upper "` file, returning a list of dictionaries containing the fields." ]
+            #[pyfunction]
+            #[pyo3(name = $py_name)]
+            #[pyo3(text_signature = "(infile: str, /)")]
+            fn [< read_ $name _py >](infile: PathBuf) -> PyResult<Vec<IndexMap<String, DmapField>>> {
+                Ok([< $name:camel Record >]::read_file(&infile)
+                    .map_err(PyErr::from)?
+                    .into_iter()
+                    .map(|rec| rec.inner())
+                    .collect()
+                )
+            }
+
+            #[doc = "Reads a `" $name:upper "` file, returning a tuple of" ]
+            #[doc = "(list of dictionaries containing the fields, byte where first corrupted record starts). "]
+            #[pyfunction]
+            #[pyo3(name = $lax_name)]
+            #[pyo3(text_signature = "(infile: str, /)")]
+            fn [< read_ $name _lax_py >](
+                infile: PathBuf,
+            ) -> PyResult<(Vec<IndexMap<String, DmapField>>, Option<usize>)> {
+                let result = [< $name:camel Record >]::read_file_lax(&infile).map_err(PyErr::from)?;
+                Ok((
+                    result.0.into_iter().map(|rec| rec.inner()).collect(),
+                    result.1,
+                ))
+            }
+
+            #[doc = "Read in `" $name:upper "` records from bytes, returning `List[Dict]` of the records." ]
+            #[pyfunction]
+            #[pyo3(name = $bytes_name)]
+            #[pyo3(text_signature = "(buf: bytes, /)")]
+            fn [< read_ $name _bytes_py >](bytes: &[u8]) -> PyResult<Vec<IndexMap<String, DmapField>>> {
+                Ok([< $name:camel Record >]::read_records(bytes)?
+                    .into_iter()
+                    .map(|rec| rec.inner())
+                    .collect()
+                )
+            }
+        }
+    }
 }
 
-/// Reads a RAWACF file, returning a list of dictionaries containing the fields.
-#[pyfunction]
-#[pyo3(name = "read_rawacf")]
-#[pyo3(text_signature = "(infile: str, /)")]
-fn read_rawacf_py(infile: PathBuf) -> PyResult<Vec<IndexMap<String, DmapField>>> {
-    read_generic::<RawacfRecord>(infile).map_err(PyErr::from)
-}
-
-/// Reads a FITACF file, returning a list of dictionaries containing the fields.
-#[pyfunction]
-#[pyo3(name = "read_fitacf")]
-#[pyo3(text_signature = "(infile: str, /)")]
-fn read_fitacf_py(infile: PathBuf) -> PyResult<Vec<IndexMap<String, DmapField>>> {
-    read_generic::<FitacfRecord>(infile).map_err(PyErr::from)
-}
-
-/// Reads a GRID file, returning a list of dictionaries containing the fields.
-#[pyfunction]
-#[pyo3(name = "read_grid")]
-#[pyo3(text_signature = "(infile: str, /)")]
-fn read_grid_py(infile: PathBuf) -> PyResult<Vec<IndexMap<String, DmapField>>> {
-    read_generic::<GridRecord>(infile).map_err(PyErr::from)
-}
-
-/// Reads a MAP file, returning a list of dictionaries containing the fields.
-#[pyfunction]
-#[pyo3(name = "read_map")]
-#[pyo3(text_signature = "(infile: str, /)")]
-fn read_map_py(infile: PathBuf) -> PyResult<Vec<IndexMap<String, DmapField>>> {
-    read_generic::<MapRecord>(infile).map_err(PyErr::from)
-}
-
-/// Reads an SND file, returning a list of dictionaries containing the fields.
-#[pyfunction]
-#[pyo3(name = "read_snd")]
-#[pyo3(text_signature = "(infile: str, /)")]
-fn read_snd_py(infile: PathBuf) -> PyResult<Vec<IndexMap<String, DmapField>>> {
-    read_generic::<SndRecord>(infile).map_err(PyErr::from)
-}
+read_py!(iqdat, "read_iqdat", "read_iqdat_lax", "read_iqdat_bytes");
+read_py!(
+    rawacf,
+    "read_rawacf",
+    "read_rawacf_lax",
+    "read_rawacf_bytes"
+);
+read_py!(
+    fitacf,
+    "read_fitacf",
+    "read_fitacf_lax",
+    "read_fitacf_bytes"
+);
+read_py!(grid, "read_grid", "read_grid_lax", "read_grid_bytes");
+read_py!(map, "read_map", "read_map_lax", "read_map_bytes");
+read_py!(snd, "read_snd", "read_snd_lax", "read_snd_bytes");
+read_py!(dmap, "read_dmap", "read_dmap_lax", "read_dmap_bytes");
 
 /// Checks that a list of dictionaries contains DMAP records, then appends to outfile.
 ///
@@ -306,57 +238,57 @@ fn write_dmap_py(recs: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -> Py
     try_write_dmap(recs, &outfile).map_err(PyErr::from)
 }
 
-/// Checks that a list of dictionaries contains valid IQDAT records, then appends to outfile.
+/// Checks that a list of dictionaries contains valid DMAP records, then converts them to bytes.
+/// Returns `list[bytes]`, one entry per record.
+///
+/// **NOTE:** No type checking is done, so the fields may not be written as the expected
+/// DMAP type, e.g. `stid` might be written one byte instead of two as this function
+/// does not know that typically `stid` is two bytes.
 #[pyfunction]
-#[pyo3(name = "write_iqdat")]
-#[pyo3(text_signature = "(recs: list[dict], outfile: str, /)")]
-fn write_iqdat_py(recs: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -> PyResult<()> {
-    try_write_iqdat(recs, &outfile).map_err(PyErr::from)
+#[pyo3(name = "write_dmap_bytes")]
+#[pyo3(text_signature = "(recs: list[dict], /)")]
+fn write_dmap_bytes_py(recs: Vec<IndexMap<String, DmapField>>) -> PyResult<Vec<u8>> {
+    let bytes = try_to_bytes::<DmapRecord>(recs).map_err(PyErr::from)?;
+    Ok(bytes)
 }
 
-/// Checks that a list of dictionaries contains valid RAWACF records, then appends to outfile.
-#[pyfunction]
-#[pyo3(name = "write_rawacf")]
-#[pyo3(text_signature = "(recs: list[dict], outfile: str, /)")]
-fn write_rawacf_py(recs: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -> PyResult<()> {
-    try_write_rawacf(recs, &outfile).map_err(PyErr::from)
+/// Generates functions exposed to the Python API for writing specific file types.
+macro_rules! write_py {
+    ($name:ident, $fn_name:literal, $bytes_name:literal) => {
+        paste! {
+            #[doc = "Checks that a list of dictionaries contains valid `" $name:upper "` records, then appends to outfile." ]
+            #[pyfunction]
+            #[pyo3(name = $fn_name)]
+            #[pyo3(text_signature = "(recs: list[dict], outfile: str, /)")]
+            fn [< write_ $name _py >](recs: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -> PyResult<()> {
+                [< try_write_ $name >](recs, &outfile).map_err(PyErr::from)
+            }
+
+            #[doc = "Checks that a list of dictionaries contains valid `" $name:upper "` records, then converts them to bytes." ]
+            #[doc = "Returns `list[bytes]`, one entry per record." ]
+            #[pyfunction]
+            #[pyo3(name = $bytes_name)]
+            #[pyo3(text_signature = "(recs: list[dict], /)")]
+            fn [< write_ $name _bytes_py >](py: Python, recs: Vec<IndexMap<String, DmapField>>) -> PyResult<PyObject> {
+                let bytes = try_to_bytes::<[< $name:camel Record >]>(recs).map_err(PyErr::from)?;
+                Ok(PyBytes::new_bound(py, &bytes).into())
+            }
+        }
+    }
 }
 
-/// Checks that a list of dictionaries contains valid FITACF records, then appends to outfile.
-#[pyfunction]
-#[pyo3(name = "write_fitacf")]
-#[pyo3(text_signature = "(recs: list[dict], outfile: str, /)")]
-fn write_fitacf_py(recs: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -> PyResult<()> {
-    try_write_fitacf(recs, &outfile).map_err(PyErr::from)
-}
-
-/// Checks that a list of dictionaries contains valid GRID records, then appends to outfile.
-#[pyfunction]
-#[pyo3(name = "write_grid")]
-#[pyo3(text_signature = "(recs: list[dict], outfile: str, /)")]
-fn write_grid_py(recs: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -> PyResult<()> {
-    try_write_grid(recs, &outfile).map_err(PyErr::from)
-}
-
-/// Checks that a list of dictionaries contains valid MAP records, then appends to outfile.
-#[pyfunction]
-#[pyo3(name = "write_map")]
-#[pyo3(text_signature = "(recs: list[dict], outfile: str, /)")]
-fn write_map_py(recs: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -> PyResult<()> {
-    try_write_map(recs, &outfile).map_err(PyErr::from)
-}
-
-/// Checks that a list of dictionaries contains valid SND records, then appends to outfile.
-#[pyfunction]
-#[pyo3(name = "write_snd")]
-#[pyo3(text_signature = "(recs: list[dict], outfile: str, /)")]
-fn write_snd_py(recs: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -> PyResult<()> {
-    try_write_snd(recs, &outfile).map_err(PyErr::from)
-}
+// **NOTE** dmap type not included in this list, since it has a more descriptive docstring.
+write_py!(iqdat, "write_iqdat", "write_iqdat_bytes");
+write_py!(rawacf, "write_rawacf", "write_rawacf_bytes");
+write_py!(fitacf, "write_fitacf", "write_fitacf_bytes");
+write_py!(grid, "write_grid", "write_grid_bytes");
+write_py!(map, "write_map", "write_map_bytes");
+write_py!(snd, "write_snd", "write_snd_bytes");
 
 /// Functions for SuperDARN DMAP file format I/O.
 #[pymodule]
 fn dmap(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Strict read functions
     m.add_function(wrap_pyfunction!(read_dmap_py, m)?)?;
     m.add_function(wrap_pyfunction!(read_iqdat_py, m)?)?;
     m.add_function(wrap_pyfunction!(read_rawacf_py, m)?)?;
@@ -364,6 +296,26 @@ fn dmap(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(read_snd_py, m)?)?;
     m.add_function(wrap_pyfunction!(read_grid_py, m)?)?;
     m.add_function(wrap_pyfunction!(read_map_py, m)?)?;
+
+    // Lax read functions
+    m.add_function(wrap_pyfunction!(read_dmap_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_iqdat_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_rawacf_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_fitacf_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_snd_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_grid_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_map_lax_py, m)?)?;
+
+    // Read functions from byte buffer
+    m.add_function(wrap_pyfunction!(read_dmap_bytes_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_iqdat_bytes_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_rawacf_bytes_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_fitacf_bytes_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_snd_bytes_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_grid_bytes_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_map_bytes_py, m)?)?;
+
+    // Write functions
     m.add_function(wrap_pyfunction!(write_dmap_py, m)?)?;
     m.add_function(wrap_pyfunction!(write_iqdat_py, m)?)?;
     m.add_function(wrap_pyfunction!(write_rawacf_py, m)?)?;
@@ -371,6 +323,15 @@ fn dmap(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(write_grid_py, m)?)?;
     m.add_function(wrap_pyfunction!(write_map_py, m)?)?;
     m.add_function(wrap_pyfunction!(write_snd_py, m)?)?;
+
+    // Convert records to bytes
+    m.add_function(wrap_pyfunction!(write_dmap_bytes_py, m)?)?;
+    m.add_function(wrap_pyfunction!(write_iqdat_bytes_py, m)?)?;
+    m.add_function(wrap_pyfunction!(write_rawacf_bytes_py, m)?)?;
+    m.add_function(wrap_pyfunction!(write_fitacf_bytes_py, m)?)?;
+    m.add_function(wrap_pyfunction!(write_snd_bytes_py, m)?)?;
+    m.add_function(wrap_pyfunction!(write_grid_bytes_py, m)?)?;
+    m.add_function(wrap_pyfunction!(write_map_bytes_py, m)?)?;
 
     Ok(())
 }
