@@ -15,12 +15,12 @@ use std::path::PathBuf;
 pub trait Record<'a>:
     Debug + Send + TryFrom<&'a mut IndexMap<String, DmapField>, Error = DmapError>
 {
-    /// Gets the underlying data of the Record.
+    /// Gets the underlying data of `self`.
     fn inner(self) -> IndexMap<String, DmapField>;
 
-    /// Reads from dmap_data and parses into a collection of Records.
+    /// Reads from `dmap_data` and parses into `Vec<Self>`.
     ///
-    /// Returns `DmapError` if dmap_data cannot be read or contains invalid data.
+    /// Returns `DmapError` if `dmap_data` cannot be read or contains invalid data.
     fn read_records(mut dmap_data: impl Read) -> Result<Vec<Self>, DmapError>
     where
         Self: Sized,
@@ -83,9 +83,10 @@ pub trait Record<'a>:
         Ok(dmap_records)
     }
 
-    /// Reads from dmap_data and parses into a collection of Records.
+    /// Reads from `dmap_data` and parses into `Vec<Self>`.
     ///
-    /// Returns a tuple of `(good records, Option<byte where first corrupted record starts>)`.
+    /// Returns a 2-tuple, where the first entry is the good records from the front of the buffer,
+    /// and the second entry is the byte where the first corrupted record starts, if applicable.
     fn read_records_lax(mut dmap_data: impl Read) -> Result<(Vec<Self>, Option<usize>), DmapError>
     where
         Self: Sized,
@@ -151,7 +152,10 @@ pub trait Record<'a>:
         }
     }
 
-    /// Read a DMAP file of type `Self`,
+    /// Read a DMAP file of type `Self`.
+    ///
+    /// If the file is corrupted, it will return the leading uncorrupted records as well as the
+    /// position corresponding to the start of the first corrupted record.
     fn read_file_lax(infile: &PathBuf) -> Result<(Vec<Self>, Option<usize>), DmapError>
     where
         Self: Sized,
@@ -167,7 +171,7 @@ pub trait Record<'a>:
         }
     }
 
-    /// Reads a record starting from cursor position
+    /// Reads a record from `cursor`.
     fn parse_record(cursor: &mut Cursor<Vec<u8>>) -> Result<Self, DmapError>
     where
         Self: Sized,
@@ -246,7 +250,7 @@ pub trait Record<'a>:
         Self::new(&mut fields)
     }
 
-    /// Creates a new object from the parsed scalars and vectors
+    /// Creates a new object from the parsed scalars and vectors.
     fn new(fields: &mut IndexMap<String, DmapField>) -> Result<Self, DmapError>
     where
         Self: Sized;
@@ -389,7 +393,7 @@ pub trait Record<'a>:
                         DmapField::Scalar(x.cast_as(expected_type)?),
                     );
                 }
-                Some(&DmapField::Scalar(_)) => {}
+                Some(DmapField::Scalar(_)) => {}
                 Some(_) => Err(DmapError::InvalidRecord(format!(
                     "Field {} is a vector, expected scalar",
                     field
@@ -419,7 +423,7 @@ pub trait Record<'a>:
         }
         for (field, expected_type) in fields_for_type.vectors_required.iter() {
             match fields_dict.get(&field.to_string()) {
-                Some(&DmapField::Scalar(_)) => Err(DmapError::InvalidRecord(format!(
+                Some(DmapField::Scalar(_)) => Err(DmapError::InvalidRecord(format!(
                     "Field {} is a scalar, expected vector",
                     field
                 )))?,
@@ -429,7 +433,7 @@ pub trait Record<'a>:
                         x.get_type()
                     )))?
                 }
-                Some(&DmapField::Vector(_)) => {}
+                Some(DmapField::Vector(_)) => {}
                 None => Err(DmapError::InvalidRecord(format!("Field {field} missing")))?,
             }
         }
@@ -456,7 +460,7 @@ pub trait Record<'a>:
     fn to_bytes(&self) -> Result<Vec<u8>, DmapError>;
 
     /// Converts the entries of an `IndexMap` into a raw byte representation, including metadata
-    /// about the entries (DMAP key, name\[, dimensions\])
+    /// about the entries `(DMAP key, name\[, dimensions\])`.
     ///
     /// If all is good, returns a tuple containing:
     /// * the number of scalar fields
@@ -545,7 +549,7 @@ macro_rules! create_record_type {
             use indexmap::IndexMap;
             use crate::record::Record;
 
-            /// Struct containing the checked fields of a single RAWACF record.
+            #[doc = "Struct containing the checked fields of a single `" $format:upper "` record." ]
             #[derive(Debug, PartialEq, Clone)]
             pub struct [< $format:camel Record >] {
                 pub data: IndexMap<String, DmapField>,
