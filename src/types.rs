@@ -4,6 +4,7 @@ use indexmap::IndexMap;
 use numpy::array::PyArray;
 use numpy::ndarray::ArrayD;
 use numpy::PyArrayMethods;
+use paste::paste;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::{Bound, FromPyObject, IntoPy, PyAny, PyObject, PyResult, Python};
@@ -151,6 +152,7 @@ impl DmapScalar {
             Self::String(_) => Type::String,
         }
     }
+
     /// Converts `self` into a new `Type`, if possible.
     pub(crate) fn cast_as(&self, new_type: &Type) -> Result<Self> {
         match new_type {
@@ -257,97 +259,30 @@ impl DmapVec {
     /// Copies the data and metadata (dimensions, `Type` key) to raw bytes
     pub(crate) fn as_bytes(&self) -> Vec<u8> {
         let mut bytes: Vec<u8> = DmapType::as_bytes(&self.get_type().key()).to_vec();
+
+        macro_rules! vec_to_bytes {
+            ($bytes:ident, $x:ident) => {{
+                $bytes.extend(($x.ndim() as i32).to_le_bytes());
+                for &dim in $x.shape().iter().rev() {
+                    $bytes.extend((dim as i32).to_le_bytes());
+                }
+                for y in $x.iter() {
+                    $bytes.append(&mut DmapType::as_bytes(y).to_vec());
+                }
+            }};
+        }
+
         match self {
-            DmapVec::Char(x) => {
-                bytes.extend((x.ndim() as i32).to_le_bytes());
-                for &dim in x.shape().iter().rev() {
-                    bytes.extend((dim as i32).to_le_bytes());
-                }
-                for y in x.iter() {
-                    bytes.append(&mut DmapType::as_bytes(y).to_vec());
-                }
-            }
-            DmapVec::Short(x) => {
-                bytes.extend((x.ndim() as i32).to_le_bytes());
-                for &dim in x.shape().iter().rev() {
-                    bytes.extend((dim as i32).to_le_bytes());
-                }
-                for y in x.iter() {
-                    bytes.append(&mut DmapType::as_bytes(y).to_vec());
-                }
-            }
-            DmapVec::Int(x) => {
-                bytes.extend((x.ndim() as i32).to_le_bytes());
-                for &dim in x.shape().iter().rev() {
-                    bytes.extend((dim as i32).to_le_bytes());
-                }
-                for y in x.iter() {
-                    bytes.append(&mut DmapType::as_bytes(y).to_vec());
-                }
-            }
-            DmapVec::Long(x) => {
-                bytes.extend((x.ndim() as i32).to_le_bytes());
-                for &dim in x.shape().iter().rev() {
-                    bytes.extend((dim as i32).to_le_bytes());
-                }
-                for y in x.iter() {
-                    bytes.append(&mut DmapType::as_bytes(y).to_vec());
-                }
-            }
-            DmapVec::Uchar(x) => {
-                bytes.extend((x.ndim() as i32).to_le_bytes());
-                for &dim in x.shape().iter().rev() {
-                    bytes.extend((dim as i32).to_le_bytes());
-                }
-                for y in x.iter() {
-                    bytes.append(&mut DmapType::as_bytes(y).to_vec());
-                }
-            }
-            DmapVec::Ushort(x) => {
-                bytes.extend((x.ndim() as i32).to_le_bytes());
-                for &dim in x.shape().iter().rev() {
-                    bytes.extend((dim as i32).to_le_bytes());
-                }
-                for y in x.iter() {
-                    bytes.append(&mut DmapType::as_bytes(y).to_vec());
-                }
-            }
-            DmapVec::Uint(x) => {
-                bytes.extend((x.ndim() as i32).to_le_bytes());
-                for &dim in x.shape().iter().rev() {
-                    bytes.extend((dim as i32).to_le_bytes());
-                }
-                for y in x.iter() {
-                    bytes.append(&mut DmapType::as_bytes(y).to_vec());
-                }
-            }
-            DmapVec::Ulong(x) => {
-                bytes.extend((x.ndim() as i32).to_le_bytes());
-                for &dim in x.shape().iter().rev() {
-                    bytes.extend((dim as i32).to_le_bytes());
-                }
-                for y in x.iter() {
-                    bytes.append(&mut DmapType::as_bytes(y).to_vec());
-                }
-            }
-            DmapVec::Float(x) => {
-                bytes.extend((x.ndim() as i32).to_le_bytes());
-                for &dim in x.shape().iter().rev() {
-                    bytes.extend((dim as i32).to_le_bytes());
-                }
-                for y in x.iter() {
-                    bytes.append(&mut DmapType::as_bytes(y).to_vec());
-                }
-            }
-            DmapVec::Double(x) => {
-                bytes.extend((x.ndim() as i32).to_le_bytes());
-                for &dim in x.shape().iter().rev() {
-                    bytes.extend((dim as i32).to_le_bytes());
-                }
-                for y in x.iter() {
-                    bytes.append(&mut DmapType::as_bytes(y).to_vec());
-                }
-            }
+            DmapVec::Char(x) => vec_to_bytes!(bytes, x),
+            DmapVec::Short(x) => vec_to_bytes!(bytes, x),
+            DmapVec::Int(x) => vec_to_bytes!(bytes, x),
+            DmapVec::Long(x) => vec_to_bytes!(bytes, x),
+            DmapVec::Uchar(x) => vec_to_bytes!(bytes, x),
+            DmapVec::Ushort(x) => vec_to_bytes!(bytes, x),
+            DmapVec::Uint(x) => vec_to_bytes!(bytes, x),
+            DmapVec::Ulong(x) => vec_to_bytes!(bytes, x),
+            DmapVec::Float(x) => vec_to_bytes!(bytes, x),
+            DmapVec::Double(x) => vec_to_bytes!(bytes, x),
         };
         bytes
     }
@@ -410,186 +345,66 @@ impl<'py> FromPyObject<'py> for DmapVec {
         }
     }
 }
-impl From<ArrayD<i8>> for DmapVec {
-    fn from(value: ArrayD<i8>) -> Self {
-        DmapVec::Char(value)
-    }
-}
-impl From<ArrayD<i16>> for DmapVec {
-    fn from(value: ArrayD<i16>) -> Self {
-        DmapVec::Short(value)
-    }
-}
-impl From<ArrayD<i32>> for DmapVec {
-    fn from(value: ArrayD<i32>) -> Self {
-        DmapVec::Int(value)
-    }
-}
-impl From<ArrayD<i64>> for DmapVec {
-    fn from(value: ArrayD<i64>) -> Self {
-        DmapVec::Long(value)
-    }
-}
-impl From<ArrayD<u8>> for DmapVec {
-    fn from(value: ArrayD<u8>) -> Self {
-        DmapVec::Uchar(value)
-    }
-}
-impl From<ArrayD<u16>> for DmapVec {
-    fn from(value: ArrayD<u16>) -> Self {
-        DmapVec::Ushort(value)
-    }
-}
-impl From<ArrayD<u32>> for DmapVec {
-    fn from(value: ArrayD<u32>) -> Self {
-        DmapVec::Uint(value)
-    }
-}
-impl From<ArrayD<u64>> for DmapVec {
-    fn from(value: ArrayD<u64>) -> Self {
-        DmapVec::Ulong(value)
-    }
-}
-impl From<ArrayD<f32>> for DmapVec {
-    fn from(value: ArrayD<f32>) -> Self {
-        DmapVec::Float(value)
-    }
-}
-impl From<ArrayD<f64>> for DmapVec {
-    fn from(value: ArrayD<f64>) -> Self {
-        DmapVec::Double(value)
-    }
-}
-impl TryFrom<DmapVec> for ArrayD<i8> {
-    type Error = DmapError;
 
-    fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Char(x) = value {
-            Ok(x)
-        } else {
-            Err(DmapError::InvalidVector(
-                "Cannot convert to ArrayD<i8>".to_string(),
-            ))
+/// Generates trait implementations for infallible conversion into DmapVec and fallible conversion
+/// back.
+/// Example: `vec_impls!(ArrayD<i8>, DmapVec::Char)` will generate `impl From<ArrayD<i8>> for
+/// DmapVec` and `impl TryFrom<DmapVec> for ArrayD<i8>` code blocks.
+macro_rules! vec_impls {
+    ($type:ty, $enum_var:path) => {
+        impl From<$type> for DmapVec {
+            fn from(value: $type) -> Self {
+                $enum_var(value)
+            }
         }
-    }
-}
-impl TryFrom<DmapVec> for ArrayD<i16> {
-    type Error = DmapError;
 
-    fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Short(x) = value {
-            Ok(x)
-        } else {
-            Err(DmapError::InvalidVector(
-                "Cannot convert to ArrayD<i16>".to_string(),
-            ))
-        }
-    }
-}
-impl TryFrom<DmapVec> for ArrayD<i32> {
-    type Error = DmapError;
+        impl TryFrom<DmapVec> for $type {
+            type Error = DmapError;
 
-    fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Int(x) = value {
-            Ok(x)
-        } else {
-            Err(DmapError::InvalidVector(
-                "Cannot convert to ArrayD<i32>".to_string(),
-            ))
+            fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
+                if let $enum_var(x) = value {
+                    Ok(x)
+                } else {
+                    Err(DmapError::InvalidVector(format!(
+                        "Cannot convert to {}",
+                        stringify!($type)
+                    )))
+                }
+            }
         }
-    }
-}
-impl TryFrom<DmapVec> for ArrayD<i64> {
-    type Error = DmapError;
 
-    fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Long(x) = value {
-            Ok(x)
-        } else {
-            Err(DmapError::InvalidVector(
-                "Cannot convert to ArrayD<i64>".to_string(),
-            ))
+        impl From<$type> for DmapField {
+            fn from(value: $type) -> Self {
+                DmapField::Vector($enum_var(value))
+            }
         }
-    }
-}
-impl TryFrom<DmapVec> for ArrayD<u8> {
-    type Error = DmapError;
 
-    fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Uchar(x) = value {
-            Ok(x)
-        } else {
-            Err(DmapError::InvalidVector(
-                "Cannot convert to ArrayD<u8>".to_string(),
-            ))
-        }
-    }
-}
-impl TryFrom<DmapVec> for ArrayD<u16> {
-    type Error = DmapError;
+        impl TryFrom<DmapField> for $type {
+            type Error = DmapError;
 
-    fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Ushort(x) = value {
-            Ok(x)
-        } else {
-            Err(DmapError::InvalidVector(
-                "Cannot convert to ArrayD<u16>".to_string(),
-            ))
+            fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
+                match value {
+                    DmapField::Vector(x) => x.try_into(),
+                    _ => Err(Self::Error::InvalidVector(format!(
+                        "Cannot interpret as {}",
+                        stringify!($type)
+                    ))),
+                }
+            }
         }
-    }
+    };
 }
-impl TryFrom<DmapVec> for ArrayD<u32> {
-    type Error = DmapError;
 
-    fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Uint(x) = value {
-            Ok(x)
-        } else {
-            Err(DmapError::InvalidVector(
-                "Cannot convert to ArrayD<u32>".to_string(),
-            ))
-        }
-    }
-}
-impl TryFrom<DmapVec> for ArrayD<u64> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Ulong(x) = value {
-            Ok(x)
-        } else {
-            Err(DmapError::InvalidVector(
-                "Cannot convert to ArrayD<u64>".to_string(),
-            ))
-        }
-    }
-}
-impl TryFrom<DmapVec> for ArrayD<f32> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Float(x) = value {
-            Ok(x)
-        } else {
-            Err(DmapError::InvalidVector(
-                "Cannot convert to ArrayD<f32>".to_string(),
-            ))
-        }
-    }
-}
-impl TryFrom<DmapVec> for ArrayD<f64> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapVec) -> std::result::Result<Self, Self::Error> {
-        if let DmapVec::Double(x) = value {
-            Ok(x)
-        } else {
-            Err(DmapError::InvalidVector(
-                "Cannot convert to ArrayD<f64>".to_string(),
-            ))
-        }
-    }
-}
+vec_impls!(ArrayD<i8>, DmapVec::Char);
+vec_impls!(ArrayD<i16>, DmapVec::Short);
+vec_impls!(ArrayD<i32>, DmapVec::Int);
+vec_impls!(ArrayD<i64>, DmapVec::Long);
+vec_impls!(ArrayD<u8>, DmapVec::Uchar);
+vec_impls!(ArrayD<u16>, DmapVec::Ushort);
+vec_impls!(ArrayD<u32>, DmapVec::Uint);
+vec_impls!(ArrayD<u64>, DmapVec::Ulong);
+vec_impls!(ArrayD<f32>, DmapVec::Float);
+vec_impls!(ArrayD<f64>, DmapVec::Double);
 
 /// A generic field of a DMAP record.
 ///
@@ -618,363 +433,48 @@ impl IntoPy<PyObject> for DmapField {
         }
     }
 }
-impl From<i8> for DmapField {
-    fn from(value: i8) -> Self {
-        DmapField::Scalar(DmapScalar::Char(value))
-    }
-}
-impl From<i16> for DmapField {
-    fn from(value: i16) -> Self {
-        DmapField::Scalar(DmapScalar::Short(value))
-    }
-}
-impl From<i32> for DmapField {
-    fn from(value: i32) -> Self {
-        DmapField::Scalar(DmapScalar::Int(value))
-    }
-}
-impl From<i64> for DmapField {
-    fn from(value: i64) -> Self {
-        DmapField::Scalar(DmapScalar::Long(value))
-    }
-}
-impl From<u8> for DmapField {
-    fn from(value: u8) -> Self {
-        DmapField::Scalar(DmapScalar::Uchar(value))
-    }
-}
-impl From<u16> for DmapField {
-    fn from(value: u16) -> Self {
-        DmapField::Scalar(DmapScalar::Ushort(value))
-    }
-}
-impl From<u32> for DmapField {
-    fn from(value: u32) -> Self {
-        DmapField::Scalar(DmapScalar::Uint(value))
-    }
-}
-impl From<u64> for DmapField {
-    fn from(value: u64) -> Self {
-        DmapField::Scalar(DmapScalar::Ulong(value))
-    }
-}
-impl From<f32> for DmapField {
-    fn from(value: f32) -> Self {
-        DmapField::Scalar(DmapScalar::Float(value))
-    }
-}
-impl From<f64> for DmapField {
-    fn from(value: f64) -> Self {
-        DmapField::Scalar(DmapScalar::Double(value))
-    }
-}
-impl From<String> for DmapField {
-    fn from(value: String) -> Self {
-        DmapField::Scalar(DmapScalar::String(value))
-    }
-}
-impl From<ArrayD<i8>> for DmapField {
-    fn from(value: ArrayD<i8>) -> Self {
-        DmapField::Vector(DmapVec::Char(value))
-    }
-}
-impl From<ArrayD<i16>> for DmapField {
-    fn from(value: ArrayD<i16>) -> Self {
-        DmapField::Vector(DmapVec::Short(value))
-    }
-}
-impl From<ArrayD<i32>> for DmapField {
-    fn from(value: ArrayD<i32>) -> Self {
-        DmapField::Vector(DmapVec::Int(value))
-    }
-}
-impl From<ArrayD<i64>> for DmapField {
-    fn from(value: ArrayD<i64>) -> Self {
-        DmapField::Vector(DmapVec::Long(value))
-    }
-}
-impl From<ArrayD<u8>> for DmapField {
-    fn from(value: ArrayD<u8>) -> Self {
-        DmapField::Vector(DmapVec::Uchar(value))
-    }
-}
-impl From<ArrayD<u16>> for DmapField {
-    fn from(value: ArrayD<u16>) -> Self {
-        DmapField::Vector(DmapVec::Ushort(value))
-    }
-}
-impl From<ArrayD<u32>> for DmapField {
-    fn from(value: ArrayD<u32>) -> Self {
-        DmapField::Vector(DmapVec::Uint(value))
-    }
-}
-impl From<ArrayD<u64>> for DmapField {
-    fn from(value: ArrayD<u64>) -> Self {
-        DmapField::Vector(DmapVec::Ulong(value))
-    }
-}
-impl From<ArrayD<f32>> for DmapField {
-    fn from(value: ArrayD<f32>) -> Self {
-        DmapField::Vector(DmapVec::Float(value))
-    }
-}
-impl From<ArrayD<f64>> for DmapField {
-    fn from(value: ArrayD<f64>) -> Self {
-        DmapField::Vector(DmapVec::Double(value))
-    }
-}
-impl TryFrom<DmapField> for i8 {
-    type Error = DmapError;
 
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar(
-                "Cannot interpret as i8".to_string(),
-            )),
+/// Macro for implementing conversion traits between primitives and `DmapField`, `DmapScalar`
+/// types.
+///
+/// Example: `scalar_impls(i8, DmapScalar::Char)` will implement:
+///   `From<i8> for DmapField`
+///   `TryFrom<DmapField> for i8`
+///   `TryFrom<DmapScalar> for i8`
+macro_rules! scalar_impls {
+    ($type:ty, $enum_var:path, $type_var:path) => {
+        impl From<$type> for DmapField {
+            fn from(value: $type) -> Self {
+                DmapField::Scalar($enum_var(value))
+            }
         }
-    }
-}
-impl TryFrom<DmapField> for i16 {
-    type Error = DmapError;
+        impl TryFrom<DmapField> for $type {
+            type Error = DmapError;
 
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar(
-                "Cannot interpret as i16".to_string(),
-            )),
+            fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
+                match value {
+                    DmapField::Scalar(x) => x.try_into(),
+                    _ => Err(Self::Error::InvalidScalar(format!(
+                        "Cannot interpret {value:?} as {}",
+                        stringify!($type)
+                    ))),
+                }
+            }
         }
-    }
+    };
 }
-impl TryFrom<DmapField> for i32 {
-    type Error = DmapError;
 
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar(
-                "Cannot interpret as i32".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for i64 {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar(
-                "Cannot interpret as i64".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for u8 {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar(
-                "Cannot interpret as u8".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for u16 {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar(
-                "Cannot interpret as u16".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for u32 {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar(
-                "Cannot interpret as u32".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for u64 {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar(
-                "Cannot interpret as u64".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for f32 {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar(
-                "Cannot interpret as f32".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for f64 {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar(
-                "Cannot interpret as f64".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for String {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Scalar(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidScalar(
-                "Cannot interpret vector as String".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for ArrayD<i8> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector(
-                "Cannot interpret as ArrayD<i8>".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for ArrayD<i16> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector(
-                "Cannot interpret as ArrayD<i16>".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for ArrayD<i32> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector(
-                "Cannot interpret as ArrayD<i32>".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for ArrayD<i64> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector(
-                "Cannot interpret as ArrayD<i64>".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for ArrayD<u8> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector(
-                "Cannot interpret as ArrayD<u8>".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for ArrayD<u16> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector(
-                "Cannot interpret as ArrayD<u16>".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for ArrayD<u32> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector(
-                "Cannot interpret as ArrayD<u32>".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for ArrayD<u64> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector(
-                "Cannot interpret as ArrayD<u64>".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for ArrayD<f32> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector(
-                "Cannot interpret as ArrayD<f32>".to_string(),
-            )),
-        }
-    }
-}
-impl TryFrom<DmapField> for ArrayD<f64> {
-    type Error = DmapError;
-
-    fn try_from(value: DmapField) -> std::result::Result<Self, Self::Error> {
-        match value {
-            DmapField::Vector(x) => x.try_into(),
-            _ => Err(Self::Error::InvalidVector(
-                "Cannot interpret as ArrayD<f64>".to_string(),
-            )),
-        }
-    }
-}
+scalar_impls!(i8, DmapScalar::Char, Type::Char);
+scalar_impls!(i16, DmapScalar::Short, Type::Short);
+scalar_impls!(i32, DmapScalar::Int, Type::Int);
+scalar_impls!(i64, DmapScalar::Long, Type::Long);
+scalar_impls!(u8, DmapScalar::Uchar, Type::Uchar);
+scalar_impls!(u16, DmapScalar::Ushort, Type::Ushort);
+scalar_impls!(u32, DmapScalar::Uint, Type::Uint);
+scalar_impls!(u64, DmapScalar::Ulong, Type::Ulong);
+scalar_impls!(f32, DmapScalar::Float, Type::Float);
+scalar_impls!(f64, DmapScalar::Double, Type::Double);
+scalar_impls!(String, DmapScalar::String, Type::String);
 
 /// Trait for raw types that can be stored in DMAP files.
 pub trait DmapType: std::fmt::Debug {
@@ -991,192 +491,60 @@ pub trait DmapType: std::fmt::Debug {
     /// Get the `Type` variant that represents `self`
     fn dmap_type(&self) -> Type;
 }
-impl DmapType for i8 {
-    fn size() -> usize {
-        1
-    }
-    fn as_bytes(&self) -> Vec<u8> {
-        AsBytes::as_bytes(self).to_vec()
-    }
-    fn from_bytes(bytes: &[u8]) -> Result<Self>
-    where
-        Self: Sized,
-    {
-        Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
-    }
-    fn dmap_type(&self) -> Type {
-        Type::Char
-    }
-}
-impl DmapType for i16 {
-    fn size() -> usize {
-        2
-    }
-    fn as_bytes(&self) -> Vec<u8> {
-        let mut bytes = [0; 2];
-        LittleEndian::write_i16(&mut bytes, *self);
-        bytes.to_vec()
-    }
-    fn from_bytes(bytes: &[u8]) -> Result<Self>
-    where
-        Self: Sized,
-    {
-        Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
-    }
-    fn dmap_type(&self) -> Type {
-        Type::Short
-    }
-}
-impl DmapType for i32 {
-    fn size() -> usize {
-        4
-    }
-    fn as_bytes(&self) -> Vec<u8> {
-        let mut bytes = [0; 4];
-        LittleEndian::write_i32(&mut bytes, *self);
-        bytes.to_vec()
-    }
-    fn from_bytes(bytes: &[u8]) -> Result<Self>
-    where
-        Self: Sized,
-    {
-        Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
-    }
-    fn dmap_type(&self) -> Type {
-        Type::Int
+
+/// Macro for implementing DmapType trait for primitive types.
+/// Example: `type_impls!(i8, Type::Char, 1)`
+macro_rules! type_impls {
+    // This variant captures single-byte types
+    ($type:ty, $enum_var:path, 1) => {
+        impl DmapType for $type {
+            fn size() -> usize { 1 }
+            fn as_bytes(&self) -> Vec<u8> {
+                AsBytes::as_bytes(self).to_vec()
+            }
+            fn from_bytes(bytes: &[u8]) -> Result<Self>
+            where
+                Self: Sized,
+            {
+                Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
+            }
+            fn dmap_type(&self) -> Type { $enum_var }
+        }
+    };
+    // This variant captures multi-byte primitive types
+    ($type:ty, $enum_var:path, $num_bytes:expr) => {
+        paste! {
+            impl DmapType for $type {
+                fn size() -> usize { $num_bytes }
+                fn as_bytes(&self) -> Vec<u8> {
+                    let mut bytes = [0; $num_bytes];
+                    LittleEndian::[< write_ $type >](&mut bytes, *self);
+                    bytes.to_vec()
+                }
+                fn from_bytes(bytes: &[u8]) -> Result<Self>
+                where
+                    Self: Sized,
+                {
+                    Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
+                }
+                fn dmap_type(&self) -> Type { $enum_var }
+            }
+        }
     }
 }
-impl DmapType for i64 {
-    fn size() -> usize {
-        8
-    }
-    fn as_bytes(&self) -> Vec<u8> {
-        let mut bytes = [0; 8];
-        LittleEndian::write_i64(&mut bytes, *self);
-        bytes.to_vec()
-    }
-    fn from_bytes(bytes: &[u8]) -> Result<Self>
-    where
-        Self: Sized,
-    {
-        Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
-    }
-    fn dmap_type(&self) -> Type {
-        Type::Long
-    }
-}
-impl DmapType for u8 {
-    fn size() -> usize {
-        1
-    }
-    fn as_bytes(&self) -> Vec<u8> {
-        AsBytes::as_bytes(self).to_vec()
-    }
-    fn from_bytes(bytes: &[u8]) -> Result<Self>
-    where
-        Self: Sized,
-    {
-        Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
-    }
-    fn dmap_type(&self) -> Type {
-        Type::Uchar
-    }
-}
-impl DmapType for u16 {
-    fn size() -> usize {
-        2
-    }
-    fn as_bytes(&self) -> Vec<u8> {
-        let mut bytes = [0; 2];
-        LittleEndian::write_u16(&mut bytes, *self);
-        bytes.to_vec()
-    }
-    fn from_bytes(bytes: &[u8]) -> Result<Self>
-    where
-        Self: Sized,
-    {
-        Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
-    }
-    fn dmap_type(&self) -> Type {
-        Type::Ushort
-    }
-}
-impl DmapType for u32 {
-    fn size() -> usize {
-        4
-    }
-    fn as_bytes(&self) -> Vec<u8> {
-        let mut bytes = [0; 4];
-        LittleEndian::write_u32(&mut bytes, *self);
-        bytes.to_vec()
-    }
-    fn from_bytes(bytes: &[u8]) -> Result<Self>
-    where
-        Self: Sized,
-    {
-        Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
-    }
-    fn dmap_type(&self) -> Type {
-        Type::Uint
-    }
-}
-impl DmapType for u64 {
-    fn size() -> usize {
-        8
-    }
-    fn as_bytes(&self) -> Vec<u8> {
-        let mut bytes = [0; 8];
-        LittleEndian::write_u64(&mut bytes, *self);
-        bytes.to_vec()
-    }
-    fn from_bytes(bytes: &[u8]) -> Result<Self>
-    where
-        Self: Sized,
-    {
-        Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
-    }
-    fn dmap_type(&self) -> Type {
-        Type::Ulong
-    }
-}
-impl DmapType for f32 {
-    fn size() -> usize {
-        4
-    }
-    fn as_bytes(&self) -> Vec<u8> {
-        let mut bytes = [0; 4];
-        LittleEndian::write_f32(&mut bytes, *self);
-        bytes.to_vec()
-    }
-    fn from_bytes(bytes: &[u8]) -> Result<Self>
-    where
-        Self: Sized,
-    {
-        Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
-    }
-    fn dmap_type(&self) -> Type {
-        Type::Float
-    }
-}
-impl DmapType for f64 {
-    fn size() -> usize {
-        8
-    }
-    fn as_bytes(&self) -> Vec<u8> {
-        let mut bytes = [0; 8];
-        LittleEndian::write_f64(&mut bytes, *self);
-        bytes.to_vec()
-    }
-    fn from_bytes(bytes: &[u8]) -> Result<Self>
-    where
-        Self: Sized,
-    {
-        Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
-    }
-    fn dmap_type(&self) -> Type {
-        Type::Double
-    }
-}
+
+type_impls!(i8, Type::Char, 1);
+type_impls!(i16, Type::Short, 2);
+type_impls!(i32, Type::Int, 4);
+type_impls!(i64, Type::Long, 8);
+type_impls!(u8, Type::Uchar, 1);
+type_impls!(u16, Type::Ushort, 2);
+type_impls!(u32, Type::Uint, 4);
+type_impls!(u64, Type::Ulong, 8);
+type_impls!(f32, Type::Float, 4);
+type_impls!(f64, Type::Double, 8);
+
+// This implementation differs significantly from the others, so it doesn't use the macro
 impl DmapType for String {
     fn size() -> usize {
         0
@@ -1195,6 +563,7 @@ impl DmapType for String {
         Type::String
     }
 }
+
 impl TryFrom<DmapScalar> for u8 {
     type Error = DmapError;
     fn try_from(value: DmapScalar) -> std::result::Result<Self, Self::Error> {
@@ -1611,66 +980,73 @@ pub(crate) fn parse_vector(
         )));
     }
 
+    macro_rules! dmapvec_from_cursor {
+        ($type:ty, $enum_var:path, $dims:ident, $cursor:ident, $num_elements:ident, $name:ident) => {
+            $enum_var(
+                ArrayD::from_shape_vec($dims, read_vector::<$type>($cursor, $num_elements)?)
+                    .map_err(|e| {
+                        DmapError::InvalidVector(format!(
+                            "Could not read in vector field {name}: {e}"
+                        ))
+                    })?,
+            )
+        };
+    }
     let vector: DmapVec = match data_type {
-        Type::Char => DmapVec::Char(
-            ArrayD::from_shape_vec(dimensions, read_vector::<i8>(cursor, total_elements)?)
-                .map_err(|e| {
-                    DmapError::InvalidVector(format!("Could not read in vector field {name}: {e}"))
-                })?,
+        Type::Char => {
+            dmapvec_from_cursor!(i8, DmapVec::Char, dimensions, cursor, total_elements, name)
+        }
+        Type::Short => dmapvec_from_cursor!(
+            i16,
+            DmapVec::Short,
+            dimensions,
+            cursor,
+            total_elements,
+            name
         ),
-        Type::Short => DmapVec::Short(
-            ArrayD::from_shape_vec(dimensions, read_vector::<i16>(cursor, total_elements)?)
-                .map_err(|e| {
-                    DmapError::InvalidVector(format!("Could not read in vector field {name}: {e}"))
-                })?,
+        Type::Int => {
+            dmapvec_from_cursor!(i32, DmapVec::Int, dimensions, cursor, total_elements, name)
+        }
+        Type::Long => {
+            dmapvec_from_cursor!(i64, DmapVec::Long, dimensions, cursor, total_elements, name)
+        }
+        Type::Uchar => {
+            dmapvec_from_cursor!(u8, DmapVec::Uchar, dimensions, cursor, total_elements, name)
+        }
+        Type::Ushort => dmapvec_from_cursor!(
+            u16,
+            DmapVec::Ushort,
+            dimensions,
+            cursor,
+            total_elements,
+            name
         ),
-        Type::Int => DmapVec::Int(
-            ArrayD::from_shape_vec(dimensions, read_vector::<i32>(cursor, total_elements)?)
-                .map_err(|e| {
-                    DmapError::InvalidVector(format!("Could not read in vector field {name}: {e}"))
-                })?,
+        Type::Uint => {
+            dmapvec_from_cursor!(u32, DmapVec::Uint, dimensions, cursor, total_elements, name)
+        }
+        Type::Ulong => dmapvec_from_cursor!(
+            u64,
+            DmapVec::Ulong,
+            dimensions,
+            cursor,
+            total_elements,
+            name
         ),
-        Type::Long => DmapVec::Long(
-            ArrayD::from_shape_vec(dimensions, read_vector::<i64>(cursor, total_elements)?)
-                .map_err(|e| {
-                    DmapError::InvalidVector(format!("Could not read in vector field {name}: {e}"))
-                })?,
+        Type::Float => dmapvec_from_cursor!(
+            f32,
+            DmapVec::Float,
+            dimensions,
+            cursor,
+            total_elements,
+            name
         ),
-        Type::Uchar => DmapVec::Uchar(
-            ArrayD::from_shape_vec(dimensions, read_vector::<u8>(cursor, total_elements)?)
-                .map_err(|e| {
-                    DmapError::InvalidVector(format!("Could not read in vector field {name}: {e}"))
-                })?,
-        ),
-        Type::Ushort => DmapVec::Ushort(
-            ArrayD::from_shape_vec(dimensions, read_vector::<u16>(cursor, total_elements)?)
-                .map_err(|e| {
-                    DmapError::InvalidVector(format!("Could not read in vector field {name}: {e}"))
-                })?,
-        ),
-        Type::Uint => DmapVec::Uint(
-            ArrayD::from_shape_vec(dimensions, read_vector::<u32>(cursor, total_elements)?)
-                .map_err(|e| {
-                    DmapError::InvalidVector(format!("Could not read in vector field {name}: {e}"))
-                })?,
-        ),
-        Type::Ulong => DmapVec::Ulong(
-            ArrayD::from_shape_vec(dimensions, read_vector::<u64>(cursor, total_elements)?)
-                .map_err(|e| {
-                    DmapError::InvalidVector(format!("Could not read in vector field {name}: {e}"))
-                })?,
-        ),
-        Type::Float => DmapVec::Float(
-            ArrayD::from_shape_vec(dimensions, read_vector::<f32>(cursor, total_elements)?)
-                .map_err(|e| {
-                    DmapError::InvalidVector(format!("Could not read in vector field {name}: {e}"))
-                })?,
-        ),
-        Type::Double => DmapVec::Double(
-            ArrayD::from_shape_vec(dimensions, read_vector::<f64>(cursor, total_elements)?)
-                .map_err(|e| {
-                    DmapError::InvalidVector(format!("Could not read in vector field {name}: {e}"))
-                })?,
+        Type::Double => dmapvec_from_cursor!(
+            f64,
+            DmapVec::Double,
+            dimensions,
+            cursor,
+            total_elements,
+            name
         ),
         _ => {
             return Err(DmapError::InvalidVector(format!(
@@ -1726,4 +1102,79 @@ pub(crate) fn read_data<T: DmapType>(cursor: &mut Cursor<Vec<u8>>) -> Result<T> 
     cursor.set_position({ position + data_size } as u64);
 
     Ok(parsed_data)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_read_vec() {
+        let bytes: Vec<u8> = vec![1, 0, 1, 0];
+        let mut cursor = Cursor::new(bytes.clone());
+        let data = read_vector::<u8>(&mut cursor, 4);
+        assert!(data.is_ok());
+        assert_eq!(data.unwrap(), vec![1, 0, 1, 0]);
+
+        cursor.set_position(0);
+        let data = read_vector::<u16>(&mut cursor, 2);
+        assert!(data.is_ok());
+        assert_eq!(data.unwrap(), vec![1, 1]);
+
+        cursor.set_position(0);
+        let data = read_vector::<i8>(&mut cursor, 4);
+        assert!(data.is_ok());
+        assert_eq!(data.unwrap(), vec![1, 0, 1, 0]);
+
+        cursor.set_position(0);
+        let data = read_vector::<i16>(&mut cursor, 2);
+        assert!(data.is_ok());
+        assert_eq!(data.unwrap(), vec![1, 1]);
+    }
+
+    #[test]
+    fn test_read_data() {
+        // bytes are little-endian, so this will come out to 1 no matter if you interpret the first
+        // number of bytes as u8, u16, u32, u64, i8, i16, i32, or i64.
+        let bytes: Vec<u8> = vec![1, 0, 0, 0, 0, 0, 0, 0];
+        let mut cursor = Cursor::new(bytes);
+        let data = read_data::<u8>(&mut cursor);
+        assert!(data.is_ok());
+        assert_eq!(data.unwrap(), 1);
+
+        cursor.set_position(0);
+        let data = read_data::<u16>(&mut cursor);
+        assert!(data.is_ok());
+        assert_eq!(data.unwrap(), 1);
+
+        cursor.set_position(0);
+        let data = read_data::<u32>(&mut cursor);
+        assert!(data.is_ok());
+        assert_eq!(data.unwrap(), 1);
+
+        cursor.set_position(0);
+        let data = read_data::<u64>(&mut cursor);
+        assert!(data.is_ok());
+        assert_eq!(data.unwrap(), 1);
+
+        cursor.set_position(0);
+        let data = read_data::<i8>(&mut cursor);
+        assert!(data.is_ok());
+        assert_eq!(data.unwrap(), 1);
+
+        cursor.set_position(0);
+        let data = read_data::<i16>(&mut cursor);
+        assert!(data.is_ok());
+        assert_eq!(data.unwrap(), 1);
+
+        cursor.set_position(0);
+        let data = read_data::<i32>(&mut cursor);
+        assert!(data.is_ok());
+        assert_eq!(data.unwrap(), 1);
+
+        cursor.set_position(0);
+        let data = read_data::<i64>(&mut cursor);
+        assert!(data.is_ok());
+        assert_eq!(data.unwrap(), 1);
+    }
 }

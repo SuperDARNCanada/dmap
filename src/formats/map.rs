@@ -1,7 +1,5 @@
-use crate::error::DmapError;
-use crate::formats::dmap::Record;
-use crate::types::{DmapField, DmapType, Fields, Type};
-use indexmap::IndexMap;
+use crate::record::create_record_type;
+use crate::types::{Fields, Type};
 use lazy_static::lazy_static;
 
 static SCALAR_FIELDS: [(&str, Type); 35] = [
@@ -167,53 +165,4 @@ lazy_static! {
     };
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct MapRecord {
-    pub data: IndexMap<String, DmapField>,
-}
-
-impl MapRecord {
-    pub fn get(&self, key: &String) -> Option<&DmapField> {
-        self.data.get(key)
-    }
-    pub fn keys(&self) -> Vec<&String> {
-        self.data.keys().collect()
-    }
-}
-
-impl Record<'_> for MapRecord {
-    fn inner(self) -> IndexMap<String, DmapField> {
-        self.data
-    }
-
-    fn new(fields: &mut IndexMap<String, DmapField>) -> Result<MapRecord, DmapError> {
-        match Self::check_fields(fields, &MAP_FIELDS) {
-            Ok(_) => {}
-            Err(e) => Err(e)?,
-        }
-
-        Ok(MapRecord {
-            data: fields.to_owned(),
-        })
-    }
-    fn to_bytes(&self) -> Result<Vec<u8>, DmapError> {
-        let (num_scalars, num_vectors, mut data_bytes) =
-            Self::data_to_bytes(&self.data, &MAP_FIELDS)?;
-
-        let mut bytes: Vec<u8> = vec![];
-        bytes.extend((65537_i32).as_bytes()); // No idea why this is what it is, copied from backscatter
-        bytes.extend((data_bytes.len() as i32 + 16).as_bytes()); // +16 for code, length, num_scalars, num_vectors
-        bytes.extend(num_scalars.as_bytes());
-        bytes.extend(num_vectors.as_bytes());
-        bytes.append(&mut data_bytes); // consumes data_bytes
-        Ok(bytes)
-    }
-}
-
-impl TryFrom<&mut IndexMap<String, DmapField>> for MapRecord {
-    type Error = DmapError;
-
-    fn try_from(value: &mut IndexMap<String, DmapField>) -> Result<Self, Self::Error> {
-        Self::coerce::<MapRecord>(value, &MAP_FIELDS)
-    }
-}
+create_record_type!(map, MAP_FIELDS);
