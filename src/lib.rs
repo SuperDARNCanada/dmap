@@ -247,9 +247,9 @@ fn write_dmap_py(recs: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -> Py
 #[pyfunction]
 #[pyo3(name = "write_dmap_bytes")]
 #[pyo3(text_signature = "(recs: list[dict], /)")]
-fn write_dmap_bytes_py(recs: Vec<IndexMap<String, DmapField>>) -> PyResult<Vec<u8>> {
+fn write_dmap_bytes_py(py: Python, recs: Vec<IndexMap<String, DmapField>>) -> PyResult<PyObject> {
     let bytes = try_to_bytes::<DmapRecord>(recs).map_err(PyErr::from)?;
-    Ok(bytes)
+    Ok(PyBytes::new_bound(py, &bytes).into())
 }
 
 /// Generates functions exposed to the Python API for writing specific file types.
