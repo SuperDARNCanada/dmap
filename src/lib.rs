@@ -163,7 +163,7 @@ read_rust!(dmap);
 /// Generates two functions: `read_[type]` and `read_[type]_lax`, for strict and lax
 /// reading, respectively.
 macro_rules! read_py {
-    ($name:ident, $py_name:literal, $lax_name:literal, $bytes_name:literal) => {
+    ($name:ident, $py_name:literal, $lax_name:literal, $bytes_name:literal, $lax_bytes_name:literal) => {
         paste! {
             #[doc = "Reads a `" $name:upper "` file, returning a list of dictionaries containing the fields." ]
             #[pyfunction]
@@ -204,27 +204,44 @@ macro_rules! read_py {
                     .collect()
                 )
             }
+
+            #[doc = "Reads a `" $name:upper "` file, returning a tuple of" ]
+            #[doc = "(list of dictionaries containing the fields, byte where first corrupted record starts). "]
+            #[pyfunction]
+            #[pyo3(name = $lax_bytes_name)]
+            #[pyo3(text_signature = "(buf: bytes, /)")]
+            fn [< read_ $name _bytes_lax_py >](
+                bytes: &[u8],
+            ) -> PyResult<(Vec<IndexMap<String, DmapField>>, Option<usize>)> {
+                let result = [< $name:camel Record >]::read_records_lax(bytes).map_err(PyErr::from)?;
+                Ok((
+                    result.0.into_iter().map(|rec| rec.inner()).collect(),
+                    result.1,
+                ))
+            }
         }
     }
 }
 
-read_py!(iqdat, "read_iqdat", "read_iqdat_lax", "read_iqdat_bytes");
+read_py!(iqdat, "read_iqdat", "read_iqdat_lax", "read_iqdat_bytes", "read_iqdat_bytes_lax");
 read_py!(
     rawacf,
     "read_rawacf",
     "read_rawacf_lax",
-    "read_rawacf_bytes"
+    "read_rawacf_bytes",
+    "read_rawacf_bytes_lax"
 );
 read_py!(
     fitacf,
     "read_fitacf",
     "read_fitacf_lax",
-    "read_fitacf_bytes"
+    "read_fitacf_bytes",
+    "read_fitacf_bytes_lax"
 );
-read_py!(grid, "read_grid", "read_grid_lax", "read_grid_bytes");
-read_py!(map, "read_map", "read_map_lax", "read_map_bytes");
-read_py!(snd, "read_snd", "read_snd_lax", "read_snd_bytes");
-read_py!(dmap, "read_dmap", "read_dmap_lax", "read_dmap_bytes");
+read_py!(grid, "read_grid", "read_grid_lax", "read_grid_bytes", "read_grid_bytes_lax");
+read_py!(map, "read_map", "read_map_lax", "read_map_bytes", "read_map_bytes_lax");
+read_py!(snd, "read_snd", "read_snd_lax", "read_snd_bytes", "read_snd_bytes_lax");
+read_py!(dmap, "read_dmap", "read_dmap_lax", "read_dmap_bytes", "read_dmap_bytes_lax");
 
 /// Checks that a list of dictionaries contains DMAP records, then appends to outfile.
 ///
@@ -314,6 +331,15 @@ fn dmap(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(read_snd_bytes_py, m)?)?;
     m.add_function(wrap_pyfunction!(read_grid_bytes_py, m)?)?;
     m.add_function(wrap_pyfunction!(read_map_bytes_py, m)?)?;
+
+    // Lax read functions from byte buffer
+    m.add_function(wrap_pyfunction!(read_dmap_bytes_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_iqdat_bytes_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_rawacf_bytes_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_fitacf_bytes_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_snd_bytes_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_grid_bytes_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_map_bytes_lax_py, m)?)?;
 
     // Write functions
     m.add_function(wrap_pyfunction!(write_dmap_py, m)?)?;
