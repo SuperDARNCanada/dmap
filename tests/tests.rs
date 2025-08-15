@@ -92,6 +92,14 @@ macro_rules! make_test {
                 // Clean up tempfile
                 remove_file(&tempfile).expect("Unable to delete tempfile");
             }
+
+            #[test]
+            fn [< test_ $record_type _sniff >] () {
+                let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($record_type)));
+                let data = [< $record_type:camel Record >]::sniff_file(&filename).expect("Unable to sniff file");
+                let all_recs = [< $record_type:camel Record >]::read_file(&filename).expect("Unable to read file");
+                assert_eq!(data, all_recs[0])
+            }
         }
     };
 }

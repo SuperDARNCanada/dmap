@@ -21,6 +21,36 @@ pub trait Record<'a>:
     /// Reads from `dmap_data` and parses into `Vec<Self>`.
     ///
     /// Returns `DmapError` if `dmap_data` cannot be read or contains invalid data.
+    fn read_first_record(mut dmap_data: impl Read) -> Result<Self, DmapError>
+    where
+        Self: Sized,
+        Self: Send,
+    {
+        let mut buffer = [0; 8];  // record size should be an i32 of the data
+        let read_result = dmap_data.read(&mut buffer[..])?;
+        if read_result < buffer.len() {
+            return Err(DmapError::CorruptStream("Unable to read size of first record"))
+        }
+
+        let rec_size = i32::from_le_bytes(buffer[4..8].try_into().unwrap()) as usize; // advance 4 bytes, skipping the "code" field
+        if rec_size <= 0 {
+            return Err(DmapError::InvalidRecord(format!(
+                "Record 0 starting at byte 0 has non-positive size {} <= 0",
+                rec_size
+            )));
+        }
+
+        let mut rec = vec![0; rec_size];
+        rec[0..8].clone_from_slice(&buffer[..]);
+        dmap_data.read_exact(&mut rec[8..])?;
+        let first_rec = Self::parse_record(&mut Cursor::new(rec))?;
+
+        Ok(first_rec)
+    }
+
+    /// Reads from `dmap_data` and parses into `Vec<Self>`.
+    ///
+    /// Returns `DmapError` if `dmap_data` cannot be read or contains invalid data.
     fn read_records(mut dmap_data: impl Read) -> Result<Vec<Self>, DmapError>
     where
         Self: Sized,
@@ -168,6 +198,22 @@ pub trait Record<'a>:
                 Self::read_records_lax(compressor)
             }
             _ => Self::read_records_lax(file),
+        }
+    }
+
+    /// Reads the first record of a DMAP file of type `Self`.
+    fn sniff_file(infile: &PathBuf) -> Result<Self, DmapError>
+    where
+        Self: Sized,
+        Self: Send,
+    {
+        let file = File::open(infile)?;
+        match infile.extension() {
+            Some(ext) if ext == OsStr::new("bz2") => {
+                let compressor = BzDecoder::new(file);
+                Self::read_first_record(compressor)
+            }
+            _ => Self::read_first_record(file),
         }
     }
 
