@@ -163,7 +163,7 @@ read_rust!(dmap);
 /// Generates two functions: `read_[type]` and `read_[type]_lax`, for strict and lax
 /// reading, respectively.
 macro_rules! read_py {
-    ($name:ident, $py_name:literal, $lax_name:literal, $bytes_name:literal, $lax_bytes_name:literal) => {
+    ($name:ident, $py_name:literal, $lax_name:literal, $bytes_name:literal, $lax_bytes_name:literal, $sniff_name:literal) => {
         paste! {
             #[doc = "Reads a `" $name:upper "` file, returning a list of dictionaries containing the fields." ]
             #[pyfunction]
@@ -219,29 +219,42 @@ macro_rules! read_py {
                     result.1,
                 ))
             }
+
+            #[doc = "Reads a `" $name:upper "` file, returning the first record." ]
+            #[pyfunction]
+            #[pyo3(name = $sniff_name)]
+            #[pyo3(text_signature = "(infile: str, /)")]
+            fn [< sniff_ $name _py >](infile: PathBuf) -> PyResult<IndexMap<String, DmapField>> {
+                Ok([< $name:camel Record >]::sniff_file(&infile)
+                    .map_err(PyErr::from)?
+                    .inner()
+                )
+            }
         }
     }
 }
 
-read_py!(iqdat, "read_iqdat", "read_iqdat_lax", "read_iqdat_bytes", "read_iqdat_bytes_lax");
+read_py!(iqdat, "read_iqdat", "read_iqdat_lax", "read_iqdat_bytes", "read_iqdat_bytes_lax", "sniff_iqdat");
 read_py!(
     rawacf,
     "read_rawacf",
     "read_rawacf_lax",
     "read_rawacf_bytes",
-    "read_rawacf_bytes_lax"
+    "read_rawacf_bytes_lax",
+    "sniff_rawacf"
 );
 read_py!(
     fitacf,
     "read_fitacf",
     "read_fitacf_lax",
     "read_fitacf_bytes",
-    "read_fitacf_bytes_lax"
+    "read_fitacf_bytes_lax",
+    "sniff_fitacf"
 );
-read_py!(grid, "read_grid", "read_grid_lax", "read_grid_bytes", "read_grid_bytes_lax");
-read_py!(map, "read_map", "read_map_lax", "read_map_bytes", "read_map_bytes_lax");
-read_py!(snd, "read_snd", "read_snd_lax", "read_snd_bytes", "read_snd_bytes_lax");
-read_py!(dmap, "read_dmap", "read_dmap_lax", "read_dmap_bytes", "read_dmap_bytes_lax");
+read_py!(grid, "read_grid", "read_grid_lax", "read_grid_bytes", "read_grid_bytes_lax", "sniff_grid");
+read_py!(map, "read_map", "read_map_lax", "read_map_bytes", "read_map_bytes_lax", "sniff_map");
+read_py!(snd, "read_snd", "read_snd_lax", "read_snd_bytes", "read_snd_bytes_lax", "sniff_snd");
+read_py!(dmap, "read_dmap", "read_dmap_lax", "read_dmap_bytes", "read_dmap_bytes_lax", "sniff_dmap");
 
 /// Checks that a list of dictionaries contains DMAP records, then appends to outfile.
 ///
@@ -358,6 +371,15 @@ fn dmap(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(write_snd_bytes_py, m)?)?;
     m.add_function(wrap_pyfunction!(write_grid_bytes_py, m)?)?;
     m.add_function(wrap_pyfunction!(write_map_bytes_py, m)?)?;
+
+    // Sniff the first record
+    m.add_function(wrap_pyfunction!(sniff_dmap_py, m)?)?;
+    m.add_function(wrap_pyfunction!(sniff_iqdat_py, m)?)?;
+    m.add_function(wrap_pyfunction!(sniff_rawacf_py, m)?)?;
+    m.add_function(wrap_pyfunction!(sniff_fitacf_py, m)?)?;
+    m.add_function(wrap_pyfunction!(sniff_snd_py, m)?)?;
+    m.add_function(wrap_pyfunction!(sniff_grid_py, m)?)?;
+    m.add_function(wrap_pyfunction!(sniff_map_py, m)?)?;
 
     Ok(())
 }
