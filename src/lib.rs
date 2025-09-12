@@ -5,6 +5,7 @@
 //! For more information about DMAP files, see [RST](https://radar-software-toolkit-rst.readthedocs.io/en/latest/)
 //! or [pyDARNio](https://pydarnio.readthedocs.io/en/latest/).
 
+pub mod compression;
 pub mod error;
 pub mod formats;
 pub mod record;
@@ -234,7 +235,14 @@ macro_rules! read_py {
     }
 }
 
-read_py!(iqdat, "read_iqdat", "read_iqdat_lax", "read_iqdat_bytes", "read_iqdat_bytes_lax", "sniff_iqdat");
+read_py!(
+    iqdat,
+    "read_iqdat",
+    "read_iqdat_lax",
+    "read_iqdat_bytes",
+    "read_iqdat_bytes_lax",
+    "sniff_iqdat"
+);
 read_py!(
     rawacf,
     "read_rawacf",
@@ -251,10 +259,38 @@ read_py!(
     "read_fitacf_bytes_lax",
     "sniff_fitacf"
 );
-read_py!(grid, "read_grid", "read_grid_lax", "read_grid_bytes", "read_grid_bytes_lax", "sniff_grid");
-read_py!(map, "read_map", "read_map_lax", "read_map_bytes", "read_map_bytes_lax", "sniff_map");
-read_py!(snd, "read_snd", "read_snd_lax", "read_snd_bytes", "read_snd_bytes_lax", "sniff_snd");
-read_py!(dmap, "read_dmap", "read_dmap_lax", "read_dmap_bytes", "read_dmap_bytes_lax", "sniff_dmap");
+read_py!(
+    grid,
+    "read_grid",
+    "read_grid_lax",
+    "read_grid_bytes",
+    "read_grid_bytes_lax",
+    "sniff_grid"
+);
+read_py!(
+    map,
+    "read_map",
+    "read_map_lax",
+    "read_map_bytes",
+    "read_map_bytes_lax",
+    "sniff_map"
+);
+read_py!(
+    snd,
+    "read_snd",
+    "read_snd_lax",
+    "read_snd_bytes",
+    "read_snd_bytes_lax",
+    "sniff_snd"
+);
+read_py!(
+    dmap,
+    "read_dmap",
+    "read_dmap_lax",
+    "read_dmap_bytes",
+    "read_dmap_bytes_lax",
+    "sniff_dmap"
+);
 
 /// Checks that a list of dictionaries contains DMAP records, then appends to outfile.
 ///

@@ -1,12 +1,12 @@
 //! Defines the `Record` trait, which contains the shared behaviour that all
 //! DMAP records must have.
 
+use crate::compression::detect_bz2;
 use crate::error::DmapError;
 use crate::types::{parse_scalar, parse_vector, read_data, DmapField, DmapType, DmapVec, Fields};
 use bzip2::read::BzDecoder;
 use indexmap::IndexMap;
 use rayon::prelude::*;
-use std::ffi::OsStr;
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::{Cursor, Read};
@@ -26,11 +26,18 @@ pub trait Record<'a>:
         Self: Sized,
         Self: Send,
     {
-        let mut buffer = [0; 8];  // record size should be an i32 of the data
-        let read_result = dmap_data.read(&mut buffer[..])?;
-        if read_result < buffer.len() {
-            return Err(DmapError::CorruptStream("Unable to read size of first record"))
+        let mut stream: Box<dyn Read>;
+        let (is_bz2, chunk) = detect_bz2(&mut dmap_data)?;
+        if is_bz2 {
+            stream = Box::new(BzDecoder::new(chunk));
+        } else {
+            stream = Box::new(chunk);
         }
+
+        let mut buffer = [0; 8]; // record size should be an i32 of the data
+        stream
+            .read_exact(&mut buffer)
+            .map_err(|_| DmapError::CorruptStream("Unable to read size of first record"))?;
 
         let rec_size = i32::from_le_bytes(buffer[4..8].try_into().unwrap()) as usize; // advance 4 bytes, skipping the "code" field
         if rec_size <= 0 {
@@ -42,7 +49,7 @@ pub trait Record<'a>:
 
         let mut rec = vec![0; rec_size];
         rec[0..8].clone_from_slice(&buffer[..]);
-        dmap_data.read_exact(&mut rec[8..])?;
+        stream.read_exact(&mut rec[8..])?;
         let first_rec = Self::parse_record(&mut Cursor::new(rec))?;
 
         Ok(first_rec)
@@ -57,12 +64,19 @@ pub trait Record<'a>:
         Self: Send,
     {
         let mut buffer: Vec<u8> = vec![];
-        dmap_data.read_to_end(&mut buffer)?;
+        let (is_bz2, mut chunk) = detect_bz2(&mut dmap_data)?;
+        if is_bz2 {
+            let mut stream = BzDecoder::new(chunk);
+            stream.read_to_end(&mut buffer)?;
+        } else {
+            chunk.read_to_end(&mut buffer)?;
+        }
 
         let mut slices: Vec<_> = vec![];
         let mut rec_start: usize = 0;
         let mut rec_size: usize;
         let mut rec_end: usize;
+
         while ((rec_start + 2 * i32::size()) as u64) < buffer.len() as u64 {
             rec_size = i32::from_le_bytes(buffer[rec_start + 4..rec_start + 8].try_into().unwrap())
                 as usize; // advance 4 bytes, skipping the "code" field
@@ -123,7 +137,13 @@ pub trait Record<'a>:
         Self: Send,
     {
         let mut buffer: Vec<u8> = vec![];
-        dmap_data.read_to_end(&mut buffer)?;
+        let (is_bz2, mut chunk) = detect_bz2(&mut dmap_data)?;
+        if is_bz2 {
+            let mut stream = BzDecoder::new(chunk);
+            stream.read_to_end(&mut buffer)?;
+        } else {
+            chunk.read_to_end(&mut buffer)?;
+        }
 
         let mut dmap_records: Vec<Self> = vec![];
         let mut bad_byte: Option<usize> = None;
@@ -173,13 +193,7 @@ pub trait Record<'a>:
         Self: Send,
     {
         let file = File::open(infile)?;
-        match infile.extension() {
-            Some(ext) if ext == OsStr::new("bz2") => {
-                let compressor = BzDecoder::new(file);
-                Self::read_records(compressor)
-            }
-            _ => Self::read_records(file),
-        }
+        Self::read_records(file)
     }
 
     /// Read a DMAP file of type `Self`.
@@ -192,13 +206,7 @@ pub trait Record<'a>:
         Self: Send,
     {
         let file = File::open(infile)?;
-        match infile.extension() {
-            Some(ext) if ext == OsStr::new("bz2") => {
-                let compressor = BzDecoder::new(file);
-                Self::read_records_lax(compressor)
-            }
-            _ => Self::read_records_lax(file),
-        }
+        Self::read_records_lax(file)
     }
 
     /// Reads the first record of a DMAP file of type `Self`.
@@ -208,13 +216,7 @@ pub trait Record<'a>:
         Self: Send,
     {
         let file = File::open(infile)?;
-        match infile.extension() {
-            Some(ext) if ext == OsStr::new("bz2") => {
-                let compressor = BzDecoder::new(file);
-                Self::read_first_record(compressor)
-            }
-            _ => Self::read_first_record(file),
-        }
+        Self::read_first_record(file)
     }
 
     /// Reads a record from `cursor`.
@@ -646,6 +648,45 @@ macro_rules! create_record_type {
 
                 fn try_from(value: &mut IndexMap<String, DmapField>) -> Result<Self, Self::Error> {
                     Self::coerce::<[< $format:camel Record>]>(value, &$fields)
+                }
+            }
+
+            #[cfg(test)]
+            mod tests {
+                use super::*;
+                use std::path::PathBuf;
+
+                /// Creates a test to ensure that the record is still able to be read, even when missing
+                /// some of the optional fields.
+                #[test]
+                fn test_missing_optional_fields() -> Result<(), DmapError> {
+                    let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($format)));
+                    let data = [< $format:camel Record >]::sniff_file(&filename).expect("Unable to sniff file");
+                    let recs = data.inner();
+
+                    for field in $fields.scalars_optional.iter().chain($fields.vectors_optional.iter()) {
+                        let mut cloned_rec = recs.clone();
+                        let _ = cloned_rec.shift_remove(field.0);
+                        let _ = [< $format:camel Record >]::try_from(&mut cloned_rec)?;
+                    }
+                    Ok(())
+                }
+
+                /// Creates a test to ensure that the record is not able to be read when missing
+                /// some of the required fields.
+                #[test]
+                fn test_missing_required_fields() -> Result<(), DmapError> {
+                    let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($format)));
+                    let data = [< $format:camel Record >]::sniff_file(&filename).expect("Unable to sniff file");
+                    let recs = data.inner();
+
+                    for field in $fields.scalars_required.iter().chain($fields.vectors_required.iter()) {
+                        let mut cloned_rec = recs.clone();
+                        let _ = cloned_rec.shift_remove(field.0);
+                        let res = [< $format:camel Record >]::try_from(&mut cloned_rec);
+                        assert!(res.is_err());
+                    }
+                    Ok(())
                 }
             }
         }
