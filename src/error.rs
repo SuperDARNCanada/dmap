@@ -14,6 +14,10 @@ pub enum DmapError {
     #[error("{0}")]
     Io(#[from] std::io::Error),
 
+    /// Error casting between Dmap types.
+    #[error("{0}")]
+    BadCast(#[from] std::num::TryFromIntError),
+
     /// Invalid key for a DMAP type. Valid keys are defined [here](https://github.com/SuperDARN/rst/blob/main/codebase/general/src.lib/dmap.1.25/include/dmap.h)
     #[error("{0}")]
     InvalidKey(i8),
@@ -30,6 +34,10 @@ pub enum DmapError {
     /// Error interpreting data as a valid DMAP vector.
     #[error("{0}")]
     InvalidVector(String),
+
+    /// Bytes cannot be interpreted as a DMAP field.
+    #[error("{0}")]
+    InvalidField(String),
 
     /// Errors when reading in multiple records
     #[error("First error: {1}\nRecords with errors: {0:?}")]
