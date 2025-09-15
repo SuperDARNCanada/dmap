@@ -2,11 +2,6 @@ use std::io::{Chain, Cursor, Error, Read};
 
 /// Detects bz2 compression on the input `stream`. Returns a reader
 /// which includes all data from `stream`.
-///
-/// ## Example
-/// ```
-
-/// ```
 pub(crate) fn detect_bz2<T>(mut stream: T) -> Result<(bool, Chain<Cursor<[u8; 3]>, T>), Error>
 where
     T: for<'a> Read,
