@@ -33,7 +33,7 @@ pub struct Fields<'a> {
 
 /// The possible data types that a scalar or vector field may have.
 ///
-/// `String` type is not supported for vector fields.
+/// **Note**: `String` type is not supported for vector fields.
 #[derive(Debug, PartialEq, Clone)]
 pub enum Type {
     Char,
@@ -226,6 +226,18 @@ impl IntoPy<PyObject> for DmapScalar {
     }
 }
 
+macro_rules! vec_to_bytes {
+    ($bytes:ident, $x:ident) => {{
+        $bytes.extend(($x.ndim() as i32).to_le_bytes());
+        for &dim in $x.shape().iter().rev() {
+            $bytes.extend((dim as i32).to_le_bytes());
+        }
+        for y in $x.iter() {
+            $bytes.append(&mut DmapType::as_bytes(y).to_vec());
+        }
+    }};
+}
+
 /// A vector field in a DMAP record.
 #[derive(Clone, Debug, PartialEq)]
 pub enum DmapVec {
@@ -241,7 +253,7 @@ pub enum DmapVec {
     Double(ArrayD<f64>),
 }
 impl DmapVec {
-    /// Gets the corresponding `Type` of the vector
+    /// Gets the corresponding `Type` of the vector.
     pub(crate) fn get_type(&self) -> Type {
         match self {
             DmapVec::Char(_) => Type::Char,
@@ -259,19 +271,6 @@ impl DmapVec {
     /// Copies the data and metadata (dimensions, `Type` key) to raw bytes
     pub(crate) fn as_bytes(&self) -> Vec<u8> {
         let mut bytes: Vec<u8> = DmapType::as_bytes(&self.get_type().key()).to_vec();
-
-        macro_rules! vec_to_bytes {
-            ($bytes:ident, $x:ident) => {{
-                $bytes.extend(($x.ndim() as i32).to_le_bytes());
-                for &dim in $x.shape().iter().rev() {
-                    $bytes.extend((dim as i32).to_le_bytes());
-                }
-                for y in $x.iter() {
-                    $bytes.append(&mut DmapType::as_bytes(y).to_vec());
-                }
-            }};
-        }
-
         match self {
             DmapVec::Char(x) => vec_to_bytes!(bytes, x),
             DmapVec::Short(x) => vec_to_bytes!(bytes, x),
@@ -286,7 +285,19 @@ impl DmapVec {
         };
         bytes
     }
-    /// Gets the dimensions of the vector.
+
+    /// Gets the dimensions of the vector, in row-major order.
+    /// ## Example
+    /// ```
+    /// use numpy::ndarray::array;
+    /// use dmap::types::DmapVec;
+    ///
+    /// let arr = DmapVec::Char(array![0, 1, 2, 3, 4].into_dyn());
+    /// assert_eq!(arr.shape(), &[5]);
+    ///
+    /// let arr = DmapVec::Uint(array![[0, 1, 2], [3, 4, 5]].into_dyn());
+    /// assert_eq!(arr.shape(), &[2, 3]);
+    /// ```
     pub fn shape(&self) -> &[usize] {
         match self {
             DmapVec::Char(x) => x.shape(),
@@ -440,7 +451,6 @@ impl IntoPy<PyObject> for DmapField {
 /// Example: `scalar_impls(i8, DmapScalar::Char)` will implement:
 ///   `From<i8> for DmapField`
 ///   `TryFrom<DmapField> for i8`
-///   `TryFrom<DmapScalar> for i8`
 macro_rules! scalar_impls {
     ($type:ty, $enum_var:path, $type_var:path) => {
         impl From<$type> for DmapField {
@@ -489,7 +499,7 @@ pub trait DmapType: std::fmt::Debug {
     where
         Self: Sized;
     /// Get the `Type` variant that represents `self`
-    fn dmap_type(&self) -> Type;
+    fn dmap_type() -> Type;
 }
 
 /// Macro for implementing DmapType trait for primitive types.
@@ -498,36 +508,44 @@ macro_rules! type_impls {
     // This variant captures single-byte types
     ($type:ty, $enum_var:path, 1) => {
         impl DmapType for $type {
+
             fn size() -> usize { 1 }
+
             fn as_bytes(&self) -> Vec<u8> {
                 AsBytes::as_bytes(self).to_vec()
             }
+
             fn from_bytes(bytes: &[u8]) -> Result<Self>
             where
                 Self: Sized,
             {
                 Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
             }
-            fn dmap_type(&self) -> Type { $enum_var }
+
+            fn dmap_type() -> Type { $enum_var }
         }
     };
     // This variant captures multi-byte primitive types
     ($type:ty, $enum_var:path, $num_bytes:expr) => {
         paste! {
             impl DmapType for $type {
+
                 fn size() -> usize { $num_bytes }
+
                 fn as_bytes(&self) -> Vec<u8> {
                     let mut bytes = [0; $num_bytes];
                     LittleEndian::[< write_ $type >](&mut bytes, *self);
                     bytes.to_vec()
                 }
+
                 fn from_bytes(bytes: &[u8]) -> Result<Self>
                 where
                     Self: Sized,
                 {
                     Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
                 }
-                fn dmap_type(&self) -> Type { $enum_var }
+
+                fn dmap_type() -> Type { $enum_var }
             }
         }
     }
@@ -559,7 +577,7 @@ impl DmapType for String {
             .map_err(|_| DmapError::InvalidScalar("Cannot convert bytes to String".to_string()))?;
         Ok(data.trim_end_matches(char::from(0)).to_string())
     }
-    fn dmap_type(&self) -> Type {
+    fn dmap_type() -> Type {
         Type::String
     }
 }
@@ -568,16 +586,20 @@ impl TryFrom<DmapScalar> for u8 {
     type Error = DmapError;
     fn try_from(value: DmapScalar) -> std::result::Result<Self, Self::Error> {
         match value {
-            DmapScalar::Char(x) => Ok(x as u8),
-            DmapScalar::Short(x) => Ok(x as u8),
-            DmapScalar::Int(x) => Ok(x as u8),
-            DmapScalar::Long(x) => Ok(x as u8),
+            DmapScalar::Char(x) => Ok(u8::try_from(x)?),
+            DmapScalar::Short(x) => Ok(u8::try_from(x)?),
+            DmapScalar::Int(x) => Ok(u8::try_from(x)?),
+            DmapScalar::Long(x) => Ok(u8::try_from(x)?),
             DmapScalar::Uchar(x) => Ok(x),
-            DmapScalar::Ushort(x) => Ok(x as u8),
-            DmapScalar::Uint(x) => Ok(x as u8),
-            DmapScalar::Ulong(x) => Ok(x as u8),
-            DmapScalar::Float(x) => Ok(x as u8),
-            DmapScalar::Double(x) => Ok(x as u8),
+            DmapScalar::Ushort(x) => Ok(u8::try_from(x)?),
+            DmapScalar::Uint(x) => Ok(u8::try_from(x)?),
+            DmapScalar::Ulong(x) => Ok(u8::try_from(x)?),
+            DmapScalar::Float(x) => Err(DmapError::InvalidScalar(format!(
+                "Unable to convert {x}_f32 to u8"
+            ))),
+            DmapScalar::Double(x) => Err(DmapError::InvalidScalar(format!(
+                "Unable to convert {x}_f64 to u8"
+            ))),
             DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to u8"
             ))),
@@ -588,16 +610,20 @@ impl TryFrom<DmapScalar> for u16 {
     type Error = DmapError;
     fn try_from(value: DmapScalar) -> std::result::Result<Self, Self::Error> {
         match value {
-            DmapScalar::Char(x) => Ok(x as u16),
-            DmapScalar::Short(x) => Ok(x as u16),
-            DmapScalar::Int(x) => Ok(x as u16),
-            DmapScalar::Long(x) => Ok(x as u16),
+            DmapScalar::Char(x) => Ok(u16::try_from(x)?),
+            DmapScalar::Short(x) => Ok(u16::try_from(x)?),
+            DmapScalar::Int(x) => Ok(u16::try_from(x)?),
+            DmapScalar::Long(x) => Ok(u16::try_from(x)?),
             DmapScalar::Uchar(x) => Ok(x as u16),
             DmapScalar::Ushort(x) => Ok(x),
-            DmapScalar::Uint(x) => Ok(x as u16),
-            DmapScalar::Ulong(x) => Ok(x as u16),
-            DmapScalar::Float(x) => Ok(x as u16),
-            DmapScalar::Double(x) => Ok(x as u16),
+            DmapScalar::Uint(x) => Ok(u16::try_from(x)?),
+            DmapScalar::Ulong(x) => Ok(u16::try_from(x)?),
+            DmapScalar::Float(x) => Err(DmapError::InvalidScalar(format!(
+                "Unable to convert {x}_f32 to u16"
+            ))),
+            DmapScalar::Double(x) => Err(DmapError::InvalidScalar(format!(
+                "Unable to convert {x}_f64 to u16"
+            ))),
             DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to u16"
             ))),
@@ -608,16 +634,20 @@ impl TryFrom<DmapScalar> for u32 {
     type Error = DmapError;
     fn try_from(value: DmapScalar) -> std::result::Result<Self, Self::Error> {
         match value {
-            DmapScalar::Char(x) => Ok(x as u32),
-            DmapScalar::Short(x) => Ok(x as u32),
-            DmapScalar::Int(x) => Ok(x as u32),
-            DmapScalar::Long(x) => Ok(x as u32),
+            DmapScalar::Char(x) => Ok(u32::try_from(x)?),
+            DmapScalar::Short(x) => Ok(u32::try_from(x)?),
+            DmapScalar::Int(x) => Ok(u32::try_from(x)?),
+            DmapScalar::Long(x) => Ok(u32::try_from(x)?),
             DmapScalar::Uchar(x) => Ok(x as u32),
             DmapScalar::Ushort(x) => Ok(x as u32),
             DmapScalar::Uint(x) => Ok(x),
-            DmapScalar::Ulong(x) => Ok(x as u32),
-            DmapScalar::Float(x) => Ok(x as u32),
-            DmapScalar::Double(x) => Ok(x as u32),
+            DmapScalar::Ulong(x) => Ok(u32::try_from(x)?),
+            DmapScalar::Float(x) => Err(DmapError::InvalidScalar(format!(
+                "Unable to convert {x}_f32 to u32"
+            ))),
+            DmapScalar::Double(x) => Err(DmapError::InvalidScalar(format!(
+                "Unable to convert {x}_f64 to u32"
+            ))),
             DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to u32"
             ))),
@@ -628,16 +658,20 @@ impl TryFrom<DmapScalar> for u64 {
     type Error = DmapError;
     fn try_from(value: DmapScalar) -> std::result::Result<Self, Self::Error> {
         match value {
-            DmapScalar::Char(x) => Ok(x as u64),
-            DmapScalar::Short(x) => Ok(x as u64),
-            DmapScalar::Int(x) => Ok(x as u64),
-            DmapScalar::Long(x) => Ok(x as u64),
+            DmapScalar::Char(x) => Ok(u64::try_from(x)?),
+            DmapScalar::Short(x) => Ok(u64::try_from(x)?),
+            DmapScalar::Int(x) => Ok(u64::try_from(x)?),
+            DmapScalar::Long(x) => Ok(u64::try_from(x)?),
             DmapScalar::Uchar(x) => Ok(x as u64),
             DmapScalar::Ushort(x) => Ok(x as u64),
             DmapScalar::Uint(x) => Ok(x as u64),
             DmapScalar::Ulong(x) => Ok(x),
-            DmapScalar::Float(x) => Ok(x as u64),
-            DmapScalar::Double(x) => Ok(x as u64),
+            DmapScalar::Float(x) => Err(DmapError::InvalidScalar(format!(
+                "Unable to convert {x}_f32 to u64"
+            ))),
+            DmapScalar::Double(x) => Err(DmapError::InvalidScalar(format!(
+                "Unable to convert {x}_f64 to u64"
+            ))),
             DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to u64"
             ))),
@@ -649,15 +683,19 @@ impl TryFrom<DmapScalar> for i8 {
     fn try_from(value: DmapScalar) -> std::result::Result<Self, Self::Error> {
         match value {
             DmapScalar::Char(x) => Ok(x),
-            DmapScalar::Short(x) => Ok(x as i8),
-            DmapScalar::Int(x) => Ok(x as i8),
-            DmapScalar::Long(x) => Ok(x as i8),
-            DmapScalar::Uchar(x) => Ok(x as i8),
-            DmapScalar::Ushort(x) => Ok(x as i8),
-            DmapScalar::Uint(x) => Ok(x as i8),
-            DmapScalar::Ulong(x) => Ok(x as i8),
-            DmapScalar::Float(x) => Ok(x as i8),
-            DmapScalar::Double(x) => Ok(x as i8),
+            DmapScalar::Short(x) => Ok(i8::try_from(x)?),
+            DmapScalar::Int(x) => Ok(i8::try_from(x)?),
+            DmapScalar::Long(x) => Ok(i8::try_from(x)?),
+            DmapScalar::Uchar(x) => Ok(i8::try_from(x)?),
+            DmapScalar::Ushort(x) => Ok(i8::try_from(x)?),
+            DmapScalar::Uint(x) => Ok(i8::try_from(x)?),
+            DmapScalar::Ulong(x) => Ok(i8::try_from(x)?),
+            DmapScalar::Float(x) => Err(DmapError::InvalidScalar(format!(
+                "Unable to convert {x}_f32 to i8"
+            ))),
+            DmapScalar::Double(x) => Err(DmapError::InvalidScalar(format!(
+                "Unable to convert {x}_f64 to i8"
+            ))),
             DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to i8"
             ))),
@@ -670,14 +708,18 @@ impl TryFrom<DmapScalar> for i16 {
         match value {
             DmapScalar::Char(x) => Ok(x as i16),
             DmapScalar::Short(x) => Ok(x),
-            DmapScalar::Int(x) => Ok(x as i16),
-            DmapScalar::Long(x) => Ok(x as i16),
+            DmapScalar::Int(x) => Ok(i16::try_from(x)?),
+            DmapScalar::Long(x) => Ok(i16::try_from(x)?),
             DmapScalar::Uchar(x) => Ok(x as i16),
-            DmapScalar::Ushort(x) => Ok(x as i16),
-            DmapScalar::Uint(x) => Ok(x as i16),
-            DmapScalar::Ulong(x) => Ok(x as i16),
-            DmapScalar::Float(x) => Ok(x as i16),
-            DmapScalar::Double(x) => Ok(x as i16),
+            DmapScalar::Ushort(x) => Ok(i16::try_from(x)?),
+            DmapScalar::Uint(x) => Ok(i16::try_from(x)?),
+            DmapScalar::Ulong(x) => Ok(i16::try_from(x)?),
+            DmapScalar::Float(x) => Err(DmapError::InvalidScalar(format!(
+                "Unable to convert {x}_f32 to i16"
+            ))),
+            DmapScalar::Double(x) => Err(DmapError::InvalidScalar(format!(
+                "Unable to convert {x}_f64 to i16"
+            ))),
             DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to i16"
             ))),
@@ -691,13 +733,17 @@ impl TryFrom<DmapScalar> for i32 {
             DmapScalar::Char(x) => Ok(x as i32),
             DmapScalar::Short(x) => Ok(x as i32),
             DmapScalar::Int(x) => Ok(x),
-            DmapScalar::Long(x) => Ok(x as i32),
+            DmapScalar::Long(x) => Ok(i32::try_from(x)?),
             DmapScalar::Uchar(x) => Ok(x as i32),
             DmapScalar::Ushort(x) => Ok(x as i32),
-            DmapScalar::Uint(x) => Ok(x as i32),
-            DmapScalar::Ulong(x) => Ok(x as i32),
-            DmapScalar::Float(x) => Ok(x as i32),
-            DmapScalar::Double(x) => Ok(x as i32),
+            DmapScalar::Uint(x) => Ok(i32::try_from(x)?),
+            DmapScalar::Ulong(x) => Ok(i32::try_from(x)?),
+            DmapScalar::Float(x) => Err(DmapError::InvalidScalar(format!(
+                "Unable to convert {x}_f32 to i32"
+            ))),
+            DmapScalar::Double(x) => Err(DmapError::InvalidScalar(format!(
+                "Unable to convert {x}_f64 to i32"
+            ))),
             DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to i32"
             ))),
@@ -715,9 +761,13 @@ impl TryFrom<DmapScalar> for i64 {
             DmapScalar::Uchar(x) => Ok(x as i64),
             DmapScalar::Ushort(x) => Ok(x as i64),
             DmapScalar::Uint(x) => Ok(x as i64),
-            DmapScalar::Ulong(x) => Ok(x as i64),
-            DmapScalar::Float(x) => Ok(x as i64),
-            DmapScalar::Double(x) => Ok(x as i64),
+            DmapScalar::Ulong(x) => Ok(i64::try_from(x)?),
+            DmapScalar::Float(x) => Err(DmapError::InvalidScalar(format!(
+                "Unable to convert {x}_f32 to i64"
+            ))),
+            DmapScalar::Double(x) => Err(DmapError::InvalidScalar(format!(
+                "Unable to convert {x}_f64 to i64"
+            ))),
             DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to i64"
             ))),
@@ -778,7 +828,7 @@ impl TryFrom<DmapScalar> for String {
 
 /// Verify that `name` exists in `fields` and is of the correct `Type`.
 pub fn check_scalar(
-    fields: &mut IndexMap<String, DmapField>,
+    fields: &IndexMap<String, DmapField>,
     name: &str,
     expected_type: Type,
 ) -> Result<()> {
@@ -798,7 +848,7 @@ pub fn check_scalar(
 
 /// If `name` is in `fields`, verify that it is of the correct `Type`.
 pub fn check_scalar_opt(
-    fields: &mut IndexMap<String, DmapField>,
+    fields: &IndexMap<String, DmapField>,
     name: &str,
     expected_type: Type,
 ) -> Result<()> {
@@ -818,7 +868,7 @@ pub fn check_scalar_opt(
 
 /// Verify that `name` exists in `fields` and is of the correct `Type`.
 pub fn check_vector(
-    fields: &mut IndexMap<String, DmapField>,
+    fields: &IndexMap<String, DmapField>,
     name: &str,
     expected_type: Type,
 ) -> Result<()> {
@@ -840,7 +890,7 @@ pub fn check_vector(
 
 /// If `name` is in `fields`, verify that it is of the correct `Type`.
 pub fn check_vector_opt(
-    fields: &mut IndexMap<String, DmapField>,
+    fields: &IndexMap<String, DmapField>,
     name: &str,
     expected_type: Type,
 ) -> Result<()> {
@@ -861,30 +911,14 @@ pub fn check_vector_opt(
 
 /// Parses a scalar starting from the `cursor` position.
 ///
-/// The number of bytes read depends on the `Type` of the data, which is represented by a key
-/// stored as an `i32` beginning at the `cursor` position.
+/// Interprets the bytes starting from the `cursor` position in the following order:
+/// 1. `name`: a null-terminated string
+/// 2. `type`: an i32 key, which maps to a data type (see [`Type`])
+/// 3. `data`: the actual data as raw bytes.
 pub(crate) fn parse_scalar(cursor: &mut Cursor<Vec<u8>>) -> Result<(String, DmapField)> {
     let _mode = 6;
-    let name = read_data::<String>(cursor).map_err(|e| {
-        DmapError::InvalidScalar(format!(
-            "Invalid scalar name, byte {}: {e}",
-            cursor.position()
-        ))
-    })?;
-    let data_type_key = match read_data::<i8>(cursor) {
-        Err(e) => Err(DmapError::InvalidScalar(format!(
-            "Invalid data type for field '{name}', byte {}: {e}",
-            cursor.position() - i8::size() as u64
-        )))?,
-        Ok(x) => Type::from_key(x).map_err(|e| {
-            DmapError::InvalidScalar(format!(
-                "Field {name}: {e}, byte {}",
-                cursor.position() - i8::size() as u64
-            ))
-        })?,
-    };
-
-    let data: DmapScalar = match data_type_key {
+    let (name, data_type) = parse_header(cursor)?;
+    let data: DmapScalar = match data_type {
         Type::Char => DmapScalar::Char(read_data::<i8>(cursor)?),
         Type::Short => DmapScalar::Short(read_data::<i16>(cursor)?),
         Type::Int => DmapScalar::Int(read_data::<i32>(cursor)?),
@@ -901,47 +935,49 @@ pub(crate) fn parse_scalar(cursor: &mut Cursor<Vec<u8>>) -> Result<(String, Dmap
     Ok((name, DmapField::Scalar(data)))
 }
 
+/// Grabs the name and data type key from `cursor`.
+fn parse_header(cursor: &mut Cursor<Vec<u8>>) -> Result<(String, Type)> {
+    let name = read_data::<String>(cursor).map_err(|e| {
+        DmapError::InvalidField(format!("Invalid name, byte {}: {e}", cursor.position()))
+    })?;
+    let data_type_key = read_data::<i8>(cursor).map_err(|e| {
+        DmapError::InvalidField(format!(
+            "Invalid data type for field '{name}', byte {}: {e}",
+            cursor.position() - i8::size() as u64
+        ))
+    })?;
+    let data_type = Type::from_key(data_type_key)?;
+
+    Ok((name, data_type))
+}
+
 /// Parses a vector starting from the `cursor` position.
 ///
-/// The number of bytes read depends on the `Type` of the data, which is represented by a key
-/// stored as an `i32` beginning at the `cursor` position, as well as on the dimensions of the
-/// data which follows the key.
+/// Interprets the bytes in `cursor` as follows:
+/// 1. `name`: a null-terminated string
+/// 2. `type`: a key indicating the data type ([`Type`])
+/// 3. `num_dims`: the number of dimensions in the array, as an `i32`.
+/// 4. `dims`: the dimensions themselves, as a list of `num_dims` `i32`s, in column-major order.
+/// 5. `data`: the data itself, of type `type` with shape `dims`, stored in column-major order.
 pub(crate) fn parse_vector(
     cursor: &mut Cursor<Vec<u8>>,
     record_size: i32,
 ) -> Result<(String, DmapField)> {
     let _mode = 7;
-    let name = read_data::<String>(cursor).map_err(|e| {
-        DmapError::InvalidVector(format!(
-            "Invalid vector name, byte {}: {e}",
-            cursor.position()
-        ))
-    })?;
-    let data_type_key = read_data::<i8>(cursor).map_err(|e| {
-        DmapError::InvalidVector(format!(
-            "Invalid data type for field '{name}', byte {}: {e}",
-            cursor.position() - i8::size() as u64
-        ))
-    })?;
-
-    let data_type = Type::from_key(data_type_key)?;
+    let start_position = cursor.position();
+    let (name, data_type) = parse_header(cursor)?;
 
     let vector_dimension = read_data::<i32>(cursor)?;
     if vector_dimension > record_size {
         return Err(DmapError::InvalidVector(format!(
-            "Parsed number of vector dimensions {} for field '{}' at byte {} are larger \
-            than record size {}",
-            vector_dimension,
-            name,
+            "Parsed number of vector dimensions {vector_dimension} for field `{name}` at byte {} are larger \
+            than record size {record_size}",
             cursor.position() - i32::size() as u64,
-            record_size
         )));
     } else if vector_dimension <= 0 {
         return Err(DmapError::InvalidVector(format!(
-            "Parsed number of vector dimensions {} for field '{}' at byte {} are zero or \
+            "Parsed number of vector dimensions {vector_dimension} for field `{name}` at byte {} are zero or \
             negative",
-            vector_dimension,
-            name,
             cursor.position() - i32::size() as u64,
         )));
     }
@@ -952,18 +988,13 @@ pub(crate) fn parse_vector(
         let dim = read_data::<i32>(cursor)?;
         if dim <= 0 && name != "slist" {
             return Err(DmapError::InvalidVector(format!(
-                "Vector dimension {} at byte {} is zero or negative for field '{}'",
-                dim,
+                "Vector `{name}` dimension {dim} at byte {} is zero or negative",
                 cursor.position() - i32::size() as u64,
-                name
             )));
         } else if dim > record_size {
             return Err(DmapError::InvalidVector(format!(
-                "Vector dimension {} at byte {} for field '{}' exceeds record size {} ",
-                dim,
+                "Vector `{name}` dimension {dim} at byte {} exceeds record size {record_size}",
                 cursor.position() - i32::size() as u64,
-                name,
-                record_size,
             )));
         }
         dimensions.push(dim as u32 as usize);
@@ -972,11 +1003,9 @@ pub(crate) fn parse_vector(
     dimensions = dimensions.into_iter().rev().collect(); // reverse the dimensions, stored in column-major order
     if total_elements * data_type.size() as i32 > record_size {
         return Err(DmapError::InvalidVector(format!(
-            "Vector size {} starting at byte {} for field '{}' exceeds record size {}",
-            total_elements * data_type.size() as i32,
+            "Vector `{name}` size starting at byte {} exceeds record size ({} > {record_size})",
             cursor.position() - vector_dimension as u64 * i32::size() as u64,
-            name,
-            record_size
+            total_elements * data_type.size() as i32,
         )));
     }
 
@@ -986,7 +1015,8 @@ pub(crate) fn parse_vector(
                 ArrayD::from_shape_vec($dims, read_vector::<$type>($cursor, $num_elements)?)
                     .map_err(|e| {
                         DmapError::InvalidVector(format!(
-                            "Could not read in vector field {name}: {e}"
+                            "Could not read in vector field {}: {e}",
+                            $name
                         ))
                     })?,
             )
@@ -1056,6 +1086,13 @@ pub(crate) fn parse_vector(
         }
     };
 
+    let num_bytes = cursor.position() - start_position;
+    if num_bytes > record_size as u64 {
+        return Err(DmapError::InvalidVector(format!(
+            "Vector `{name}` occupies more bytes than record ({num_bytes} > {record_size})"
+        )));
+    }
+
     Ok((name, DmapField::Vector(vector)))
 }
 
@@ -1107,6 +1144,7 @@ pub(crate) fn read_data<T: DmapType>(cursor: &mut Cursor<Vec<u8>>) -> Result<T> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use numpy::ndarray::array;
 
     #[test]
     fn test_read_vec() {
@@ -1176,5 +1214,453 @@ mod tests {
         let data = read_data::<i64>(&mut cursor);
         assert!(data.is_ok());
         assert_eq!(data.unwrap(), 1);
+
+        // This read_data call should return an error, since i64 is bigger than the remaining buffer
+        cursor.set_position(1);
+        let data = read_data::<i64>(&mut cursor);
+        assert!(data.is_err());
+
+        // This read_data call should return an error, since the cursor is past the end of the buffer
+        cursor.set_position(4);
+        let data = read_data::<i64>(&mut cursor);
+        assert!(data.is_err());
+
+        let bytes: Vec<u8> = vec![116, 101, 115, 116, 0]; // b"test\0"
+        let mut cursor = Cursor::new(bytes);
+        let data = read_data::<String>(&mut cursor);
+        assert!(data.is_ok());
+        assert_eq!(data.unwrap(), "test".to_string());
+
+        let bytes: Vec<u8> = vec![116, 101, 115, 116]; // b"test", not null-terminated
+        let mut cursor = Cursor::new(bytes);
+        let data = read_data::<String>(&mut cursor);
+        assert!(data.is_err());
+    }
+
+    #[test]
+    fn dmaptype() -> Result<()> {
+        assert_eq!(i8::size(), 1);
+        assert_eq!(u8::size(), 1);
+        assert_eq!(i16::size(), 2);
+        assert_eq!(u16::size(), 2);
+        assert_eq!(i32::size(), 4);
+        assert_eq!(u32::size(), 4);
+        assert_eq!(f32::size(), 4);
+        assert_eq!(i64::size(), 8);
+        assert_eq!(u64::size(), 8);
+        assert_eq!(f64::size(), 8);
+
+        assert_eq!(i8::dmap_type(), Type::Char);
+        assert_eq!(u8::dmap_type(), Type::Uchar);
+        assert_eq!(i16::dmap_type(), Type::Short);
+        assert_eq!(u16::dmap_type(), Type::Ushort);
+        assert_eq!(i32::dmap_type(), Type::Int);
+        assert_eq!(u32::dmap_type(), Type::Uint);
+        assert_eq!(f32::dmap_type(), Type::Float);
+        assert_eq!(i64::dmap_type(), Type::Long);
+        assert_eq!(u64::dmap_type(), Type::Ulong);
+        assert_eq!(f64::dmap_type(), Type::Double);
+
+        assert_eq!(vec![1], DmapType::as_bytes(&i8::from_bytes(&[1])?));
+        assert_eq!(vec![1], DmapType::as_bytes(&u8::from_bytes(&[1])?));
+        assert_eq!(vec![1, 0], DmapType::as_bytes(&i16::from_bytes(&[1, 0])?));
+        assert_eq!(vec![1, 0], DmapType::as_bytes(&u16::from_bytes(&[1, 0])?));
+        assert_eq!(
+            vec![1, 0, 0, 0],
+            DmapType::as_bytes(&i32::from_bytes(&[1, 0, 0, 0])?)
+        );
+        assert_eq!(
+            vec![1, 2, 3, 4],
+            DmapType::as_bytes(&u32::from_bytes(&[1, 2, 3, 4])?)
+        );
+        assert_eq!(
+            vec![1, 0, 0, 0],
+            DmapType::as_bytes(&f32::from_bytes(&[1, 0, 0, 0])?)
+        );
+        assert_eq!(
+            vec![1, 2, 3, 4, 5, 6, 7, 8],
+            DmapType::as_bytes(&u64::from_bytes(&[1, 2, 3, 4, 5, 6, 7, 8])?)
+        );
+        assert_eq!(
+            vec![1, 0, 0, 0, 1, 2, 3, 4],
+            DmapType::as_bytes(&i64::from_bytes(&[1, 0, 0, 0, 1, 2, 3, 4])?)
+        );
+        assert_eq!(
+            vec![1, 2, 3, 4, 4, 32, 2, 1],
+            DmapType::as_bytes(&f64::from_bytes(&[1, 2, 3, 4, 4, 32, 2, 1])?)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn types() -> Result<()> {
+        assert_eq!(Type::from_key(1)?, Type::Char);
+        assert_eq!(Type::from_key(2)?, Type::Short);
+        assert_eq!(Type::from_key(3)?, Type::Int);
+        assert_eq!(Type::from_key(10)?, Type::Long);
+        assert_eq!(Type::from_key(16)?, Type::Uchar);
+        assert_eq!(Type::from_key(17)?, Type::Ushort);
+        assert_eq!(Type::from_key(18)?, Type::Uint);
+        assert_eq!(Type::from_key(19)?, Type::Ulong);
+        assert_eq!(Type::from_key(4)?, Type::Float);
+        assert_eq!(Type::from_key(8)?, Type::Double);
+        assert_eq!(Type::from_key(9)?, Type::String);
+        assert!(Type::from_key(-1).is_err());
+        assert!(Type::from_key(15).is_err());
+        assert!(Type::from_key(0).is_err());
+
+        assert_eq!(Type::Char.key(), 1);
+        assert_eq!(Type::Short.key(), 2);
+        assert_eq!(Type::Int.key(), 3);
+        assert_eq!(Type::Long.key(), 10);
+        assert_eq!(Type::Uchar.key(), 16);
+        assert_eq!(Type::Ushort.key(), 17);
+        assert_eq!(Type::Uint.key(), 18);
+        assert_eq!(Type::Ulong.key(), 19);
+        assert_eq!(Type::Float.key(), 4);
+        assert_eq!(Type::Double.key(), 8);
+        assert_eq!(Type::String.key(), 9);
+
+        assert_eq!(Type::Char.size(), 1);
+        assert_eq!(Type::Short.size(), 2);
+        assert_eq!(Type::Int.size(), 4);
+        assert_eq!(Type::Long.size(), 8);
+        assert_eq!(Type::Uchar.size(), 1);
+        assert_eq!(Type::Ushort.size(), 2);
+        assert_eq!(Type::Uint.size(), 4);
+        assert_eq!(Type::Ulong.size(), 8);
+        assert_eq!(Type::Float.size(), 4);
+        assert_eq!(Type::Double.size(), 8);
+        assert_eq!(Type::String.size(), 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn dmapscalar() -> Result<()> {
+        assert_eq!(DmapScalar::Char(0).get_type(), Type::Char);
+        assert_eq!(DmapScalar::Short(0).get_type(), Type::Short);
+        assert_eq!(DmapScalar::Int(0).get_type(), Type::Int);
+        assert_eq!(DmapScalar::Long(0).get_type(), Type::Long);
+        assert_eq!(DmapScalar::Uchar(0).get_type(), Type::Uchar);
+        assert_eq!(DmapScalar::Ushort(0).get_type(), Type::Ushort);
+        assert_eq!(DmapScalar::Uint(0).get_type(), Type::Uint);
+        assert_eq!(DmapScalar::Ulong(0).get_type(), Type::Ulong);
+        assert_eq!(DmapScalar::Float(0.0).get_type(), Type::Float);
+        assert_eq!(DmapScalar::Double(0.0).get_type(), Type::Double);
+        assert_eq!(
+            DmapScalar::String("test".to_string()).get_type(),
+            Type::String
+        );
+
+        let x = DmapScalar::Char(-1);
+        assert_eq!(x.cast_as(&Type::Short)?, DmapScalar::Short(-1));
+        assert!(x.cast_as(&Type::Float).is_ok());
+        assert!(x.cast_as(&Type::Uchar).is_err());
+        assert!(x.cast_as(&Type::String).is_err());
+
+        let x = DmapScalar::Uchar(255);
+        assert_eq!(x.cast_as(&Type::Short)?, DmapScalar::Short(255));
+        assert!(x.cast_as(&Type::Char).is_err());
+        assert!(x.cast_as(&Type::Float).is_ok());
+        assert!(x.cast_as(&Type::Uchar).is_ok());
+        assert!(x.cast_as(&Type::String).is_err());
+
+        let x = DmapScalar::Short(256);
+        assert_eq!(x.cast_as(&Type::Short)?, DmapScalar::Short(256));
+        assert!(x.cast_as(&Type::Char).is_err());
+        assert_eq!(x.cast_as(&Type::Ushort)?, DmapScalar::Ushort(256));
+        assert!(x.cast_as(&Type::Uchar).is_err());
+        assert!(x.cast_as(&Type::Float).is_ok());
+        assert!(x.cast_as(&Type::String).is_err());
+
+        let x = DmapScalar::Float(1.0);
+        assert!(x.cast_as(&Type::Double).is_ok());
+        assert!(x.cast_as(&Type::Char).is_err());
+        assert!(x.cast_as(&Type::Uchar).is_err());
+        assert!(x.cast_as(&Type::Float).is_ok());
+        assert!(x.cast_as(&Type::String).is_err());
+
+        let x = DmapScalar::String("test".to_string());
+        assert!(x.cast_as(&Type::Char).is_err());
+        assert!(x.cast_as(&Type::Short).is_err());
+        assert!(x.cast_as(&Type::Int).is_err());
+        assert!(x.cast_as(&Type::Long).is_err());
+        assert!(x.cast_as(&Type::Uchar).is_err());
+        assert!(x.cast_as(&Type::Ushort).is_err());
+        assert!(x.cast_as(&Type::Uint).is_err());
+        assert!(x.cast_as(&Type::Ulong).is_err());
+        assert!(x.cast_as(&Type::Float).is_err());
+        assert!(x.cast_as(&Type::Double).is_err());
+
+        assert_eq!(
+            DmapScalar::Char(8).as_bytes(),
+            vec![Type::Char.key() as u8, 8]
+        );
+        assert_eq!(
+            DmapScalar::Short(256).as_bytes(),
+            vec![Type::Short.key() as u8, 0, 1]
+        );
+        assert_eq!(
+            DmapScalar::Int(256).as_bytes(),
+            vec![Type::Int.key() as u8, 0, 1, 0, 0]
+        );
+        assert_eq!(
+            DmapScalar::Long(512).as_bytes(),
+            vec![Type::Long.key() as u8, 0, 2, 0, 0, 0, 0, 0, 0]
+        );
+        assert_eq!(
+            DmapScalar::Uchar(8).as_bytes(),
+            vec![Type::Uchar.key() as u8, 8]
+        );
+        assert_eq!(
+            DmapScalar::Ushort(256).as_bytes(),
+            vec![Type::Ushort.key() as u8, 0, 1]
+        );
+        assert_eq!(
+            DmapScalar::Uint(256).as_bytes(),
+            vec![Type::Uint.key() as u8, 0, 1, 0, 0]
+        );
+        assert_eq!(
+            DmapScalar::Ulong(512).as_bytes(),
+            vec![Type::Ulong.key() as u8, 0, 2, 0, 0, 0, 0, 0, 0]
+        );
+        assert_eq!(
+            DmapScalar::Float(0.0).as_bytes(),
+            vec![Type::Float.key() as u8, 0, 0, 0, 0]
+        );
+        assert_eq!(
+            DmapScalar::Double(0.0).as_bytes(),
+            vec![Type::Double.key() as u8, 0, 0, 0, 0, 0, 0, 0, 0]
+        );
+        assert_eq!(
+            DmapScalar::String("test".to_string()).as_bytes(),
+            vec![Type::String.key() as u8, 116, 101, 115, 116, 0]
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn dmapvec() -> Result<()> {
+        let arr = DmapVec::Char(array![0, 1, 2, 3, 4].into_dyn());
+        assert_eq!(arr.get_type(), Type::Char);
+        let arr = DmapVec::Uchar(array![0, 1, 2, 3, 4].into_dyn());
+        assert_eq!(arr.get_type(), Type::Uchar);
+        let arr = DmapVec::Short(array![0, 1, 2, 3, 4].into_dyn());
+        assert_eq!(arr.get_type(), Type::Short);
+        let arr = DmapVec::Ushort(array![0, 1, 2, 3, 4].into_dyn());
+        assert_eq!(arr.get_type(), Type::Ushort);
+        let arr = DmapVec::Int(array![0, 1, 2, 3, 4].into_dyn());
+        assert_eq!(arr.get_type(), Type::Int);
+        let arr = DmapVec::Uint(array![[0, 1, 2], [3, 4, 5]].into_dyn());
+        assert_eq!(arr.get_type(), Type::Uint);
+        let arr = DmapVec::Long(array![0, 1, 2, 3, 4].into_dyn());
+        assert_eq!(arr.get_type(), Type::Long);
+        let arr = DmapVec::Ulong(array![0, 1, 2, 3, 4].into_dyn());
+        assert_eq!(arr.get_type(), Type::Ulong);
+        let arr = DmapVec::Float(array![0.0, 1.0, 2.0, 3.0, 4.0].into_dyn());
+        assert_eq!(arr.get_type(), Type::Float);
+        let arr = DmapVec::Double(array![0.0, 1.0, 2.0, 3.0, 4.0].into_dyn());
+        assert_eq!(arr.get_type(), Type::Double);
+
+        Ok(())
+    }
+
+    #[test]
+    fn check_fields_in_indexmap() -> Result<()> {
+        use numpy::ndarray::array;
+
+        let mut rec = IndexMap::<String, DmapField>::new();
+        let res = check_scalar(&rec, "test", Type::Char);
+        assert!(res.is_err());
+        let res = check_scalar_opt(&rec, "test", Type::Char);
+        assert!(res.is_ok());
+        let res = check_vector(&rec, "test", Type::Char);
+        assert!(res.is_err());
+        let res = check_vector_opt(&rec, "test", Type::Char);
+        assert!(res.is_ok());
+
+        let res = rec.insert("test".to_string(), DmapField::from(1i32));
+        assert!(res.is_none());
+        let res = check_scalar(&rec, "test", Type::Int);
+        assert!(res.is_ok());
+        let res = check_scalar_opt(&rec, "test", Type::Char);
+        assert!(res.is_err());
+        let res = check_scalar_opt(&rec, "test", Type::Int);
+        assert!(res.is_ok());
+        let res = check_vector(&rec, "test", Type::Char);
+        assert!(res.is_err());
+        let res = check_vector_opt(&rec, "test", Type::Char);
+        assert!(res.is_err());
+
+        let test_vec = array![1.0f32, 2.0f32].into_dyn();
+        let res = rec.insert("test_vec".to_string(), test_vec.into());
+        assert!(res.is_none());
+        let res = check_scalar(&rec, "test_vec", Type::Float);
+        assert!(res.is_err());
+        let res = check_scalar_opt(&rec, "test_vec", Type::Float);
+        assert!(res.is_err());
+        let res = check_vector(&rec, "test_vec", Type::Float);
+        assert!(res.is_ok());
+        let res = check_vector(&rec, "test_vec", Type::Double);
+        assert!(res.is_err());
+        let res = check_vector_opt(&rec, "test_vec", Type::Float);
+        assert!(res.is_ok());
+        let res = check_vector_opt(&rec, "test_vec", Type::Int);
+        assert!(res.is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_parse_header() -> Result<()> {
+        let name: Vec<u8> = vec![116, 101, 115, 116, 0, Type::Char.key() as u8];
+        let num_bytes = name.len();
+        let mut cursor = Cursor::new(name);
+        let res = parse_header(&mut cursor);
+        assert_eq!(res?, ("test".to_string(), Type::Char));
+        assert_eq!(cursor.position(), num_bytes as u64);
+
+        cursor.set_position(2);
+        let res = parse_header(&mut cursor);
+        assert_eq!(res?, ("st".to_string(), Type::Char));
+
+        cursor.set_position(5);
+        let res = parse_scalar(&mut cursor);
+        assert!(res.is_err());
+
+        let name: Vec<u8> = vec![116, 101, 115, 116, Type::Char.key() as u8]; // name not null-terminated
+        let mut cursor = Cursor::new(name);
+        let res = parse_header(&mut cursor);
+        assert!(res.is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_parse_scalar() -> Result<()> {
+        let mut name: Vec<u8> = vec![116, 101, 115, 116, 0]; // "test" in bytes
+        let mut data: Vec<u8> = vec![Type::Char.key() as u8, 25, 56];
+        name.append(&mut data);
+        let num_bytes = name.len();
+        let mut cursor = Cursor::new(name);
+        let res = parse_scalar(&mut cursor);
+        assert_eq!(res?, ("test".to_string(), 25i8.into()));
+        assert_eq!(cursor.position(), (num_bytes - 1) as u64);
+
+        cursor.set_position(1);
+        let res = parse_scalar(&mut cursor);
+        assert_eq!(res?, ("est".to_string(), 25i8.into()));
+
+        cursor.set_position(4);
+        let res = parse_scalar(&mut cursor);
+        assert_eq!(res?, ("".to_string(), 25i8.into()));
+
+        cursor.set_position(5);
+        let res = parse_scalar(&mut cursor);
+        assert!(res.is_err());
+
+        // This test should highlight the problem when the name is not null-terminated. The bytes of the `type` are
+        // consumed as part of the scalar name, until a 0 is encountered.
+        let mut name: Vec<u8> = vec![116, 101, 115, 116]; // b"test" , not null-terminated
+        let mut data: Vec<u8> = vec![Type::Char.key() as u8, 25];
+        name.append(&mut data);
+        let mut cursor = Cursor::new(name);
+        let res = parse_scalar(&mut cursor);
+        assert!(res.is_err());
+
+        // This test should highlight the problem when a string field is not null-terminated.
+        let mut name: Vec<u8> = vec![116, 101, 115, 116, 0]; // "test"
+        let mut data: Vec<u8> = vec![Type::String.key() as u8, 116, 101, 115, 116]; // b"test" , not null-terminated
+        name.append(&mut data);
+        let mut cursor = Cursor::new(name);
+        let res = parse_scalar(&mut cursor);
+        assert!(res.is_err());
+
+        let mut name: Vec<u8> = vec![116, 101, 115, 116, 0]; // "test"
+        let mut data: Vec<u8> = vec![Type::String.key() as u8, 116, 101, 115, 116, 0]; // b"test\0"
+        name.append(&mut data);
+        let mut cursor = Cursor::new(name);
+        let res = parse_scalar(&mut cursor);
+        assert_eq!(res?, ("test".to_string(), "test".to_string().into()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_parse_vector() -> Result<()> {
+        let mut name: Vec<u8> = vec![116, 101, 115, 116, 0]; // "test" in bytes
+        let mut data: Vec<u8> = vec![Type::Char.key() as u8, 1, 0, 0, 0, 1, 0, 0, 0, 25];
+        name.append(&mut data);
+        let num_bytes = name.len();
+        let mut cursor = Cursor::new(name);
+        let res = parse_vector(&mut cursor, 15);
+        assert_eq!(res?, ("test".to_string(), array![25i8].into_dyn().into()));
+        assert_eq!(cursor.position(), num_bytes as u64);
+
+        let mut name: Vec<u8> = vec![116, 101, 115, 116, 0]; // "test" in bytes
+        let mut data: Vec<u8> = vec![
+            Type::Char.key() as u8,
+            2,
+            0,
+            0,
+            0,
+            3,
+            0,
+            0,
+            0,
+            2,
+            0,
+            0,
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+        ];
+        name.append(&mut data);
+        let num_bytes = name.len();
+        let mut cursor = Cursor::new(name);
+        let res = parse_vector(&mut cursor, 24);
+        assert_eq!(
+            res?,
+            (
+                "test".to_string(),
+                array![[1i8, 2, 3], [4, 5, 6]].into_dyn().into()
+            )
+        );
+        assert_eq!(cursor.position(), num_bytes as u64);
+
+        cursor.set_position(0);
+        let res = parse_vector(&mut cursor, 3);
+        assert!(res.is_err()); // size (all dimensions multiplied together) greater than record size (6 > 3)
+
+        let mut name: Vec<u8> = vec![116, 101, 115, 116, 0]; // "test" in bytes
+        let mut data: Vec<u8> = vec![
+            Type::Char.key() as u8,
+            100,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+        ];
+        name.append(&mut data);
+        let mut cursor = Cursor::new(name);
+        let res = parse_vector(&mut cursor, 24);
+        assert!(res.is_err()); // number of dimensions greater than record size (100 > 24)
+
+        Ok(())
     }
 }
