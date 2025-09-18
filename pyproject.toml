@@ -13,9 +13,16 @@ classifiers = [
     "Programming Language :: Python",
     "Programming Language :: Rust"
 ]
+description = "SuperDARN DMAP file format I/O"
+readme = "README.md"
 dependencies = ["numpy<3"]
+license = "LGPL-3.0-or-later"
+
+[project.urls]
+Repository = "https://github.com/SuperDARNCanada/dmap"
 
 [tool.maturin]
+python-source = "python"
 bindings = "pyo3"
 profile = "release"
 compatibility = "manylinux2014"

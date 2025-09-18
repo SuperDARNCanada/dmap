@@ -1,8 +1,12 @@
 [package]
-name = "dmap"
+name = "darn_dmap"
 version = "0.4.0"
 edition = "2021"
 rust-version = "1.63.0"
+authors = ["Remington Rohel"]
+description = "SuperDARN DMAP file format I/O"
+homepage = "https://github.com/SuperDARNCanada/dmap"
+license = "LGPL-3.0-or-later"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

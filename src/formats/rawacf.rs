@@ -46,9 +46,9 @@ static SCALAR_FIELDS: [(&str, Type); 47] = [
     ("tfreq", Type::Short),
     ("mxpwr", Type::Int),
     ("lvmax", Type::Int),
-    ("combf", Type::String),
     ("rawacf.revision.major", Type::Int),
     ("rawacf.revision.minor", Type::Int),
+    ("combf", Type::String),
     ("thr", Type::Float),
 ];
 

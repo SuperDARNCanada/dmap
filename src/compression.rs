@@ -1,3 +1,7 @@
+//! Utility functions for detecting compression on a stream.
+//!
+//! Currently only supports bz2 compression detection.
+
 use std::io::{Chain, Cursor, Error, Read};
 
 /// Detects bz2 compression on the input `stream`. Returns a reader
