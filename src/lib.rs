@@ -1,5 +1,13 @@
 //! A library for SuperDARN DMAP file I/O.
-//!
+//! 
+//! [![github]](https://github.com/SuperDARNCanada/dmap)&ensp;[![crates-io]](https://crates.io/crates/darn-dmap)&ensp;[![docs-rs]](crate)
+//! 
+//! [github]: https://img.shields.io/badge/github-8da0cb?style=for-the-badge&labelColor=555555&logo=github
+//! [crates-io]: https://img.shields.io/badge/crates.io-fc8d62?style=for-the-badge&labelColor=555555&logo=rust
+//! [docs-rs]: https://img.shields.io/badge/docs.rs-66c2a5?style=for-the-badge&labelColor=555555&logo=docs.rs
+//! 
+//! <br>
+//! 
 //! This library also has a Python API using pyo3.
 //!
 //! For more information about DMAP files, see [RST](https://radar-software-toolkit-rst.readthedocs.io/en/latest/)
@@ -325,7 +333,7 @@ write_py!(snd, "write_snd", "write_snd_bytes");
 
 /// Functions for SuperDARN DMAP file format I/O.
 #[pymodule]
-fn dmap(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn dmap_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Strict read functions
     m.add_function(wrap_pyfunction!(read_dmap_py, m)?)?;
     m.add_function(wrap_pyfunction!(read_iqdat_py, m)?)?;

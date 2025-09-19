@@ -23,6 +23,7 @@ Repository = "https://github.com/SuperDARNCanada/dmap"
 
 [tool.maturin]
 python-source = "python"
+module-name = "dmap.dmap_rs"
 bindings = "pyo3"
 profile = "release"
 compatibility = "manylinux2014"

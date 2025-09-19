@@ -1,11 +1,11 @@
 """
-Wrappers around the `dmap` Python API.
+Wrappers around the `dmap_rs` Python API.
 
 Each file type will have one function for calling any type of reading (strict, lax, bytes, sniff) or any type of writing
 (regular, bytes).
 """
 from typing import Union, Optional
-import dmap
+from . import dmap_rs
 
 
 def read_dispatcher(source: Union[str, bytes], fmt: str, mode: str) -> Union[dict, list[dict], tuple[list[dict], Optional[int]]]:
@@ -61,7 +61,7 @@ def read_dispatcher(source: Union[str, bytes], fmt: str, mode: str) -> Union[dic
         f"{'_lax' if mode == 'lax' else ''}"
     )
 
-    return getattr(dmap, fn_name)(source)
+    return getattr(dmap_rs, fn_name)(source)
 
 
 def write_dispatcher(source: list[dict], fmt: str, outfile: Union[None, str]) -> Union[None, bytes]:
@@ -84,9 +84,9 @@ def write_dispatcher(source: list[dict], fmt: str, outfile: Union[None, str]) ->
             f"invalid fmt `{fmt}`: expected one of ['dmap', 'iqdat', 'rawacf', 'fitacf', 'grid', 'map', 'snd']"
         )
     if outfile is None:
-        return getattr(dmap, f"write_{fmt}_bytes")(source)
+        return getattr(dmap_rs, f"write_{fmt}_bytes")(source)
     elif isinstance(outfile, str):
-        getattr(dmap, f"write_{fmt}")(source, outfile)
+        getattr(dmap_rs, f"write_{fmt}")(source, outfile)
     else:
         raise TypeError(f"invalid type for `outfile` {type(outfile)}: expected `str` or `None`")
 

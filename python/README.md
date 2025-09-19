@@ -1,6 +1,8 @@
-# Dmap
+A library for SuperDARN DMAP file I/O
+=====================================
 
-A library for SuperDARN DMAP file I/O.
+[<img alt="github" src="https://img.shields.io/badge/github-SuperDARNCanada/dmap-8da0cb?style=for-the-badge&labelColor=555555&logo=github" height="20">](https://github.com/SuperDARNCanada/dmap)
+
 
 The SuperDARN DMAP file formats are all supported (IQDAT, RAWACF, FITACF, GRID, MAP, and SND)
 as well as a generic DMAP format that is unaware of any required fields or types (e.g. char, int32) for any fields.
