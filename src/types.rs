@@ -15,7 +15,7 @@ use zerocopy::{AsBytes, ByteOrder, FromBytes, LittleEndian};
 
 type Result<T> = std::result::Result<T, DmapError>;
 
-/// Defines the fields of a record and their `Type`.
+/// Defines the fields of a record and their [`Type`].
 pub struct Fields<'a> {
     /// The names of all fields of the record type
     pub all_fields: Vec<&'a str>,
@@ -253,7 +253,8 @@ pub enum DmapVec {
     Double(ArrayD<f64>),
 }
 impl DmapVec {
-    /// Gets the corresponding `Type` of the vector.
+    /// Gets the corresponding [`Type`] of the vector.
+    #[inline]
     pub(crate) fn get_type(&self) -> Type {
         match self {
             DmapVec::Char(_) => Type::Char,
@@ -268,7 +269,8 @@ impl DmapVec {
             DmapVec::Double(_) => Type::Double,
         }
     }
-    /// Copies the data and metadata (dimensions, `Type` key) to raw bytes
+    /// Copies the data and metadata (dimensions, [`Type`] key) to raw bytes
+    #[inline]
     pub(crate) fn as_bytes(&self) -> Vec<u8> {
         let mut bytes: Vec<u8> = DmapType::as_bytes(&self.get_type().key()).to_vec();
         match self {
@@ -298,6 +300,7 @@ impl DmapVec {
     /// let arr = DmapVec::Uint(array![[0, 1, 2], [3, 4, 5]].into_dyn());
     /// assert_eq!(arr.shape(), &[2, 3]);
     /// ```
+    #[must_use]
     pub fn shape(&self) -> &[usize] {
         match self {
             DmapVec::Char(x) => x.shape(),
@@ -357,13 +360,15 @@ impl<'py> FromPyObject<'py> for DmapVec {
     }
 }
 
-/// Generates trait implementations for infallible conversion into DmapVec and fallible conversion
+/// Generates trait implementations for infallible conversion into [`DmapVec`] and fallible conversion
 /// back.
+///
 /// Example: `vec_impls!(ArrayD<i8>, DmapVec::Char)` will generate `impl From<ArrayD<i8>> for
 /// DmapVec` and `impl TryFrom<DmapVec> for ArrayD<i8>` code blocks.
 macro_rules! vec_impls {
     ($type:ty, $enum_var:path) => {
         impl From<$type> for DmapVec {
+            #[inline]
             fn from(value: $type) -> Self {
                 $enum_var(value)
             }
@@ -385,6 +390,7 @@ macro_rules! vec_impls {
         }
 
         impl From<$type> for DmapField {
+            #[inline]
             fn from(value: $type) -> Self {
                 DmapField::Vector($enum_var(value))
             }
@@ -429,6 +435,8 @@ pub enum DmapField {
 }
 impl DmapField {
     /// Converts the field and metadata (`Type` key and dimensions if applicable) to raw bytes.
+    #[inline]
+    #[must_use]
     pub fn as_bytes(&self) -> Vec<u8> {
         match self {
             Self::Scalar(x) => x.as_bytes(),
@@ -445,7 +453,7 @@ impl IntoPy<PyObject> for DmapField {
     }
 }
 
-/// Macro for implementing conversion traits between primitives and `DmapField`, `DmapScalar`
+/// Macro for implementing conversion traits between primitives and [`DmapField`], [`DmapScalar`]
 /// types.
 ///
 /// Example: `scalar_impls(i8, DmapScalar::Char)` will implement:
@@ -495,6 +503,9 @@ pub trait DmapType: std::fmt::Debug {
     /// Create a copy of the data as raw bytes.
     fn as_bytes(&self) -> Vec<u8>;
     /// Convert raw bytes to `Self`
+    ///
+    /// # Errors
+    /// If the bytes are not a valid DMAP record of type `Self`.
     fn from_bytes(bytes: &[u8]) -> Result<Self>
     where
         Self: Sized;
@@ -502,19 +513,21 @@ pub trait DmapType: std::fmt::Debug {
     fn dmap_type() -> Type;
 }
 
-/// Macro for implementing DmapType trait for primitive types.
+/// Macro for implementing [`DmapType`] trait for primitive types.
 /// Example: `type_impls!(i8, Type::Char, 1)`
 macro_rules! type_impls {
     // This variant captures single-byte types
     ($type:ty, $enum_var:path, 1) => {
         impl DmapType for $type {
-
+            #[inline]
             fn size() -> usize { 1 }
 
+            #[inline]
             fn as_bytes(&self) -> Vec<u8> {
                 AsBytes::as_bytes(self).to_vec()
             }
 
+            #[inline]
             fn from_bytes(bytes: &[u8]) -> Result<Self>
             where
                 Self: Sized,
@@ -522,6 +535,7 @@ macro_rules! type_impls {
                 Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
             }
 
+            #[inline]
             fn dmap_type() -> Type { $enum_var }
         }
     };
@@ -529,15 +543,17 @@ macro_rules! type_impls {
     ($type:ty, $enum_var:path, $num_bytes:expr) => {
         paste! {
             impl DmapType for $type {
-
+                #[inline]
                 fn size() -> usize { $num_bytes }
 
+                #[inline]
                 fn as_bytes(&self) -> Vec<u8> {
                     let mut bytes = [0; $num_bytes];
                     LittleEndian::[< write_ $type >](&mut bytes, *self);
                     bytes.to_vec()
                 }
 
+                #[inline]
                 fn from_bytes(bytes: &[u8]) -> Result<Self>
                 where
                     Self: Sized,
@@ -545,6 +561,7 @@ macro_rules! type_impls {
                     Self::read_from(bytes).ok_or(DmapError::CorruptStream("Unable to interpret bytes"))
                 }
 
+                #[inline]
                 fn dmap_type() -> Type { $enum_var }
             }
         }
@@ -564,19 +581,26 @@ type_impls!(f64, Type::Double, 8);
 
 // This implementation differs significantly from the others, so it doesn't use the macro
 impl DmapType for String {
+    #[inline]
     fn size() -> usize {
         0
     }
+
+    #[inline]
     fn as_bytes(&self) -> Vec<u8> {
         let mut bytes = self.as_bytes().to_vec();
         bytes.push(0); // null-terminate
         bytes
     }
+
+    #[inline]
     fn from_bytes(bytes: &[u8]) -> Result<Self> {
         let data = String::from_utf8(bytes.to_owned())
             .map_err(|_| DmapError::InvalidScalar("Cannot convert bytes to String".to_string()))?;
         Ok(data.trim_end_matches(char::from(0)).to_string())
     }
+
+    #[inline]
     fn dmap_type() -> Type {
         Type::String
     }
@@ -806,7 +830,7 @@ impl TryFrom<DmapScalar> for f64 {
             DmapScalar::Ushort(x) => Ok(x as f64),
             DmapScalar::Uint(x) => Ok(x as f64),
             DmapScalar::Ulong(x) => Ok(x as f64),
-            DmapScalar::Float(x) => Ok(x as f64),
+            DmapScalar::Float(x) => Ok(f64::from(x)),
             DmapScalar::Double(x) => Ok(x),
             DmapScalar::String(x) => Err(DmapError::InvalidScalar(format!(
                 "Unable to convert {x} to f64"
@@ -826,14 +850,19 @@ impl TryFrom<DmapScalar> for String {
     }
 }
 
-/// Verify that `name` exists in `fields` and is of the correct `Type`.
+/// Verify that `name` exists in `fields` and is of the correct [`Type`].
+///
+/// # Errors
+/// If `name` is not in `fields`.
+///
+/// If `name` is in `fields`, but is not a [`DmapField::Scalar`] of `expected_type`.
 pub fn check_scalar(
     fields: &IndexMap<String, DmapField>,
     name: &str,
-    expected_type: Type,
+    expected_type: &Type,
 ) -> Result<()> {
     match fields.get(name) {
-        Some(DmapField::Scalar(data)) if data.get_type() == expected_type => Ok(()),
+        Some(DmapField::Scalar(data)) if data.get_type() == *expected_type => Ok(()),
         Some(DmapField::Scalar(data)) => Err(DmapError::InvalidScalar(format!(
             "{name} is of type {}, expected {}",
             data.get_type(),
@@ -846,14 +875,17 @@ pub fn check_scalar(
     }
 }
 
-/// If `name` is in `fields`, verify that it is of the correct `Type`.
+/// If `name` is in `fields`, verify that it is of the correct [`Type`].
+///
+/// # Errors
+/// If `name` is in `fields`, but is not a [`DmapField::Scalar`] of `expected_type`.
 pub fn check_scalar_opt(
     fields: &IndexMap<String, DmapField>,
     name: &str,
-    expected_type: Type,
+    expected_type: &Type,
 ) -> Result<()> {
     match fields.get(name) {
-        Some(DmapField::Scalar(data)) if data.get_type() == expected_type => Ok(()),
+        Some(DmapField::Scalar(data)) if data.get_type() == *expected_type => Ok(()),
         Some(DmapField::Scalar(data)) => Err(DmapError::InvalidScalar(format!(
             "{name} is of type {}, expected {}",
             data.get_type(),
@@ -866,14 +898,19 @@ pub fn check_scalar_opt(
     }
 }
 
-/// Verify that `name` exists in `fields` and is of the correct `Type`.
+/// Verify that `name` exists in `fields` and is of the correct [`Type`].
+///
+/// # Errors
+/// If `name` is not in `fields`.
+///
+/// If `name` is in `fields`, but is not a [`DmapField::Vector`] of `expected_type`.
 pub fn check_vector(
     fields: &IndexMap<String, DmapField>,
     name: &str,
-    expected_type: Type,
+    expected_type: &Type,
 ) -> Result<()> {
     match fields.get(name) {
-        Some(DmapField::Vector(data)) if data.get_type() != expected_type => {
+        Some(DmapField::Vector(data)) if data.get_type() != *expected_type => {
             Err(DmapError::InvalidVector(format!(
                 "{name} is of type {}, expected {}",
                 data.get_type(),
@@ -888,14 +925,17 @@ pub fn check_vector(
     }
 }
 
-/// If `name` is in `fields`, verify that it is of the correct `Type`.
+/// If `name` is in `fields`, verify that it is of the correct [`Type`].
+///
+/// # Errors
+/// If `name` is in `fields`, but is not a [`DmapField::Vector`] of `expected_type`.
 pub fn check_vector_opt(
     fields: &IndexMap<String, DmapField>,
     name: &str,
-    expected_type: Type,
+    expected_type: &Type,
 ) -> Result<()> {
     match fields.get(name) {
-        Some(DmapField::Vector(data)) if data.get_type() != expected_type => {
+        Some(DmapField::Vector(data)) if data.get_type() != *expected_type => {
             Err(DmapError::InvalidVector(format!(
                 "{name} is of type {}, expected {}",
                 data.get_type(),
@@ -915,8 +955,8 @@ pub fn check_vector_opt(
 /// 1. `name`: a null-terminated string
 /// 2. `type`: an i32 key, which maps to a data type (see [`Type`])
 /// 3. `data`: the actual data as raw bytes.
+#[inline]
 pub(crate) fn parse_scalar(cursor: &mut Cursor<Vec<u8>>) -> Result<(String, DmapField)> {
-    let _mode = 6;
     let (name, data_type) = parse_header(cursor)?;
     let data: DmapScalar = match data_type {
         Type::Char => DmapScalar::Char(read_data::<i8>(cursor)?),
@@ -936,6 +976,7 @@ pub(crate) fn parse_scalar(cursor: &mut Cursor<Vec<u8>>) -> Result<(String, Dmap
 }
 
 /// Grabs the name and data type key from `cursor`.
+#[inline]
 fn parse_header(cursor: &mut Cursor<Vec<u8>>) -> Result<(String, Type)> {
     let name = read_data::<String>(cursor).map_err(|e| {
         DmapError::InvalidField(format!("Invalid name, byte {}: {e}", cursor.position()))
@@ -963,7 +1004,6 @@ pub(crate) fn parse_vector(
     cursor: &mut Cursor<Vec<u8>>,
     record_size: i32,
 ) -> Result<(String, DmapField)> {
-    let _mode = 7;
     let start_position = cursor.position();
     let (name, data_type) = parse_header(cursor)?;
 
@@ -997,15 +1037,15 @@ pub(crate) fn parse_vector(
                 cursor.position() - i32::size() as u64,
             )));
         }
-        dimensions.push(dim as u32 as usize);
+        dimensions.push(usize::try_from(dim)?);
         total_elements *= dim;
     }
     dimensions = dimensions.into_iter().rev().collect(); // reverse the dimensions, stored in column-major order
-    if total_elements * data_type.size() as i32 > record_size {
+    if total_elements * i32::try_from(data_type.size())? > record_size {
         return Err(DmapError::InvalidVector(format!(
             "Vector `{name}` size starting at byte {} exceeds record size ({} > {record_size})",
-            cursor.position() - vector_dimension as u64 * i32::size() as u64,
-            total_elements * data_type.size() as i32,
+            cursor.position() - u64::try_from(vector_dimension)? * u64::try_from(i32::size())?,
+            total_elements * i32::try_from(data_type.size())?,
         )));
     }
 
@@ -1078,16 +1118,15 @@ pub(crate) fn parse_vector(
             total_elements,
             name
         ),
-        _ => {
+        Type::String => {
             return Err(DmapError::InvalidVector(format!(
-                "Invalid type {} for DMAP vector {}",
-                data_type, name
+                "Invalid type {data_type} for DMAP vector {name}"
             )))
         }
     };
 
     let num_bytes = cursor.position() - start_position;
-    if num_bytes > record_size as u64 {
+    if num_bytes > u64::try_from(record_size)? {
         return Err(DmapError::InvalidVector(format!(
             "Vector `{name}` occupies more bytes than record ({num_bytes} > {record_size})"
         )));
@@ -1106,8 +1145,9 @@ fn read_vector<T: DmapType>(cursor: &mut Cursor<Vec<u8>>, num_elements: i32) -> 
 }
 
 /// Reads a singular value of type `T` starting from the `cursor` position.
+#[inline]
 pub(crate) fn read_data<T: DmapType>(cursor: &mut Cursor<Vec<u8>>) -> Result<T> {
-    let position = cursor.position() as usize;
+    let position = usize::try_from(cursor.position())?;
     let stream = cursor.get_mut();
 
     if position > stream.len() {
@@ -1472,42 +1512,42 @@ mod tests {
         use numpy::ndarray::array;
 
         let mut rec = IndexMap::<String, DmapField>::new();
-        let res = check_scalar(&rec, "test", Type::Char);
+        let res = check_scalar(&rec, "test", &Type::Char);
         assert!(res.is_err());
-        let res = check_scalar_opt(&rec, "test", Type::Char);
+        let res = check_scalar_opt(&rec, "test", &Type::Char);
         assert!(res.is_ok());
-        let res = check_vector(&rec, "test", Type::Char);
+        let res = check_vector(&rec, "test", &Type::Char);
         assert!(res.is_err());
-        let res = check_vector_opt(&rec, "test", Type::Char);
+        let res = check_vector_opt(&rec, "test", &Type::Char);
         assert!(res.is_ok());
 
         let res = rec.insert("test".to_string(), DmapField::from(1i32));
         assert!(res.is_none());
-        let res = check_scalar(&rec, "test", Type::Int);
+        let res = check_scalar(&rec, "test", &Type::Int);
         assert!(res.is_ok());
-        let res = check_scalar_opt(&rec, "test", Type::Char);
+        let res = check_scalar_opt(&rec, "test", &Type::Char);
         assert!(res.is_err());
-        let res = check_scalar_opt(&rec, "test", Type::Int);
+        let res = check_scalar_opt(&rec, "test", &Type::Int);
         assert!(res.is_ok());
-        let res = check_vector(&rec, "test", Type::Char);
+        let res = check_vector(&rec, "test", &Type::Char);
         assert!(res.is_err());
-        let res = check_vector_opt(&rec, "test", Type::Char);
+        let res = check_vector_opt(&rec, "test", &Type::Char);
         assert!(res.is_err());
 
         let test_vec = array![1.0f32, 2.0f32].into_dyn();
         let res = rec.insert("test_vec".to_string(), test_vec.into());
         assert!(res.is_none());
-        let res = check_scalar(&rec, "test_vec", Type::Float);
+        let res = check_scalar(&rec, "test_vec", &Type::Float);
         assert!(res.is_err());
-        let res = check_scalar_opt(&rec, "test_vec", Type::Float);
+        let res = check_scalar_opt(&rec, "test_vec", &Type::Float);
         assert!(res.is_err());
-        let res = check_vector(&rec, "test_vec", Type::Float);
+        let res = check_vector(&rec, "test_vec", &Type::Float);
         assert!(res.is_ok());
-        let res = check_vector(&rec, "test_vec", Type::Double);
+        let res = check_vector(&rec, "test_vec", &Type::Double);
         assert!(res.is_err());
-        let res = check_vector_opt(&rec, "test_vec", Type::Float);
+        let res = check_vector_opt(&rec, "test_vec", &Type::Float);
         assert!(res.is_ok());
-        let res = check_vector_opt(&rec, "test_vec", Type::Int);
+        let res = check_vector_opt(&rec, "test_vec", &Type::Int);
         assert!(res.is_err());
 
         Ok(())

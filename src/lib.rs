@@ -1,6 +1,6 @@
 //! A library for SuperDARN DMAP file I/O.
 //!
-//! This library has a Python API using pyo3 that supports reading and writing whole files.
+//! This library also has a Python API using pyo3.
 //!
 //! For more information about DMAP files, see [RST](https://radar-software-toolkit-rst.readthedocs.io/en/latest/)
 //! or [pyDARNio](https://pydarnio.readthedocs.io/en/latest/).
@@ -69,7 +69,7 @@
 //! # fn main() -> Result<(), DmapError> {
 //! let file = File::open("tests/test_files/test.rawacf.bz2")?;  // `File` implements the `Read` trait
 //! let rawacf_data = RawacfRecord::read_records(file)?;
-//! 
+//!
 //! let uncompressed_data = RawacfRecord::read_file("tests/test_files/test.rawacf")?;
 //! assert_eq!(rawacf_data.len(), uncompressed_data.len());
 //! for (left, right) in izip!(rawacf_data, uncompressed_data) {
@@ -104,11 +104,14 @@ use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use std::path::{Path, PathBuf};
 
-/// This macro generates a function for attempting to convert `Vec<IndexMap>` to `Vec<$type>` and write it to file. 
+/// This macro generates a function for attempting to convert `Vec<IndexMap>` to `Vec<$type>` and write it to file.
 macro_rules! write_rust {
     ($type:ident) => {
         paste! {
-            #[doc = "Attempts to convert `recs` to `" $type:camel Record "` then append to `outfile`." ]
+            #[doc = "Attempts to convert `recs` to `" $type:camel Record "` then append to `outfile`."]
+            #[doc = ""]
+            #[doc = "# Errors"]
+            #[doc = "if any of the `IndexMap`s are unable to be interpreted as a `" $type:camel Record "`, or there is an issue writing to file."]
             pub fn [< try_write_ $type >]<P: AsRef<Path>>(
                 recs: Vec<IndexMap<String, DmapField>>,
                 outfile: P,
@@ -127,7 +130,6 @@ write_rust!(grid);
 write_rust!(map);
 write_rust!(snd);
 write_rust!(dmap);
-
 
 /// Creates functions for reading DMAP files for the Python API.
 ///

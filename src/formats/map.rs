@@ -1,3 +1,5 @@
+//! The [Map file format](https://radar-software-toolkit-rst.readthedocs.io/en/latest/references/general/map/).
+
 use crate::record::create_record_type;
 use crate::types::{Fields, Type};
 use lazy_static::lazy_static;

@@ -34,6 +34,14 @@ If you are defining a new DMAP format, you will need to make a new file in this 
 existing files. Essentially, you define the scalar and vector fields, both required and optional, and the groups of vector
 fields which must have identical dimensions, then call a macro to autogenerate the struct code for you. 
 
+### `src/compression.rs`
+This file contains the automatic bz2 detection function. If more compression types are to be supported, this is where you would
+put them.
+
+### `src/io.rs`
+This file contains the function `bytes_to_file`, which handles writing a `Vec<u8>` to `AsRef<Path>`. If the path
+ends in `.bz2`, the function will compress first with bz2.
+
 ### `tests`
 In `tests.rs`, integration tests for reading and writing all file types are present. Small example files
 are contained in `tests/test_files`.

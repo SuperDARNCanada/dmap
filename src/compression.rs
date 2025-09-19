@@ -4,9 +4,14 @@
 
 use std::io::{Chain, Cursor, Error, Read};
 
+type PartiallyReadStream<T> = Chain<Cursor<[u8; 3]>, T>;
+
 /// Detects bz2 compression on the input `stream`. Returns a reader
 /// which includes all data from `stream`.
-pub(crate) fn detect_bz2<T>(mut stream: T) -> Result<(bool, Chain<Cursor<[u8; 3]>, T>), Error>
+///
+/// # Errors
+/// See [`std::io::Read::read_exact`].
+pub(crate) fn detect_bz2<T>(mut stream: T) -> Result<(bool, PartiallyReadStream<T>), Error>
 where
     T: for<'a> Read,
 {

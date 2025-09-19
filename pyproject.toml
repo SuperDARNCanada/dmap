@@ -14,7 +14,7 @@ classifiers = [
     "Programming Language :: Rust"
 ]
 description = "SuperDARN DMAP file format I/O"
-readme = "README.md"
+readme = "python/README.md"
 dependencies = ["numpy<3"]
 license = "LGPL-3.0-or-later"
 
