@@ -7,7 +7,7 @@ use numpy::PyArrayMethods;
 use paste::paste;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::{Bound, FromPyObject, IntoPy, PyAny, PyObject, PyResult, Python};
+use pyo3::{Bound, FromPyObject, PyAny, PyResult, Python};
 use std::cmp::PartialEq;
 use std::fmt::{Display, Formatter};
 use std::io::Cursor;
@@ -120,7 +120,7 @@ impl Type {
 }
 
 /// A scalar field in a DMAP record.
-#[derive(Debug, Clone, PartialEq, FromPyObject)]
+#[derive(Debug, Clone, PartialEq, FromPyObject, IntoPyObject)]
 #[repr(C)]
 pub enum DmapScalar {
     Char(i8),
@@ -208,23 +208,23 @@ impl Display for DmapScalar {
         }
     }
 }
-impl IntoPy<PyObject> for DmapScalar {
-    fn into_py(self, py: Python<'_>) -> PyObject {
-        match self {
-            Self::Char(x) => x.into_py(py),
-            Self::Short(x) => x.into_py(py),
-            Self::Int(x) => x.into_py(py),
-            Self::Long(x) => x.into_py(py),
-            Self::Uchar(x) => x.into_py(py),
-            Self::Ushort(x) => x.into_py(py),
-            Self::Uint(x) => x.into_py(py),
-            Self::Ulong(x) => x.into_py(py),
-            Self::Float(x) => x.into_py(py),
-            Self::Double(x) => x.into_py(py),
-            Self::String(x) => x.into_py(py),
-        }
-    }
-}
+// impl IntoPy<PyObject> for DmapScalar {
+//     fn into_py(self, py: Python<'_>) -> PyObject {
+//         match self {
+//             Self::Char(x) => x.into_py(py),
+//             Self::Short(x) => x.into_py(py),
+//             Self::Int(x) => x.into_py(py),
+//             Self::Long(x) => x.into_py(py),
+//             Self::Uchar(x) => x.into_py(py),
+//             Self::Ushort(x) => x.into_py(py),
+//             Self::Uint(x) => x.into_py(py),
+//             Self::Ulong(x) => x.into_py(py),
+//             Self::Float(x) => x.into_py(py),
+//             Self::Double(x) => x.into_py(py),
+//             Self::String(x) => x.into_py(py),
+//         }
+//     }
+// }
 
 macro_rules! vec_to_bytes {
     ($bytes:ident, $x:ident) => {{
@@ -316,20 +316,24 @@ impl DmapVec {
         }
     }
 }
-impl IntoPy<PyObject> for DmapVec {
-    fn into_py(self, py: Python<'_>) -> PyObject {
-        match self {
-            DmapVec::Char(x) => PyObject::from(PyArray::from_owned_array_bound(py, x)),
-            DmapVec::Short(x) => PyObject::from(PyArray::from_owned_array_bound(py, x)),
-            DmapVec::Int(x) => PyObject::from(PyArray::from_owned_array_bound(py, x)),
-            DmapVec::Long(x) => PyObject::from(PyArray::from_owned_array_bound(py, x)),
-            DmapVec::Uchar(x) => PyObject::from(PyArray::from_owned_array_bound(py, x)),
-            DmapVec::Ushort(x) => PyObject::from(PyArray::from_owned_array_bound(py, x)),
-            DmapVec::Uint(x) => PyObject::from(PyArray::from_owned_array_bound(py, x)),
-            DmapVec::Ulong(x) => PyObject::from(PyArray::from_owned_array_bound(py, x)),
-            DmapVec::Float(x) => PyObject::from(PyArray::from_owned_array_bound(py, x)),
-            DmapVec::Double(x) => PyObject::from(PyArray::from_owned_array_bound(py, x)),
-        }
+impl<'py> IntoPyObject<'py> for DmapVec {
+    type Target = PyAny;
+    type Output = Bound<'py, Self::Target>;
+    type Error = std::convert::Infallible;
+
+    fn into_pyobject(self, py: Python<'py>) -> std::result::Result<Self::Output, Self::Error> {
+        Ok(match self {
+            DmapVec::Char(x) => PyArray::from_owned_array(py, x).into_any(),
+            DmapVec::Short(x) => PyArray::from_owned_array(py, x).into_any(),
+            DmapVec::Int(x) => PyArray::from_owned_array(py, x).into_any(),
+            DmapVec::Long(x) => PyArray::from_owned_array(py, x).into_any(),
+            DmapVec::Uchar(x) => PyArray::from_owned_array(py, x).into_any(),
+            DmapVec::Ushort(x) => PyArray::from_owned_array(py, x).into_any(),
+            DmapVec::Uint(x) => PyArray::from_owned_array(py, x).into_any(),
+            DmapVec::Ulong(x) => PyArray::from_owned_array(py, x).into_any(),
+            DmapVec::Float(x) => PyArray::from_owned_array(py, x).into_any(),
+            DmapVec::Double(x) => PyArray::from_owned_array(py, x).into_any(),
+        })
     }
 }
 impl<'py> FromPyObject<'py> for DmapVec {
@@ -427,7 +431,7 @@ vec_impls!(ArrayD<f64>, DmapVec::Double);
 ///
 /// This is the type that is stored in a DMAP record, representing either a scalar or
 /// vector field.
-#[derive(Debug, Clone, PartialEq, FromPyObject)]
+#[derive(Debug, Clone, PartialEq, FromPyObject, IntoPyObject)]
 #[repr(C)]
 pub enum DmapField {
     Vector(DmapVec),
@@ -444,14 +448,14 @@ impl DmapField {
         }
     }
 }
-impl IntoPy<PyObject> for DmapField {
-    fn into_py(self, py: Python<'_>) -> PyObject {
-        match self {
-            DmapField::Scalar(x) => x.into_py(py),
-            DmapField::Vector(x) => x.into_py(py),
-        }
-    }
-}
+// impl IntoPyObject for DmapField {
+//     fn into_py(self, py: Python<'_>) -> PyObject {
+//         match self {
+//             DmapField::Scalar(x) => x.into_py(py),
+//             DmapField::Vector(x) => x.into_py(py),
+//         }
+//     }
+// }
 
 /// Macro for implementing conversion traits between primitives and [`DmapField`], [`DmapScalar`]
 /// types.

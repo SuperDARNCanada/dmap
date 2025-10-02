@@ -1,13 +1,13 @@
 //! A library for SuperDARN DMAP file I/O.
-//! 
+//!
 //! [![github]](https://github.com/SuperDARNCanada/dmap)&ensp;[![crates-io]](https://crates.io/crates/darn-dmap)&ensp;[![docs-rs]](crate)
-//! 
+//!
 //! [github]: https://img.shields.io/badge/github-8da0cb?style=for-the-badge&labelColor=555555&logo=github
 //! [crates-io]: https://img.shields.io/badge/crates.io-fc8d62?style=for-the-badge&labelColor=555555&logo=rust
 //! [docs-rs]: https://img.shields.io/badge/docs.rs-66c2a5?style=for-the-badge&labelColor=555555&logo=docs.rs
-//! 
+//!
 //! <br>
-//! 
+//!
 //! This library also has a Python API using pyo3.
 //!
 //! For more information about DMAP files, see [RST](https://radar-software-toolkit-rst.readthedocs.io/en/latest/)
@@ -295,7 +295,7 @@ fn write_dmap_py(recs: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -> Py
 #[pyo3(text_signature = "(recs: list[dict], /)")]
 fn write_dmap_bytes_py(py: Python, recs: Vec<IndexMap<String, DmapField>>) -> PyResult<PyObject> {
     let bytes = DmapRecord::try_into_bytes(recs).map_err(PyErr::from)?;
-    Ok(PyBytes::new_bound(py, &bytes).into())
+    Ok(PyBytes::new(py, &bytes).into())
 }
 
 /// Generates functions exposed to the Python API for writing specific file types.
@@ -317,7 +317,7 @@ macro_rules! write_py {
             #[pyo3(text_signature = "(recs: list[dict], /)")]
             fn [< write_ $name _bytes_py >](py: Python, recs: Vec<IndexMap<String, DmapField>>) -> PyResult<PyObject> {
                 let bytes = [< $name:camel Record >]::try_into_bytes(recs).map_err(PyErr::from)?;
-                Ok(PyBytes::new_bound(py, &bytes).into())
+                Ok(PyBytes::new(py, &bytes).into())
             }
         }
     }
