@@ -29,5 +29,5 @@ from ._wrapper import (
     write_grid,
     write_map,
     write_snd,
-    write_dmap
+    write_dmap,
 )

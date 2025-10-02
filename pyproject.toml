@@ -29,3 +29,10 @@ profile = "release"
 compatibility = "manylinux2014"
 auditwheel = "repair"
 strip = true
+
+[project.optional-dependencies]
+dev = [
+    "bz2",
+    "pytest",
+    "ruff",
+]
