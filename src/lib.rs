@@ -86,8 +86,6 @@
 //! #     Ok(())
 //! # }
 //! ```
-//! Writing to a file also
-//!
 
 pub(crate) mod compression;
 pub mod error;
