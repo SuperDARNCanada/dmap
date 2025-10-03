@@ -32,7 +32,6 @@ strip = true
 
 [project.optional-dependencies]
 dev = [
-    "bz2",
     "pytest",
     "ruff",
 ]

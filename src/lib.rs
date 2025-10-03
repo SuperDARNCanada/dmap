@@ -293,7 +293,7 @@ fn write_dmap_py(recs: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -> Py
 #[pyfunction]
 #[pyo3(name = "write_dmap_bytes")]
 #[pyo3(text_signature = "(recs: list[dict], /)")]
-fn write_dmap_bytes_py(py: Python, recs: Vec<IndexMap<String, DmapField>>) -> PyResult<PyObject> {
+fn write_dmap_bytes_py(py: Python, recs: Vec<IndexMap<String, DmapField>>) -> PyResult<Py<PyAny>> {
     let bytes = DmapRecord::try_into_bytes(recs).map_err(PyErr::from)?;
     Ok(PyBytes::new(py, &bytes).into())
 }
@@ -315,7 +315,7 @@ macro_rules! write_py {
             #[pyfunction]
             #[pyo3(name = $bytes_name)]
             #[pyo3(text_signature = "(recs: list[dict], /)")]
-            fn [< write_ $name _bytes_py >](py: Python, recs: Vec<IndexMap<String, DmapField>>) -> PyResult<PyObject> {
+            fn [< write_ $name _bytes_py >](py: Python, recs: Vec<IndexMap<String, DmapField>>) -> PyResult<Py<PyAny>> {
                 let bytes = [< $name:camel Record >]::try_into_bytes(recs).map_err(PyErr::from)?;
                 Ok(PyBytes::new(py, &bytes).into())
             }
