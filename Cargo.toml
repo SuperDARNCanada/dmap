@@ -9,6 +9,7 @@ repository = "https://github.com/SuperDARNCanada/dmap"
 license = "LGPL-3.0-or-later"
 keywords = ["SuperDARN", "dmap", "I/O"]
 categories = ["parser-implementations", "science"]
+include = ["src/**/*.rs"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
