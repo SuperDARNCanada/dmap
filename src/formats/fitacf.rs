@@ -1,3 +1,5 @@
+//! The [FitACF file format](https://radar-software-toolkit-rst.readthedocs.io/en/latest/references/general/fitacf/).
+
 use crate::record::create_record_type;
 use crate::types::{Fields, Type};
 use lazy_static::lazy_static;
@@ -46,9 +48,9 @@ static SCALAR_FIELDS: [(&str, Type); 49] = [
     ("tfreq", Type::Short),
     ("mxpwr", Type::Int),
     ("lvmax", Type::Int),
-    ("combf", Type::String),
     ("fitacf.revision.major", Type::Int),
     ("fitacf.revision.minor", Type::Int),
+    ("combf", Type::String),
     ("noise.sky", Type::Float),
     ("noise.lag0", Type::Float),
     ("noise.vel", Type::Float),

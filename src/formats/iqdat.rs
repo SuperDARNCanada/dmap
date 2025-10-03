@@ -1,3 +1,5 @@
+//! The [IQDat file format](https://radar-software-toolkit-rst.readthedocs.io/en/latest/references/general/iqdat/).
+
 use crate::record::create_record_type;
 use crate::types::{Fields, Type};
 use lazy_static::lazy_static;

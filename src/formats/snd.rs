@@ -1,3 +1,5 @@
+//! The [SND file format](https://github.com/SuperDARN/rst/pull/315).
+
 use crate::record::create_record_type;
 use crate::types::{Fields, Type};
 use lazy_static::lazy_static;

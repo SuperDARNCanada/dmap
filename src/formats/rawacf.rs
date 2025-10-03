@@ -1,3 +1,5 @@
+//! The [RawACF file format](https://radar-software-toolkit-rst.readthedocs.io/en/latest/references/general/rawacf/).
+
 use crate::record::create_record_type;
 use crate::types::{Fields, Type};
 use lazy_static::lazy_static;
@@ -46,9 +48,9 @@ static SCALAR_FIELDS: [(&str, Type); 47] = [
     ("tfreq", Type::Short),
     ("mxpwr", Type::Int),
     ("lvmax", Type::Int),
-    ("combf", Type::String),
     ("rawacf.revision.major", Type::Int),
     ("rawacf.revision.minor", Type::Int),
+    ("combf", Type::String),
     ("thr", Type::Float),
 ];
 

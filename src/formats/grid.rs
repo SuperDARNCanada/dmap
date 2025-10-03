@@ -1,3 +1,5 @@
+//! The [Grid file format](https://radar-software-toolkit-rst.readthedocs.io/en/latest/references/general/grid/).
+
 use crate::record::create_record_type;
 use crate::types::{Fields, Type};
 use lazy_static::lazy_static;

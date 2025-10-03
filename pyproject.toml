@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "darn-dmap"
-version = "0.4.0"
+version = "0.5.0"
 requires-python = ">=3.8"
 authors = [
     { name = "Remington Rohel" }
@@ -13,11 +13,25 @@ classifiers = [
     "Programming Language :: Python",
     "Programming Language :: Rust"
 ]
+description = "SuperDARN DMAP file format I/O"
+readme = "python/README.md"
 dependencies = ["numpy<3"]
+license = "LGPL-3.0-or-later"
+
+[project.urls]
+Repository = "https://github.com/SuperDARNCanada/dmap"
 
 [tool.maturin]
+python-source = "python"
+module-name = "dmap.dmap_rs"
 bindings = "pyo3"
 profile = "release"
 compatibility = "manylinux2014"
 auditwheel = "repair"
 strip = true
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
+]

@@ -1,4 +1,6 @@
-//! Defines the `DmapRecord` struct which implements `Record`, which can be used
+//! The generic [DMAP file format](https://radar-software-toolkit-rst.readthedocs.io/en/latest/references/general/dmap_data/).
+//!
+//! Defines [`DmapRecord`] which implements [`Record`], which can be used
 //! for reading/writing DMAP files without checking that certain fields are or
 //! are not present, or have a given type.
 
@@ -12,20 +14,16 @@ pub struct DmapRecord {
     pub data: IndexMap<String, DmapField>,
 }
 
-impl DmapRecord {
-    pub fn get(&self, key: &String) -> Option<&DmapField> {
-        self.data.get(key)
-    }
-    pub fn keys(&self) -> Vec<&String> {
-        self.data.keys().collect()
-    }
-}
-
 impl Record<'_> for DmapRecord {
     fn inner(self) -> IndexMap<String, DmapField> {
         self.data
     }
-
+    fn get(&self, key: &str) -> Option<&DmapField> {
+        self.data.get(key)
+    }
+    fn keys(&self) -> Vec<&String> {
+        self.data.keys().collect()
+    }
     fn new(fields: &mut IndexMap<String, DmapField>) -> Result<DmapRecord, DmapError> {
         Ok(DmapRecord {
             data: fields.to_owned(),
@@ -69,5 +67,13 @@ impl TryFrom<&mut IndexMap<String, DmapField>> for DmapRecord {
 
     fn try_from(value: &mut IndexMap<String, DmapField>) -> Result<Self, Self::Error> {
         DmapRecord::new(value)
+    }
+}
+
+impl TryFrom<IndexMap<String, DmapField>> for DmapRecord {
+    type Error = DmapError;
+
+    fn try_from(mut value: IndexMap<String, DmapField>) -> Result<Self, Self::Error> {
+        DmapRecord::new(&mut value)
     }
 }

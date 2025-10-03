@@ -1,22 +1,39 @@
-//! Defines the `Record` trait, which contains the shared behaviour that all
-//! DMAP records must have.
+//! Defines the [`Record`] trait, which contains the shared behaviour that all DMAP records must have.
 
 use crate::compression::detect_bz2;
 use crate::error::DmapError;
+use crate::io;
 use crate::types::{parse_scalar, parse_vector, read_data, DmapField, DmapType, DmapVec, Fields};
 use bzip2::read::BzDecoder;
 use indexmap::IndexMap;
+use itertools::izip;
+use rayon::iter::Either;
 use rayon::prelude::*;
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::{Cursor, Read};
-use std::path::PathBuf;
+use std::path::Path;
 
+/// DMAP record template.
+///
+/// This trait defines functionality for parsing bytes into records, converting records to bytes,
+/// and reading from / writing to files.
 pub trait Record<'a>:
-    Debug + Send + TryFrom<&'a mut IndexMap<String, DmapField>, Error = DmapError>
+    Debug + Send + Sync + TryFrom<IndexMap<String, DmapField>, Error = DmapError>
 {
+    /// Creates a new object from the parsed scalars and vectors.
+    fn new(fields: &mut IndexMap<String, DmapField>) -> Result<Self, DmapError>
+    where
+        Self: Sized;
+
     /// Gets the underlying data of `self`.
     fn inner(self) -> IndexMap<String, DmapField>;
+
+    /// Returns the field with name `key`, if it exists in the record.
+    fn get(&self, key: &str) -> Option<&DmapField>;
+
+    /// Returns the names of all fields stored in the record.
+    fn keys(&self) -> Vec<&String>;
 
     /// Reads from `dmap_data` and parses into `Vec<Self>`.
     ///
@@ -40,7 +57,7 @@ pub trait Record<'a>:
             .map_err(|_| DmapError::CorruptStream("Unable to read size of first record"))?;
 
         let rec_size = i32::from_le_bytes(buffer[4..8].try_into().unwrap()) as usize; // advance 4 bytes, skipping the "code" field
-        if rec_size <= 0 {
+        if rec_size == 0 {
             return Err(DmapError::InvalidRecord(format!(
                 "Record 0 starting at byte 0 has non-positive size {} <= 0",
                 rec_size
@@ -83,7 +100,7 @@ pub trait Record<'a>:
             rec_end = rec_start + rec_size; // error-checking the size is conducted in Self::parse_record()
             if rec_end > buffer.len() {
                 return Err(DmapError::InvalidRecord(format!("Record {} starting at byte {} has size greater than remaining length of buffer ({} > {})", slices.len(), rec_start, rec_size, buffer.len() - rec_start)));
-            } else if rec_size <= 0 {
+            } else if rec_size == 0 {
                 return Err(DmapError::InvalidRecord(format!(
                     "Record {} starting at byte {} has non-positive size {} <= 0",
                     slices.len(),
@@ -121,7 +138,7 @@ pub trait Record<'a>:
                 }
             }
         }
-        if dmap_errors.len() > 0 {
+        if !dmap_errors.is_empty() {
             return Err(DmapError::BadRecords(bad_recs, dmap_errors[0].to_string()));
         }
         Ok(dmap_records)
@@ -158,7 +175,7 @@ pub trait Record<'a>:
             rec_size = i32::from_le_bytes(buffer[rec_start + 4..rec_start + 8].try_into().unwrap())
                 as usize; // advance 4 bytes, skipping the "code" field
             rec_end = rec_start + rec_size; // error-checking the size is conducted in Self::parse_record()
-            if rec_end > buffer.len() || rec_size <= 0 {
+            if rec_end > buffer.len() || rec_size == 0 {
                 bad_byte = Some(rec_start);
                 break;
                 // rec_start = buffer.len(); // break from loop
@@ -167,6 +184,9 @@ pub trait Record<'a>:
                 slices.push(Cursor::new(buffer[rec_start..rec_end].to_vec()));
                 rec_start = rec_end;
             }
+        }
+        if rec_start != buffer.len() {
+            bad_byte = Some(rec_start);
         }
         let mut dmap_results: Vec<Result<Self, DmapError>> = vec![];
         dmap_results.par_extend(
@@ -187,7 +207,7 @@ pub trait Record<'a>:
     }
 
     /// Read a DMAP file of type `Self`
-    fn read_file(infile: &PathBuf) -> Result<Vec<Self>, DmapError>
+    fn read_file<P: AsRef<Path>>(infile: P) -> Result<Vec<Self>, DmapError>
     where
         Self: Sized,
         Self: Send,
@@ -200,7 +220,7 @@ pub trait Record<'a>:
     ///
     /// If the file is corrupted, it will return the leading uncorrupted records as well as the
     /// position corresponding to the start of the first corrupted record.
-    fn read_file_lax(infile: &PathBuf) -> Result<(Vec<Self>, Option<usize>), DmapError>
+    fn read_file_lax<P: AsRef<Path>>(infile: P) -> Result<(Vec<Self>, Option<usize>), DmapError>
     where
         Self: Sized,
         Self: Send,
@@ -210,7 +230,7 @@ pub trait Record<'a>:
     }
 
     /// Reads the first record of a DMAP file of type `Self`.
-    fn sniff_file(infile: &PathBuf) -> Result<Self, DmapError>
+    fn sniff_file<P: AsRef<Path>>(infile: P) -> Result<Self, DmapError>
     where
         Self: Sized,
         Self: Send,
@@ -297,11 +317,6 @@ pub trait Record<'a>:
 
         Self::new(&mut fields)
     }
-
-    /// Creates a new object from the parsed scalars and vectors.
-    fn new(fields: &mut IndexMap<String, DmapField>) -> Result<Self, DmapError>
-    where
-        Self: Sized;
 
     /// Checks the validity of an `IndexMap` as a representation of a DMAP record.
     ///
@@ -418,10 +433,10 @@ pub trait Record<'a>:
     }
 
     /// Attempts to massage the entries of an `IndexMap` into the proper types for a DMAP record.
-    fn coerce<T: Record<'a>>(
+    fn coerce(
         fields_dict: &mut IndexMap<String, DmapField>,
         fields_for_type: &Fields,
-    ) -> Result<T, DmapError> {
+    ) -> Result<Self, DmapError> {
         let unsupported_keys: Vec<&String> = fields_dict
             .keys()
             .filter(|&k| !fields_for_type.all_fields.contains(&&**k))
@@ -501,7 +516,7 @@ pub trait Record<'a>:
             }
         }
 
-        T::new(fields_dict)
+        Self::new(fields_dict)
     }
 
     /// Attempts to copy `self` to a raw byte representation.
@@ -522,6 +537,7 @@ pub trait Record<'a>:
         let mut num_scalars: i32 = 0;
         let mut num_vectors: i32 = 0;
 
+        // let scalar_fields = data.keys().filter(|k| )
         for (field, _) in fields_for_type.scalars_required.iter() {
             match data.get(&field.to_string()) {
                 Some(x @ DmapField::Scalar(_)) => {
@@ -587,6 +603,175 @@ pub trait Record<'a>:
 
         Ok((num_scalars, num_vectors, data_bytes))
     }
+
+    /// Converts the entries of a `Record` into a raw byte representation, for debugging the conversion.
+    ///
+    /// If all is good, returns a vector containing tuples of:
+    /// * `String`: the name of the field (`"header"` denoting the record header)
+    /// * `usize`: where the serialized bytes of the field start in the record byte representation
+    /// * `Vec<u8>` the byte representation of the field.
+    fn inspect_bytes(
+        &self,
+        fields_for_type: &Fields,
+    ) -> Result<Vec<(String, usize, Vec<u8>)>, DmapError> {
+        let mut data_bytes: Vec<Vec<u8>> = vec![];
+        let mut indices: Vec<usize> = vec![16]; // start at 16 to account for header
+        let mut fields: Vec<String> = vec![];
+
+        let (mut num_scalars, mut num_vectors) = (0, 0);
+
+        for (field, _) in fields_for_type.scalars_required.iter() {
+            fields.push(field.to_string());
+            match self.get(field) {
+                Some(x @ DmapField::Scalar(_)) => {
+                    let mut bytes = vec![];
+                    bytes.extend(field.as_bytes());
+                    bytes.extend([0]); // null-terminate string
+                    bytes.append(&mut x.as_bytes());
+                    indices.push(indices[indices.len() - 1] + bytes.len());
+                    data_bytes.push(bytes);
+                    num_scalars += 1;
+                }
+                Some(_) => Err(DmapError::InvalidScalar(format!(
+                    "Field {field} is a vector, expected scalar"
+                )))?,
+                None => Err(DmapError::InvalidRecord(format!(
+                    "Field {field} missing from record"
+                )))?,
+            }
+        }
+        for (field, _) in fields_for_type.scalars_optional.iter() {
+            fields.push(field.to_string());
+            if let Some(x) = self.get(field) {
+                match x {
+                    DmapField::Scalar(_) => {
+                        let mut bytes = vec![];
+                        bytes.extend(field.as_bytes());
+                        bytes.extend([0]); // null-terminate string
+                        bytes.append(&mut x.as_bytes());
+                        indices.push(indices[indices.len() - 1] + bytes.len());
+                        data_bytes.push(bytes);
+                        num_scalars += 1;
+                    }
+                    DmapField::Vector(_) => Err(DmapError::InvalidScalar(format!(
+                        "Field {field} is a vector, expected scalar"
+                    )))?,
+                }
+            }
+        }
+        for (field, _) in fields_for_type.vectors_required.iter() {
+            fields.push(field.to_string());
+            match self.get(field) {
+                Some(x @ DmapField::Vector(_)) => {
+                    let mut bytes = vec![];
+                    bytes.extend(field.as_bytes());
+                    bytes.extend([0]); // null-terminate string
+                    bytes.append(&mut x.as_bytes());
+                    indices.push(indices[indices.len() - 1] + bytes.len());
+                    data_bytes.push(bytes);
+                    num_vectors += 1;
+                }
+                Some(_) => Err(DmapError::InvalidVector(format!(
+                    "Field {field} is a scalar, expected vector"
+                )))?,
+                None => Err(DmapError::InvalidRecord(format!(
+                    "Field {field} missing from record"
+                )))?,
+            }
+        }
+        for (field, _) in fields_for_type.vectors_optional.iter() {
+            fields.push(field.to_string());
+            if let Some(x) = self.get(field) {
+                match x {
+                    DmapField::Vector(_) => {
+                        let mut bytes = vec![];
+                        bytes.extend(field.as_bytes());
+                        bytes.extend([0]); // null-terminate string
+                        bytes.append(&mut x.as_bytes());
+                        indices.push(indices[indices.len() - 1] + data_bytes.len());
+                        data_bytes.push(bytes);
+                        num_vectors += 1;
+                    }
+                    DmapField::Scalar(_) => Err(DmapError::InvalidVector(format!(
+                        "Field {field} is a scalar, expected vector"
+                    )))?,
+                }
+            }
+        }
+
+        // Now build up the header
+        let num_bytes: usize = data_bytes.iter().map(|x| x.len()).sum();
+        let mut bytes: Vec<u8> = vec![];
+        bytes.extend((65537_i32).as_bytes()); // No idea why this is what it is, copied from backscatter
+        bytes.extend((num_bytes as i32 + 16).as_bytes()); // +16 for code, length, num_scalars, num_vectors
+        bytes.extend(num_scalars.as_bytes());
+        bytes.extend(num_vectors.as_bytes());
+
+        // Accumulate all the results into one big `Vec`
+        let mut field_info: Vec<(String, usize, Vec<u8>)> = vec![("header".to_string(), 0, bytes)];
+        for (f, (s, b)) in izip!(
+            fields.into_iter(),
+            izip!(indices[..indices.len() - 1].iter(), data_bytes.into_iter())
+        ) {
+            field_info.push((f, *s, b));
+        }
+
+        Ok(field_info)
+    }
+
+    /// Creates the byte represenation of a collection of [`Record`]s.
+    ///
+    /// Ordering of the members is preserved.
+    fn into_bytes(recs: &Vec<Self>) -> Result<Vec<u8>, DmapError> {
+        let mut bytes: Vec<u8> = vec![];
+        let (errors, rec_bytes): (Vec<_>, Vec<_>) =
+            recs.par_iter()
+                .enumerate()
+                .partition_map(|(i, rec)| match rec.to_bytes() {
+                    Err(e) => Either::Left((i, e)),
+                    Ok(y) => Either::Right(y),
+                });
+        if !errors.is_empty() {
+            Err(DmapError::InvalidRecord(format!(
+                "Corrupted records: {errors:?}"
+            )))?
+        }
+        bytes.par_extend(rec_bytes.into_par_iter().flatten());
+        Ok(bytes)
+    }
+
+    /// Attempts to convert `recs` to `Self` then convert to bytes.
+    fn try_into_bytes(recs: Vec<IndexMap<String, DmapField>>) -> Result<Vec<u8>, DmapError> {
+        let mut bytes: Vec<u8> = vec![];
+        let (errors, rec_bytes): (Vec<_>, Vec<_>) =
+            recs.into_par_iter()
+                .enumerate()
+                .partition_map(|(i, rec)| match Self::try_from(rec) {
+                    Err(e) => Either::Left((i, e)),
+                    Ok(x) => match x.to_bytes() {
+                        Err(e) => Either::Left((i, e)),
+                        Ok(y) => Either::Right(y),
+                    },
+                });
+        if !errors.is_empty() {
+            Err(DmapError::BadRecords(
+                errors.iter().map(|(i, _)| *i).collect(),
+                errors[0].1.to_string(),
+            ))?
+        }
+        bytes.par_extend(rec_bytes.into_par_iter().flatten());
+        Ok(bytes)
+    }
+
+    /// Writes a collection of `Record`s to `outfile`.
+    ///
+    /// Prefer using the specific functions, e.g. `write_dmap`, `write_rawacf`, etc. for their
+    /// specific field checks.
+    fn write_to_file<P: AsRef<Path>>(recs: &Vec<Self>, outfile: P) -> Result<(), DmapError> {
+        let bytes: Vec<u8> = Self::into_bytes(recs)?;
+        io::bytes_to_file(bytes, outfile)?;
+        Ok(())
+    }
 }
 
 macro_rules! create_record_type {
@@ -603,21 +788,15 @@ macro_rules! create_record_type {
                 pub data: IndexMap<String, DmapField>,
             }
 
-            impl [< $format:camel Record >] {
-                /// Returns the field with name `key`, if it exists in the record.
-                pub fn get(&self, key: &String) -> Option<&DmapField> {
-                    self.data.get(key)
-                }
-
-                /// Returns the names of all fields stored in the record.
-                pub fn keys(&self) -> Vec<&String> {
-                    self.data.keys().collect()
-                }
-            }
-
             impl Record<'_> for [< $format:camel Record>] {
                 fn inner(self) -> IndexMap<String, DmapField> {
                     self.data
+                }
+                fn get(&self, key: &str) -> Option<&DmapField> {
+                    self.data.get(key)
+                }
+                fn keys(&self) -> Vec<&String> {
+                    self.data.keys().collect()
                 }
                 fn new(fields: &mut IndexMap<String, DmapField>) -> Result<[< $format:camel Record>], DmapError> {
                     match Self::check_fields(fields, &$fields) {
@@ -647,7 +826,15 @@ macro_rules! create_record_type {
                 type Error = DmapError;
 
                 fn try_from(value: &mut IndexMap<String, DmapField>) -> Result<Self, Self::Error> {
-                    Self::coerce::<[< $format:camel Record>]>(value, &$fields)
+                    Self::coerce(value, &$fields)
+                }
+            }
+
+            impl TryFrom<IndexMap<String, DmapField>> for [< $format:camel Record >] {
+                type Error = DmapError;
+
+                fn try_from(mut value: IndexMap<String, DmapField>) -> Result<Self, Self::Error> {
+                    Self::coerce(&mut value, &$fields)
                 }
             }
 
