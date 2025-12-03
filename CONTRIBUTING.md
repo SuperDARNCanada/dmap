@@ -46,5 +46,5 @@ ends in `.bz2`, the function will compress first with bz2.
 In `tests.rs`, integration tests for reading and writing all file types are present. Small example files
 are contained in `tests/test_files`.
 
-### `benches/io_benchmarking.rs`
+### `benches/bench.rs`
 This file contains benchmarking functions for checking the performance of the basic read functions.
