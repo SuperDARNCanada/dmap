@@ -13,7 +13,82 @@ import os
 HERE = os.path.dirname(__file__)
 FORMATS = ("iqdat", "rawacf", "fitacf", "grid", "map", "snd")
 FILE_LENGTHS = (247688, 73528, 10780, 4612, 32668, 1659)
-
+DATA_FIELDS = (
+    ("data"), 
+    ("pwr0", "slist", "acfd", "xcfd"),
+    (
+        "slist",
+        "nlag",
+        "qflg",
+        "gflg",
+        "p_l",
+        "p_l_e",
+        "p_s",
+        "p_s_e",
+        "v",
+        "v_e",
+        "w_l",
+        "w_l_e",
+        "w_s",
+        "w_s_e",
+        "sd_l",
+        "sd_s",
+        "sd_phi",
+        "x_qflg",
+        "x_gflg",
+        "x_p_l",
+        "x_p_l_e",
+        "x_p_s",
+        "x_p_s_e",
+        "x_v",
+        "x_v_e",
+        "x_w_l",
+        "x_w_l_e",
+        "x_w_s",
+        "x_w_s_e",
+        "phi0",
+        "phi0_e",
+        "elv",
+        "elv_fitted",
+        "elv_error",
+        "elv_low",
+        "elv_high",
+        "x_sd_l",
+        "x_sd_s",
+        "x_sd_phi"
+    ),
+    (
+        "vector.mlat",
+        "vector.mlon",
+        "vector.kvect",
+        "vector.stid",
+        "vector.channel",
+        "vector.index",
+        "vector.vel.median",
+        "vector.vel.sd",
+        "vector.pwr.median",
+        "vector.pwr.sd",
+        "vector.wdt.median",
+        "vector.wdt.sd",
+        "vector.srng"
+    ),
+    (
+        "vector.mlat", 
+        "vector.mlon", 
+        "vector.kvect", 
+        "vector.stid", 
+        "vector.channel", 
+        "vector.index", 
+        "vector.srng", 
+        "vector.vel.median", 
+        "vector.vel.sd", 
+        "vector.pwr.median", 
+        "vector.pwr.sd", 
+        "vector.wdt.median", 
+        "vector.wdt.sd"
+    ),
+    ("slist", "qflg", "gflg", "v", "v_e", "p_l", "w_l", "x_qflg", "phi0", "phi0_e")
+)
 
 def compare_recs(data1, data2):
     """Compare two `list[dict]`s, checking they are identical."""
@@ -281,3 +356,12 @@ def test_key_wrong_type_read(fmt):
 
     with pytest.raises(ValueError):
         _ = getattr(dmap, f"read_{fmt}")(raw_bytes, mode="strict")
+
+
+@pytest.mark.parametrize("fmt,data_fields", zip(FORMATS, DATA_FIELDS))
+def test_read_metadata(fmt, data_fields):
+    infile = f"{HERE}/test_files/test.{fmt}"
+    data = getattr(dmap, f"read_{fmt}")(infile, mode="metadata")
+    for rec in data:
+        assert not any([f in rec for f in data_fields])
+

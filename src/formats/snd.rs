@@ -65,6 +65,10 @@ static MATCHED_VECS: [[&str; 10]; 1] = [[
     "slist", "qflg", "gflg", "v", "v_e", "p_l", "w_l", "x_qflg", "phi0", "phi0_e",
 ]];
 
+static DATA_FIELDS: [&str; 10] = [
+    "slist", "qflg", "gflg", "v", "v_e", "p_l", "w_l", "x_qflg", "phi0", "phi0_e",
+];
+
 lazy_static! {
     static ref SND_FIELDS: Fields<'static> = Fields {
         all_fields: {
@@ -80,6 +84,7 @@ lazy_static! {
         vectors_required: VECTOR_FIELDS.to_vec(),
         vectors_optional: VECTOR_FIELDS_OPT.to_vec(),
         vector_dim_groups: MATCHED_VECS.to_vec().iter().map(|x| x.to_vec()).collect(),
+        data_fields: DATA_FIELDS.to_vec(),
     };
 }
 

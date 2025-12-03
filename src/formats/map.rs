@@ -105,6 +105,22 @@ static VECTOR_FIELDS_OPT: [(&str, Type); 23] = [
     ("boundary.mlon", Type::Float),
 ];
 
+static DATA_FIELDS: [&str; 13] = [
+    "vector.mlat",
+    "vector.mlon",
+    "vector.kvect",
+    "vector.stid",
+    "vector.channel",
+    "vector.index",
+    "vector.srng",
+    "vector.vel.median",
+    "vector.vel.sd",
+    "vector.pwr.median",
+    "vector.pwr.sd",
+    "vector.wdt.median",
+    "vector.wdt.sd",
+];
+
 lazy_static! {
     static ref MATCHED_VECS: Vec<Vec<&'static str>> = vec![
         vec![
@@ -164,6 +180,7 @@ lazy_static! {
         vectors_required: VECTOR_FIELDS.to_vec(),
         vectors_optional: VECTOR_FIELDS_OPT.to_vec(),
         vector_dim_groups: MATCHED_VECS.clone(),
+        data_fields: DATA_FIELDS.to_vec(),
     };
 }
 

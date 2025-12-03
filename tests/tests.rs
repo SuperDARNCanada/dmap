@@ -92,6 +92,17 @@ macro_rules! make_test {
                 let all_recs = [< $record_type:camel Record >]::read_file(&filename).expect("Unable to read file");
                 assert_eq!(data, all_recs[0])
             }
+
+            #[test]
+            fn [< test_ $record_type _metadata >] () {
+                let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($record_type)));
+                let data = [< $record_type:camel Record >]::read_file_metadata(&filename).expect("Unable to read file metadata");
+                let all_recs = [< $record_type:camel Record >]::read_file(&filename).expect("Unable to read file");
+                assert_eq!(data.len(), all_recs.len());
+                for (mdata_rec, ref_rec) in izip!(data.iter(), all_recs.iter()) {
+                    assert!(mdata_rec.keys().len() < ref_rec.keys().len())
+                }
+            }
         }
     };
 }

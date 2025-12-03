@@ -154,6 +154,48 @@ static MATCHED_VECS: [[&str; 39]; 1] = [[
     "x_sd_phi",
 ]];
 
+static DATA_FIELDS: [&str; 39] = [
+    "slist",
+    "nlag",
+    "qflg",
+    "gflg",
+    "p_l",
+    "p_l_e",
+    "p_s",
+    "p_s_e",
+    "v",
+    "v_e",
+    "w_l",
+    "w_l_e",
+    "w_s",
+    "w_s_e",
+    "sd_l",
+    "sd_s",
+    "sd_phi",
+    "x_qflg",
+    "x_gflg",
+    "x_p_l",
+    "x_p_l_e",
+    "x_p_s",
+    "x_p_s_e",
+    "x_v",
+    "x_v_e",
+    "x_w_l",
+    "x_w_l_e",
+    "x_w_s",
+    "x_w_s_e",
+    "phi0",
+    "phi0_e",
+    "elv",
+    "elv_fitted",
+    "elv_error",
+    "elv_low",
+    "elv_high",
+    "x_sd_l",
+    "x_sd_s",
+    "x_sd_phi",
+];
+
 lazy_static! {
     static ref FITACF_FIELDS: Fields<'static> = Fields {
         all_fields: {
@@ -174,7 +216,8 @@ lazy_static! {
                 grouped_vecs.push(group.to_vec())
             }
             grouped_vecs
-        }
+        },
+        data_fields: DATA_FIELDS.to_vec(),
     };
 }
 

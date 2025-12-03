@@ -66,6 +66,8 @@ static VECTOR_FIELDS: [(&str, Type); 5] = [
 
 static VECTOR_FIELDS_OPT: [(&str, Type); 1] = [("xcfd", Type::Float)];
 
+static DATA_FIELDS: [&str; 4] = ["pwr0", "slist", "acfd", "xcfd"];
+
 lazy_static! {
     static ref RAWACF_FIELDS: Fields<'static> = Fields {
         all_fields: {
@@ -81,6 +83,7 @@ lazy_static! {
         vectors_required: VECTOR_FIELDS.to_vec(),
         vectors_optional: VECTOR_FIELDS_OPT.to_vec(),
         vector_dim_groups: vec![],
+        data_fields: DATA_FIELDS.to_vec(),
     };
 }
 

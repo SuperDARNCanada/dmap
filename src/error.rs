@@ -11,11 +11,11 @@ pub enum DmapError {
     CorruptStream(&'static str),
 
     /// Unable to read from a buffer.
-    #[error("{0}")]
+    #[error(transparent)]
     Io(#[from] std::io::Error),
 
     /// Error casting between Dmap types.
-    #[error("{0}")]
+    #[error(transparent)]
     BadCast(#[from] std::num::TryFromIntError),
 
     /// Invalid key for a DMAP type. Valid keys are defined [here](https://github.com/SuperDARN/rst/blob/main/codebase/general/src.lib/dmap.1.25/include/dmap.h)
