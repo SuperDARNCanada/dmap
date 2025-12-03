@@ -29,6 +29,8 @@ pub struct Fields<'a> {
     pub vectors_optional: Vec<(&'a str, Type)>,
     /// Groups of vector fields which must have identical dimensions
     pub vector_dim_groups: Vec<Vec<&'a str>>,
+    /// The name of each field which is a data (as opposed to metadata) field
+    pub data_fields: Vec<&'a str>,
 }
 
 /// The possible data types that a scalar or vector field may have.
@@ -102,7 +104,7 @@ impl Type {
         }
     }
     /// The size in bytes of the data for `Type`
-    fn size(&self) -> usize {
+    pub fn size(&self) -> usize {
         match self {
             Self::Char => 1,
             Self::Short => 2,
@@ -981,7 +983,7 @@ pub(crate) fn parse_scalar(cursor: &mut Cursor<Vec<u8>>) -> Result<(String, Dmap
 
 /// Grabs the name and data type key from `cursor`.
 #[inline]
-fn parse_header(cursor: &mut Cursor<Vec<u8>>) -> Result<(String, Type)> {
+pub(crate) fn parse_header(cursor: &mut Cursor<Vec<u8>>) -> Result<(String, Type)> {
     let name = read_data::<String>(cursor).map_err(|e| {
         DmapError::InvalidField(format!("Invalid name, byte {}: {e}", cursor.position()))
     })?;
@@ -996,19 +998,17 @@ fn parse_header(cursor: &mut Cursor<Vec<u8>>) -> Result<(String, Type)> {
     Ok((name, data_type))
 }
 
-/// Parses a vector starting from the `cursor` position.
+/// Parses a header for a vector starting from the `cursor` position.
 ///
 /// Interprets the bytes in `cursor` as follows:
 /// 1. `name`: a null-terminated string
 /// 2. `type`: a key indicating the data type ([`Type`])
 /// 3. `num_dims`: the number of dimensions in the array, as an `i32`.
 /// 4. `dims`: the dimensions themselves, as a list of `num_dims` `i32`s, in column-major order.
-/// 5. `data`: the data itself, of type `type` with shape `dims`, stored in column-major order.
-pub(crate) fn parse_vector(
+pub(crate) fn parse_vector_header(
     cursor: &mut Cursor<Vec<u8>>,
     record_size: i32,
-) -> Result<(String, DmapField)> {
-    let start_position = cursor.position();
+) -> Result<(String, Type, Vec<usize>, i32)> {
     let (name, data_type) = parse_header(cursor)?;
 
     let vector_dimension = read_data::<i32>(cursor)?;
@@ -1052,6 +1052,24 @@ pub(crate) fn parse_vector(
             total_elements * i32::try_from(data_type.size())?,
         )));
     }
+
+    Ok((name, data_type, dimensions, total_elements))
+}
+
+/// Parses a vector starting from the `cursor` position.
+///
+/// Interprets the bytes in `cursor` as follows:
+/// 1. `name`: a null-terminated string
+/// 2. `type`: a key indicating the data type ([`Type`])
+/// 3. `num_dims`: the number of dimensions in the array, as an `i32`.
+/// 4. `dims`: the dimensions themselves, as a list of `num_dims` `i32`s, in column-major order.
+/// 5. `data`: the data itself, of type `type` with shape `dims`, stored in column-major order.
+pub(crate) fn parse_vector(
+    cursor: &mut Cursor<Vec<u8>>,
+    record_size: i32,
+) -> Result<(String, DmapField)> {
+    let start_position = cursor.position();
+    let (name, data_type, dimensions, total_elements) = parse_vector_header(cursor, record_size)?;
 
     macro_rules! dmapvec_from_cursor {
         ($type:ty, $enum_var:path, $dims:ident, $cursor:ident, $num_elements:ident, $name:ident) => {

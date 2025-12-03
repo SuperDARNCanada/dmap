@@ -29,6 +29,9 @@ impl Record<'_> for DmapRecord {
             data: fields.to_owned(),
         })
     }
+    fn is_metadata_field(_name: &str) -> bool {
+        true
+    }
     fn to_bytes(&self) -> Result<Vec<u8>, DmapError> {
         let mut data_bytes: Vec<u8> = vec![];
         let mut num_scalars: i32 = 0;

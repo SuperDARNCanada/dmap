@@ -3,7 +3,10 @@
 use crate::compression::detect_bz2;
 use crate::error::DmapError;
 use crate::io;
-use crate::types::{parse_scalar, parse_vector, read_data, DmapField, DmapType, DmapVec, Fields};
+use crate::types::{
+    parse_scalar, parse_vector, parse_vector_header, read_data, DmapField, DmapType, DmapVec,
+    Fields,
+};
 use bzip2::read::BzDecoder;
 use indexmap::IndexMap;
 use itertools::izip;
@@ -34,6 +37,9 @@ pub trait Record<'a>:
 
     /// Returns the names of all fields stored in the record.
     fn keys(&self) -> Vec<&String>;
+
+    /// Returns whether `name` is a metadata field of the record.
+    fn is_metadata_field(name: &str) -> bool;
 
     /// Reads from `dmap_data` and parses into `Vec<Self>`.
     ///
@@ -144,6 +150,81 @@ pub trait Record<'a>:
         Ok(dmap_records)
     }
 
+    /// Reads metadata of records from `dmap_data` and parses into `Vec<Self>`.
+    ///
+    /// Returns `DmapError` if `dmap_data` cannot be read or contains invalid data.
+    fn read_metadata(
+        mut dmap_data: impl Read,
+    ) -> Result<Vec<IndexMap<String, DmapField>>, DmapError>
+    where
+        Self: Sized,
+        Self: Send,
+    {
+        let mut buffer: Vec<u8> = vec![];
+        let (is_bz2, mut chunk) = detect_bz2(&mut dmap_data)?;
+        if is_bz2 {
+            let mut stream = BzDecoder::new(chunk);
+            stream.read_to_end(&mut buffer)?;
+        } else {
+            chunk.read_to_end(&mut buffer)?;
+        }
+
+        let mut slices: Vec<_> = vec![];
+        let mut rec_start: usize = 0;
+        let mut rec_size: usize;
+        let mut rec_end: usize;
+
+        while ((rec_start + 2 * i32::size()) as u64) < buffer.len() as u64 {
+            rec_size = i32::from_le_bytes(buffer[rec_start + 4..rec_start + 8].try_into().unwrap())
+                as usize; // advance 4 bytes, skipping the "code" field
+            rec_end = rec_start + rec_size; // error-checking the size is conducted in Self::parse_record()
+            if rec_end > buffer.len() {
+                return Err(DmapError::InvalidRecord(format!("Record {} starting at byte {} has size greater than remaining length of buffer ({} > {})", slices.len(), rec_start, rec_size, buffer.len() - rec_start)));
+            } else if rec_size == 0 {
+                return Err(DmapError::InvalidRecord(format!(
+                    "Record {} starting at byte {} has non-positive size {} <= 0",
+                    slices.len(),
+                    rec_start,
+                    rec_size
+                )));
+            }
+            slices.push(Cursor::new(buffer[rec_start..rec_end].to_vec()));
+            rec_start = rec_end;
+        }
+        if rec_start != buffer.len() {
+            return Err(DmapError::InvalidRecord(format!(
+                "Record {} starting at byte {} incomplete; has size of {} bytes",
+                slices.len() + 1,
+                rec_start,
+                buffer.len() - rec_start
+            )));
+        }
+        let mut dmap_results: Vec<Result<IndexMap<String, DmapField>, DmapError>> = vec![];
+        dmap_results.par_extend(
+            slices
+                .par_iter_mut()
+                .map(|cursor| Self::parse_metadata(cursor)),
+        );
+
+        let mut dmap_records: Vec<IndexMap<String, DmapField>> = vec![];
+        let mut bad_recs: Vec<usize> = vec![];
+        let mut dmap_errors: Vec<DmapError> = vec![];
+        for (i, rec) in dmap_results.into_iter().enumerate() {
+            match rec {
+                Ok(x) => dmap_records.push(x),
+                Err(e) => {
+                    dmap_errors.push(e);
+                    bad_recs.push(i);
+                }
+            }
+        }
+        if !dmap_errors.is_empty() {
+            return Err(DmapError::BadRecords(bad_recs, dmap_errors[0].to_string()));
+        }
+
+        Ok(dmap_records)
+    }
+
     /// Reads from `dmap_data` and parses into `Vec<Self>`.
     ///
     /// Returns a 2-tuple, where the first entry is the good records from the front of the buffer,
@@ -237,6 +318,108 @@ pub trait Record<'a>:
     {
         let file = File::open(infile)?;
         Self::read_first_record(file)
+    }
+
+    /// Read the metadata from a DMAP file of type `Self`
+    fn read_file_metadata<P: AsRef<Path>>(
+        infile: P,
+    ) -> Result<Vec<IndexMap<String, DmapField>>, DmapError>
+    where
+        Self: Sized,
+        Self: Send,
+    {
+        let file = File::open(infile)?;
+        Self::read_metadata(file)
+    }
+
+    /// Reads a record from `cursor`, only keeping the metadata fields.
+    fn parse_metadata(
+        cursor: &mut Cursor<Vec<u8>>,
+    ) -> Result<IndexMap<String, DmapField>, DmapError>
+    where
+        Self: Sized,
+    {
+        let bytes_already_read = cursor.position();
+        let _code = read_data::<i32>(cursor).map_err(|e| {
+            DmapError::InvalidRecord(format!(
+                "Cannot interpret code at byte {}: {e}",
+                bytes_already_read
+            ))
+        })?;
+        let size = read_data::<i32>(cursor).map_err(|e| {
+            DmapError::InvalidRecord(format!(
+                "Cannot interpret size at byte {}: {e}",
+                bytes_already_read + i32::size() as u64
+            ))
+        })?;
+
+        // adding 8 bytes because code and size are part of the record.
+        if size as u64 > cursor.get_ref().len() as u64 - cursor.position() + 2 * i32::size() as u64
+        {
+            return Err(DmapError::InvalidRecord(format!(
+                "Record size {size} at byte {} bigger than remaining buffer {}",
+                cursor.position() - i32::size() as u64,
+                cursor.get_ref().len() as u64 - cursor.position() + 2 * i32::size() as u64
+            )));
+        } else if size <= 0 {
+            return Err(DmapError::InvalidRecord(format!("Record size {size} <= 0")));
+        }
+
+        let num_scalars = read_data::<i32>(cursor).map_err(|e| {
+            DmapError::InvalidRecord(format!(
+                "Cannot interpret number of scalars at byte {}: {e}",
+                cursor.position() - i32::size() as u64
+            ))
+        })?;
+        let num_vectors = read_data::<i32>(cursor).map_err(|e| {
+            DmapError::InvalidRecord(format!(
+                "Cannot interpret number of vectors at byte {}: {e}",
+                cursor.position() - i32::size() as u64
+            ))
+        })?;
+        if num_scalars <= 0 {
+            return Err(DmapError::InvalidRecord(format!(
+                "Number of scalars {num_scalars} at byte {} <= 0",
+                cursor.position() - 2 * i32::size() as u64
+            )));
+        } else if num_vectors <= 0 {
+            return Err(DmapError::InvalidRecord(format!(
+                "Number of vectors {num_vectors} at byte {} <= 0",
+                cursor.position() - i32::size() as u64
+            )));
+        } else if num_scalars + num_vectors > size {
+            return Err(DmapError::InvalidRecord(format!(
+                "Number of scalars {num_scalars} plus vectors {num_vectors} greater than size '{size}'")));
+        }
+
+        let mut fields: IndexMap<String, DmapField> = IndexMap::new();
+        for _ in 0..num_scalars {
+            let (name, val) = parse_scalar(cursor)?;
+            fields.insert(name, val);
+        }
+        for _ in 0..num_vectors {
+            let here = cursor.position();
+            let (name, dtype, _dims, num_elements) = parse_vector_header(cursor, size)?;
+            if Self::is_metadata_field(&name) {
+                cursor.set_position(here);
+                let (_, val) = parse_vector(cursor, size)?;
+                fields.insert(name.to_string(), val);
+            } else {
+                let vec_data_size = dtype.size() as u64 * num_elements as u64;
+                let here = cursor.position();
+                cursor.set_position(here + vec_data_size);
+            }
+        }
+
+        if cursor.position() - bytes_already_read != size as u64 {
+            return Err(DmapError::InvalidRecord(format!(
+                "Bytes read {} does not match the records size field {}",
+                cursor.position() - bytes_already_read,
+                size
+            )));
+        }
+
+        Ok(fields)
     }
 
     /// Reads a record from `cursor`.
@@ -819,6 +1002,9 @@ macro_rules! create_record_type {
                     bytes.extend(num_vectors.as_bytes());
                     bytes.append(&mut data_bytes); // consumes data_bytes
                     Ok(bytes)
+                }
+                fn is_metadata_field(name: &str) -> bool {
+                    !$fields.data_fields.iter().any(|e| e == &name)
                 }
             }
 

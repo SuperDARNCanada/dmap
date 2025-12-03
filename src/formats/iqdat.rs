@@ -76,6 +76,8 @@ static MATCHED_VECS: [[&str; 6]; 1] = [["tsc", "tus", "tatten", "tnoise", "toff"
 
 static VECTOR_FIELDS_OPT: [(&str, Type); 0] = [];
 
+static DATA_FIELDS: [&str; 1] = ["data"];
+
 lazy_static! {
     static ref IQDAT_FIELDS: Fields<'static> = Fields {
         all_fields: {
@@ -91,6 +93,7 @@ lazy_static! {
         vectors_required: VECTOR_FIELDS.to_vec(),
         vectors_optional: VECTOR_FIELDS_OPT.to_vec(),
         vector_dim_groups: MATCHED_VECS.to_vec().iter().map(|x| x.to_vec()).collect(),
+        data_fields: DATA_FIELDS.to_vec(),
     };
 }
 
