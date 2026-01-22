@@ -17,7 +17,7 @@ macro_rules! make_test {
 
                 let data = [< $record_type:camel Record >]::read_file(&filename).expect("Unable to read file");
 
-                _ = [< $record_type:camel Record >]::write_to_file(&data, &tempfile).expect("Unable to write to file");
+                _ = [< $record_type:camel Record >]::write_to_file(&data, &tempfile, false).expect("Unable to write to file");
                 let new_recs = [< $record_type:camel Record >]::read_file(&tempfile).expect("Cannot read tempfile");
                 for (ref read_rec, ref written_rec) in izip!(data.iter(), new_recs.iter()) {
                     assert_eq!(read_rec, written_rec)
@@ -35,7 +35,7 @@ macro_rules! make_test {
 
                 let data = [< $record_type:camel Record >]::read_file(&filename).expect("Unable to read file");
 
-                _ = [< $record_type:camel Record >]::write_to_file(&data, &tempfile).expect("Unable to write to file");
+                _ = [< $record_type:camel Record >]::write_to_file(&data, &tempfile, false).expect("Unable to write to file");
                 let new_recs = [< $record_type:camel Record >]::read_file(&tempfile).expect("Cannot read tempfile");
                 for (ref read_rec, ref written_rec) in izip!(data.iter(), new_recs.iter()) {
                     assert_eq!(read_rec, written_rec)
@@ -75,7 +75,7 @@ macro_rules! make_test {
                 tempfile.set_file_name(format!("tmp.{}.generic", stringify!($record_type)));
 
                 let gen_data = DmapRecord::read_file(&filename).expect("Unable to read file");
-                _ = DmapRecord::write_to_file(&gen_data, &tempfile).expect("Unable to write to file");
+                _ = DmapRecord::write_to_file(&gen_data, &tempfile, false).expect("Unable to write to file");
                 let new_recs = DmapRecord::read_file(&tempfile).expect("Cannot read tempfile");
                 for (new_rec, ref_rec) in izip!(new_recs.iter(), gen_data.iter()) {
                     assert_eq!(new_rec, ref_rec)

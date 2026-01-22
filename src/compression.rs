@@ -2,7 +2,21 @@
 //!
 //! Currently only supports bz2 compression detection.
 
+use bzip2::read::BzEncoder;
+use bzip2::Compression;
 use std::io::{Chain, Cursor, Error, Read};
+
+/// Compress bytes using [`bzip2::BzEncoder`].
+///
+/// # Errors
+/// See [`Read::read_to_end`].
+pub(crate) fn compress_bz2(bytes: &[u8]) -> Result<Vec<u8>, Error> {
+    let mut out_bytes: Vec<u8> = vec![];
+    let mut compressor = BzEncoder::new(bytes, Compression::best());
+    compressor.read_to_end(&mut out_bytes)?;
+
+    Ok(out_bytes)
+}
 
 type PartiallyReadStream<T> = Chain<Cursor<[u8; 3]>, T>;
 
@@ -10,7 +24,7 @@ type PartiallyReadStream<T> = Chain<Cursor<[u8; 3]>, T>;
 /// which includes all data from `stream`.
 ///
 /// # Errors
-/// See [`std::io::Read::read_exact`].
+/// See [`Read::read_exact`].
 pub(crate) fn detect_bz2<T>(mut stream: T) -> Result<(bool, PartiallyReadStream<T>), Error>
 where
     T: for<'a> Read,

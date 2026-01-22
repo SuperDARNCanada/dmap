@@ -73,7 +73,7 @@ def read_dispatcher(
 
 
 def write_dispatcher(
-    source: list[dict], fmt: str, outfile: Union[None, str]
+    source: list[dict], fmt: str, outfile: Union[None, str], bz2: bool,
 ) -> Union[None, bytes]:
     """
     Writes DMAP data from `source` to either a `bytes` object or to `outfile`.
@@ -88,15 +88,17 @@ def write_dispatcher(
         If `None`, returns the data as a `bytes` object. If this is a string, then this is interpreted as a path
         and data will be written to the filesystem. If the file ends in the `.bz2` extension, the data will be
         compressed using bzip2.
+    bz2: bool
+        If `True`, the data will be compressed with `bzip2`.
     """
     if fmt not in ["dmap", "iqdat", "rawacf", "fitacf", "grid", "map", "snd"]:
         raise ValueError(
             f"invalid fmt `{fmt}`: expected one of ['dmap', 'iqdat', 'rawacf', 'fitacf', 'grid', 'map', 'snd']"
         )
     if outfile is None:
-        return getattr(dmap_rs, f"write_{fmt}_bytes")(source)
+        return getattr(dmap_rs, f"write_{fmt}_bytes")(source, bz2=bz2)
     elif isinstance(outfile, str):
-        getattr(dmap_rs, f"write_{fmt}")(source, outfile)
+        getattr(dmap_rs, f"write_{fmt}")(source, outfile, bz2=bz2)
     else:
         raise TypeError(
             f"invalid type for `outfile` {type(outfile)}: expected `str` or `None`"
@@ -308,7 +310,7 @@ def read_snd(
 
 
 def write_dmap(
-    source: list[dict], outfile: Union[None, str] = None
+    source: list[dict], outfile: Union[None, str] = None, bz2: bool = False,
 ) -> Union[None, bytes]:
     """
     Writes DMAP data from `source` to either a `bytes` object or to `outfile`.
@@ -321,12 +323,14 @@ def write_dmap(
         If `None`, returns the data as a `bytes` object. If this is a string, then this is interpreted as a path
         and data will be written to the filesystem. If the file ends in the `.bz2` extension, the data will be
         compressed using bzip2.
+    bz2: bool
+        If `True`, the data will be compressed with `bzip2`.
     """
-    return write_dispatcher(source, "dmap", outfile)
+    return write_dispatcher(source, "dmap", outfile, bz2=bz2)
 
 
 def write_iqdat(
-    source: list[dict], outfile: Union[None, str] = None
+    source: list[dict], outfile: Union[None, str] = None, bz2: bool = False,
 ) -> Union[None, bytes]:
     """
     Writes IQDAT data from `source` to either a `bytes` object or to `outfile`.
@@ -339,12 +343,14 @@ def write_iqdat(
         If `None`, returns the data as a `bytes` object. If this is a string, then this is interpreted as a path
         and data will be written to the filesystem. If the file ends in the `.bz2` extension, the data will be
         compressed using bzip2.
+    bz2: bool
+        If `True`, the data will be compressed with `bzip2`.
     """
-    return write_dispatcher(source, "iqdat", outfile)
+    return write_dispatcher(source, "iqdat", outfile, bz2=bz2)
 
 
 def write_rawacf(
-    source: list[dict], outfile: Union[None, str] = None
+    source: list[dict], outfile: Union[None, str] = None, bz2: bool = False,
 ) -> Union[None, bytes]:
     """
     Writes RAWACF data from `source` to either a `bytes` object or to `outfile`.
@@ -357,12 +363,14 @@ def write_rawacf(
         If `None`, returns the data as a `bytes` object. If this is a string, then this is interpreted as a path
         and data will be written to the filesystem. If the file ends in the `.bz2` extension, the data will be
         compressed using bzip2.
+    bz2: bool
+        If `True`, the data will be compressed with `bzip2`.
     """
-    return write_dispatcher(source, "rawacf", outfile)
+    return write_dispatcher(source, "rawacf", outfile, bz2=bz2)
 
 
 def write_fitacf(
-    source: list[dict], outfile: Union[None, str] = None
+    source: list[dict], outfile: Union[None, str] = None, bz2: bool = False,
 ) -> Union[None, bytes]:
     """
     Writes FITACF data from `source` to either a `bytes` object or to `outfile`.
@@ -375,12 +383,14 @@ def write_fitacf(
         If `None`, returns the data as a `bytes` object. If this is a string, then this is interpreted as a path
         and data will be written to the filesystem. If the file ends in the `.bz2` extension, the data will be
         compressed using bzip2.
+    bz2: bool
+        If `True`, the data will be compressed with `bzip2`.
     """
-    return write_dispatcher(source, "fitacf", outfile)
+    return write_dispatcher(source, "fitacf", outfile, bz2=bz2)
 
 
 def write_grid(
-    source: list[dict], outfile: Union[None, str] = None
+    source: list[dict], outfile: Union[None, str] = None, bz2: bool = False,
 ) -> Union[None, bytes]:
     """
     Writes GRID data from `source` to either a `bytes` object or to `outfile`.
@@ -393,12 +403,14 @@ def write_grid(
         If `None`, returns the data as a `bytes` object. If this is a string, then this is interpreted as a path
         and data will be written to the filesystem. If the file ends in the `.bz2` extension, the data will be
         compressed using bzip2.
+    bz2: bool
+        If `True`, the data will be compressed with `bzip2`.
     """
-    return write_dispatcher(source, "grid", outfile)
+    return write_dispatcher(source, "grid", outfile, bz2=bz2)
 
 
 def write_map(
-    source: list[dict], outfile: Union[None, str] = None
+    source: list[dict], outfile: Union[None, str] = None, bz2: bool = False,
 ) -> Union[None, bytes]:
     """
     Writes MAP data from `source` to either a `bytes` object or to `outfile`.
@@ -411,12 +423,14 @@ def write_map(
         If `None`, returns the data as a `bytes` object. If this is a string, then this is interpreted as a path
         and data will be written to the filesystem. If the file ends in the `.bz2` extension, the data will be
         compressed using bzip2.
+    bz2: bool
+        If `True`, the data will be compressed with `bzip2`.
     """
-    return write_dispatcher(source, "map", outfile)
+    return write_dispatcher(source, "map", outfile, bz2=bz2)
 
 
 def write_snd(
-    source: list[dict], outfile: Union[None, str] = None
+    source: list[dict], outfile: Union[None, str] = None, bz2: bool = False,
 ) -> Union[None, bytes]:
     """
     Writes SND data from `source` to either a `bytes` object or to `outfile`.
@@ -429,5 +443,7 @@ def write_snd(
         If `None`, returns the data as a `bytes` object. If this is a string, then this is interpreted as a path
         and data will be written to the filesystem. If the file ends in the `.bz2` extension, the data will be
         compressed using bzip2.
+    bz2: bool
+        If `True`, the data will be compressed with `bzip2`.
     """
-    return write_dispatcher(source, "snd", outfile)
+    return write_dispatcher(source, "snd", outfile, bz2=bz2)
