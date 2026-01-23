@@ -80,8 +80,8 @@ fitacf_file = "path/to/file.bz2"
 data, _ = dmap.read_fitacf(fitacf_file)
 dmap.write_fitacf(data, "temp.fitacf.bz2")
 ```
-will read in the compressed file, then also write out a new compressed file. Note that compression on the writing side
-will only be done when writing to file, as the detection is done based on the file extension of the output file.
+will read in the compressed file, then also write out a new compressed file. You can also pass the argument `bz2=True`
+to compress with `bzip2` regardless of file extension, or even to return compressed byte objects.
 
 ### Generic I/O
 dmap supports generic DMAP I/O, without verifying the field names and types. The file must still
@@ -162,10 +162,10 @@ assert binary_data == raw_bytes
 ```
 As a note, this binary data can be compressed ~2x typically using zlib, or with another compression utility. This is quite 
 useful if sending data over a network where speed and bandwidth must be considered. Note that the binary writing functions
-don't compress automatically, an external package like `zlib` or `bzip2` must be used.
+can compress with bzip2 by passing `bz2=True` as an argument.
 
 ### File "sniffing"
-If you only want to inspect a file, without actually needing access to all of the data, you can use the `read_[type]`
+If you only want to inspect a file, without actually needing access to all the data, you can use the `read_[type]`
 functions in `"sniff"` mode. This will only read in the first record from a file, and works on both compressed and 
 non-compressed files. Note that this mode does not work with bytes objects directly.
 
@@ -174,3 +174,9 @@ import dmap
 path = "path/to/file"
 first_rec = dmap.read_dmap(path, mode="sniff")
 ```
+
+### Reading only metadata fields
+Each DMAP format consists of metadata and data fields. You can read only the metadata fields by passing `mode="metadata"`
+to any of the writing functions. Note that the generic read function `read_dmap` will return all fields, as it by nature
+has no knowledge of the underlying fields. Note also that the read functions operating on a file still read the entire
+file into memory first, so reading metadata only does not largely decrease read times.

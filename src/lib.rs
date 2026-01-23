@@ -62,7 +62,7 @@
 //!
 //! // Write the records to a file
 //! let out_path = PathBuf::from("tests/test_files/output.rawacf");
-//! RawacfRecord::write_to_file(&rawacf_data, &out_path)?;
+//! RawacfRecord::write_to_file(&rawacf_data, &out_path, false)?;
 //! # std::fs::remove_file(out_path)?;
 //! #    Ok(())
 //! # }
@@ -121,9 +121,10 @@ macro_rules! write_rust {
             pub fn [< try_write_ $type >]<P: AsRef<Path>>(
                 recs: Vec<IndexMap<String, DmapField>>,
                 outfile: P,
+                bz2: bool,
             ) -> Result<(), DmapError> {
                 let bytes = [< $type:camel Record >]::try_into_bytes(recs)?;
-                crate::io::bytes_to_file(bytes, outfile).map_err(DmapError::from)
+                crate::io::bytes_to_file(bytes, outfile, bz2).map_err(DmapError::from)
             }
         }
     }
@@ -308,9 +309,14 @@ read_py!(
 /// does not know that typically `stid` is two bytes.
 #[pyfunction]
 #[pyo3(name = "write_dmap")]
-#[pyo3(text_signature = "(recs: list[dict], outfile: str, /)")]
-fn write_dmap_py(recs: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -> PyResult<()> {
-    try_write_dmap(recs, &outfile).map_err(PyErr::from)
+#[pyo3(signature = (recs, outfile, /, bz2))]
+#[pyo3(text_signature = "(recs: list[dict], outfile: str, /, bz2: bool = False)")]
+fn write_dmap_py(
+    recs: Vec<IndexMap<String, DmapField>>,
+    outfile: PathBuf,
+    bz2: bool,
+) -> PyResult<()> {
+    try_write_dmap(recs, &outfile, bz2).map_err(PyErr::from)
 }
 
 /// Checks that a list of dictionaries contains valid DMAP records, then converts them to bytes.
@@ -321,9 +327,17 @@ fn write_dmap_py(recs: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -> Py
 /// does not know that typically `stid` is two bytes.
 #[pyfunction]
 #[pyo3(name = "write_dmap_bytes")]
-#[pyo3(text_signature = "(recs: list[dict], /)")]
-fn write_dmap_bytes_py(py: Python, recs: Vec<IndexMap<String, DmapField>>) -> PyResult<Py<PyAny>> {
-    let bytes = DmapRecord::try_into_bytes(recs).map_err(PyErr::from)?;
+#[pyo3(signature = (recs, /, bz2))]
+#[pyo3(text_signature = "(recs: list[dict], /, bz2: bool = False)")]
+fn write_dmap_bytes_py(
+    py: Python,
+    recs: Vec<IndexMap<String, DmapField>>,
+    bz2: bool,
+) -> PyResult<Py<PyAny>> {
+    let mut bytes = DmapRecord::try_into_bytes(recs).map_err(PyErr::from)?;
+    if bz2 {
+        bytes = compression::compress_bz2(&bytes).map_err(PyErr::from)?;
+    }
     Ok(PyBytes::new(py, &bytes).into())
 }
 
@@ -334,18 +348,23 @@ macro_rules! write_py {
             #[doc = "Checks that a list of dictionaries contains valid `" $name:upper "` records, then appends to outfile." ]
             #[pyfunction]
             #[pyo3(name = $fn_name)]
-            #[pyo3(text_signature = "(recs: list[dict], outfile: str, /)")]
-            fn [< write_ $name _py >](recs: Vec<IndexMap<String, DmapField>>, outfile: PathBuf) -> PyResult<()> {
-                [< try_write_ $name >](recs, &outfile).map_err(PyErr::from)
+            #[pyo3(signature = (recs, outfile, /, bz2))]
+            #[pyo3(text_signature = "(recs: list[dict], outfile: str, /, bz2: bool = False)")]
+            fn [< write_ $name _py >](recs: Vec<IndexMap<String, DmapField>>, outfile: PathBuf, bz2: bool) -> PyResult<()> {
+                [< try_write_ $name >](recs, &outfile, bz2).map_err(PyErr::from)
             }
 
             #[doc = "Checks that a list of dictionaries contains valid `" $name:upper "` records, then converts them to bytes." ]
             #[doc = "Returns `list[bytes]`, one entry per record." ]
             #[pyfunction]
             #[pyo3(name = $bytes_name)]
-            #[pyo3(text_signature = "(recs: list[dict], /)")]
-            fn [< write_ $name _bytes_py >](py: Python, recs: Vec<IndexMap<String, DmapField>>) -> PyResult<Py<PyAny>> {
-                let bytes = [< $name:camel Record >]::try_into_bytes(recs).map_err(PyErr::from)?;
+            #[pyo3(signature = (recs, /, bz2))]
+            #[pyo3(text_signature = "(recs: list[dict], /, bz2: bool = False)")]
+            fn [< write_ $name _bytes_py >](py: Python, recs: Vec<IndexMap<String, DmapField>>, bz2: bool) -> PyResult<Py<PyAny>> {
+                let mut bytes = [< $name:camel Record >]::try_into_bytes(recs).map_err(PyErr::from)?;
+                if bz2 {
+                    bytes = compression::compress_bz2(&bytes).map_err(PyErr::from)?;
+                }
                 Ok(PyBytes::new(py, &bytes).into())
             }
         }

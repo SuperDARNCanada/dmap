@@ -950,9 +950,13 @@ pub trait Record<'a>:
     ///
     /// Prefer using the specific functions, e.g. `write_dmap`, `write_rawacf`, etc. for their
     /// specific field checks.
-    fn write_to_file<P: AsRef<Path>>(recs: &Vec<Self>, outfile: P) -> Result<(), DmapError> {
+    fn write_to_file<P: AsRef<Path>>(
+        recs: &Vec<Self>,
+        outfile: P,
+        bz2: bool,
+    ) -> Result<(), DmapError> {
         let bytes: Vec<u8> = Self::into_bytes(recs)?;
-        io::bytes_to_file(bytes, outfile)?;
+        io::bytes_to_file(bytes, outfile, bz2)?;
         Ok(())
     }
 }
