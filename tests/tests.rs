@@ -94,6 +94,14 @@ macro_rules! make_test {
             }
 
             #[test]
+            fn [< test_ $record_type _sniff_last >] () {
+                let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($record_type)));
+                let data = [< $record_type:camel Record >]::sniff_last_file(&filename).expect("Unable to sniff file");
+                let all_recs = [< $record_type:camel Record >]::read_file(&filename).expect("Unable to read file");
+                assert_eq!(data, all_recs[all_recs.len()-1])
+            }
+
+            #[test]
             fn [< test_ $record_type _metadata >] () {
                 let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($record_type)));
                 let data = [< $record_type:camel Record >]::read_file_metadata(&filename).expect("Unable to read file metadata");

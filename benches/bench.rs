@@ -19,7 +19,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("Read SND", |b| b.iter(|| read_snd()));
     c.bench_function("Read MAP", |b| b.iter(|| read_map()));
     c.bench_function("Read DMAP", |b| b.iter(|| read_dmap()));
-    
+
     c.bench_function("Read bzipped IQDAT", |b| b.iter(|| read_iqdat_bz2()));
     c.bench_function("Read bzipped RAWACF", |b| b.iter(|| read_rawacf_bz2()));
     c.bench_function("Read bzipped FITACF", |b| b.iter(|| read_fitacf_bz2()));
@@ -27,15 +27,19 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("Read bzipped SND", |b| b.iter(|| read_snd_bz2()));
     c.bench_function("Read bzipped MAP", |b| b.iter(|| read_map_bz2()));
     c.bench_function("Read bzipped DMAP", |b| b.iter(|| read_dmap_bz2()));
-    
+
     c.bench_function("Read IQDAT metadata", |b| b.iter(|| read_iqdat_metadata()));
-    c.bench_function("Read RAWACF metadata", |b| b.iter(|| read_rawacf_metadata()));
-    c.bench_function("Read FITACF metadata", |b| b.iter(|| read_fitacf_metadata()));
+    c.bench_function("Read RAWACF metadata", |b| {
+        b.iter(|| read_rawacf_metadata())
+    });
+    c.bench_function("Read FITACF metadata", |b| {
+        b.iter(|| read_fitacf_metadata())
+    });
     c.bench_function("Read GRID metadata", |b| b.iter(|| read_grid_metadata()));
     c.bench_function("Read SND metadata", |b| b.iter(|| read_snd_metadata()));
     c.bench_function("Read MAP metadata", |b| b.iter(|| read_map_metadata()));
     c.bench_function("Read DMAP metadata", |b| b.iter(|| read_dmap_metadata()));
-    
+
     // let records = read_iqdat();
     // c.bench_with_input(
     //     BenchmarkId::new("Write IQDAT", "IQDAT Records"),
@@ -51,7 +55,7 @@ macro_rules! read_type {
             fn [< read_ $type >]() -> Vec<[< $type:camel Record >]> {
                 [< $type:camel Record >]::read_file(format!("tests/test_files/test.{}", $name)).unwrap()
             }
-            
+
             fn [< read_ $type _bz2 >]() -> Vec<[< $type:camel Record >]> {
                 [< $type:camel Record >]::read_file(format!("tests/test_files/test.{}.bz2", $name)).unwrap()
             }

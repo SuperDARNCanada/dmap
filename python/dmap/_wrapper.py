@@ -23,27 +23,27 @@ def read_dispatcher(
     fmt: str
         DMAP format being read. One of `["dmap", "iqdat", "rawacf", "fitacf", "grid", "map", "snd"]`.
     mode: str
-        Mode in which to read the data, one of `["strict", "lax", "sniff", "metadata"]`. In `strict` mode, any corruption
+        Mode in which to read the data, one of `["strict", "lax", "sniff", "sniff_last", "metadata"]`. In `strict` mode, any corruption
         in the data will raise an error. In `lax` mode, all valid records will be returned in a tuple along with
-        the byte index of `source` where the corruption starts. In `sniff` mode, `source` must be a `str`, and
-        only the first record will be read. In `metadata` mode, only the metadata fields of the records are returned.
+        the byte index of `source` where the corruption starts. In `sniff` or `sniff_last` mode, `source` must be a `str`, and
+        only the first or last record will be read. In `metadata` mode, only the metadata fields of the records are returned.
 
     Returns
     -------
     If `mode` is `strict` or `metadata`, returns `list[dict]` which is the parsed records.
     If `mode` is `lax`, returns `tuple[list[dict], Optional[int]]`, where the first element is the records which were parsed,
     and the second is the byte index where `source` was no longer a valid record of type `fmt`.
-    If `mode` is `sniff`, returns `dict` of the first record.
+    If `mode` is `sniff` or `sniff_last`, returns `dict` of the first or last record.
     """
     if fmt not in ["dmap", "iqdat", "rawacf", "fitacf", "grid", "map", "snd"]:
         raise ValueError(
             f"invalid fmt `{fmt}`: expected one of ['dmap', 'iqdat', 'rawacf', 'fitacf', 'grid', 'map', 'snd']"
         )
 
-    if mode not in ["strict", "lax", "sniff", "metadata"]:
+    if mode not in ["strict", "lax", "sniff", "sniff_last", "metadata"]:
         raise ValueError(f"invalid mode `{mode}`: expected `strict`, `lax`, or `sniff`")
 
-    if mode in ["sniff", "metadata"] and not isinstance(source, str):
+    if mode in ["sniff", "sniff_last", "metadata"] and not isinstance(source, str):
         raise TypeError(
             f"invalid type for `source` {type(source)} in `sniff` mode: expected `str`"
         )
@@ -61,8 +61,13 @@ def read_dispatcher(
     #   read_fitacf_lax
     #   read_fitacf_bytes_lax
     #   sniff_fitacf
+    #   sniff_last_fitacf
+    if "sniff" in mode:
+        prefix = "sniff"
+    else:
+        prefix = "read"
     fn_name = (
-        f"{'sniff' if mode == 'sniff' else 'read'}"
+        f"{prefix + '_last' if mode == 'sniff_last' else prefix}"
         f"_{fmt}"
         f"{'_bytes' if isinstance(source, bytes) else ''}"
         f"{'_lax' if mode == 'lax' else ''}"
@@ -122,6 +127,7 @@ def read_dmap(
         corruption starts.
         In "strict" mode, any corruption in the data will raise an error.
         In "sniff" mode, `source` must be a path, and only the first record will be read.
+        In "sniff_last" mode, `source` must be a path, and only the last record will be read.
         In "metadata" mode, `source` must be a path, and since this function is for generic DMAP records where there
         is no information about which fields are metadata, the behaviour mirrors that of "strict" mode.
 
@@ -130,7 +136,7 @@ def read_dmap(
     If `mode` is `lax`, returns `tuple[list[dict], Optional[int]]`, where the first element is the records which were parsed,
     and the second is the byte index where `source` was no longer a valid DMAP record.
     If `mode` is `strict` or `metadata`, returns `list[dict]` which is the parsed records.
-    If `mode` is `sniff`, returns `dict`, which is the first record.
+    If `mode` is `sniff` or `sniff_last`, returns `dict`, which is the first or last record.
     """
     return read_dispatcher(source, "dmap", mode)
 
@@ -152,6 +158,7 @@ def read_iqdat(
         corruption starts.
         In "strict" mode, any corruption in the data will raise an error.
         In "sniff" mode, `source` must be a path, and only the first record will be read.
+        In "sniff_last" mode, `source` must be a path, and only the last record will be read.
         In "metadata" mode, `source` must be a path, and only the metadata fields of the records are returned.
 
     Returns
@@ -159,7 +166,7 @@ def read_iqdat(
     If `mode` is `lax`, returns `tuple[list[dict], Optional[int]]`, where the first element is the records which were parsed,
     and the second is the byte index where `source` was no longer a valid DMAP record.
     If `mode` is `strict` or `metadata`, returns `list[dict]` which is the parsed records.
-    If `mode` is `sniff`, returns `dict`, which is the first record.
+    If `mode` is `sniff` or `sniff_last`, returns `dict`, which is the first or last record.
     """
     return read_dispatcher(source, "iqdat", mode)
 
@@ -181,6 +188,7 @@ def read_rawacf(
         corruption starts.
         In "strict" mode, any corruption in the data will raise an error.
         In "sniff" mode, `source` must be a path, and only the first record will be read.
+        In "sniff_last" mode, `source` must be a path, and only the last record will be read.
         In "metadata" mode, `source` must be a path, and only the metadata fields of the records are returned.
 
     Returns
@@ -188,7 +196,7 @@ def read_rawacf(
     If `mode` is `lax`, returns `tuple[list[dict], Optional[int]]`, where the first element is the records which were parsed,
     and the second is the byte index where `source` was no longer a valid DMAP record.
     If `mode` is `strict` or `metadata`, returns `list[dict]` which is the parsed records.
-    If `mode` is `sniff`, returns `dict`, which is the first record.
+    If `mode` is `sniff` or `sniff_last`, returns `dict`, which is the first or last record.
     """
     return read_dispatcher(source, "rawacf", mode)
 
@@ -210,6 +218,7 @@ def read_fitacf(
         corruption starts.
         In "strict" mode, any corruption in the data will raise an error.
         In "sniff" mode, `source` must be a path, and only the first record will be read.
+        In "sniff_last" mode, `source` must be a path, and only the last record will be read.
         In "metadata" mode, `source` must be a path, and only the metadata fields of the records are returned.
 
     Returns
@@ -217,7 +226,7 @@ def read_fitacf(
     If `mode` is `lax`, returns `tuple[list[dict], Optional[int]]`, where the first element is the records which were parsed,
     and the second is the byte index where `source` was no longer a valid DMAP record.
     If `mode` is `strict` or `metadata`, returns `list[dict]` which is the parsed records.
-    If `mode` is `sniff`, returns `dict`, which is the first record.
+    If `mode` is `sniff` or `sniff_last`, returns `dict`, which is the first or last record.
     """
     return read_dispatcher(source, "fitacf", mode)
 
@@ -239,6 +248,7 @@ def read_grid(
         corruption starts.
         In "strict" mode, any corruption in the data will raise an error.
         In "sniff" mode, `source` must be a path, and only the first record will be read.
+        In "sniff_last" mode, `source` must be a path, and only the last record will be read.
         In "metadata" mode, `source` must be a path, and only the metadata fields of the records are returned.
 
     Returns
@@ -246,7 +256,7 @@ def read_grid(
     If `mode` is `lax`, returns `tuple[list[dict], Optional[int]]`, where the first element is the records which were parsed,
     and the second is the byte index where `source` was no longer a valid DMAP record.
     If `mode` is `strict` or `metadata`, returns `list[dict]` which is the parsed records.
-    If `mode` is `sniff`, returns `dict`, which is the first record.
+    If `mode` is `sniff` or `sniff_last`, returns `dict`, which is the first or last record.
     """
     return read_dispatcher(source, "grid", mode)
 
@@ -268,6 +278,7 @@ def read_map(
         corruption starts.
         In "strict" mode, any corruption in the data will raise an error.
         In "sniff" mode, `source` must be a path, and only the first record will be read.
+        In "sniff_last" mode, `source` must be a path, and only the last record will be read.
         In "metadata" mode, `source` must be a path, and only the metadata fields of the records are returned.
 
     Returns
@@ -275,7 +286,7 @@ def read_map(
     If `mode` is `lax`, returns `tuple[list[dict], Optional[int]]`, where the first element is the records which were parsed,
     and the second is the byte index where `source` was no longer a valid DMAP record.
     If `mode` is `strict` or `metadata`, returns `list[dict]` which is the parsed records.
-    If `mode` is `sniff`, returns `dict`, which is the first record.
+    If `mode` is `sniff` or `sniff_last`, returns `dict`, which is the first or last record.
     """
     return read_dispatcher(source, "map", mode)
 
@@ -297,6 +308,7 @@ def read_snd(
         corruption starts.
         In "strict" mode, any corruption in the data will raise an error.
         In "sniff" mode, `source` must be a path, and only the first record will be read.
+        In "sniff_last" mode, `source` must be a path, and only the last record will be read.
         In "metadata" mode, `source` must be a path, and only the metadata fields of the records are returned.
 
     Returns
@@ -304,7 +316,7 @@ def read_snd(
     If `mode` is `lax`, returns `tuple[list[dict], Optional[int]]`, where the first element is the records which were parsed,
     and the second is the byte index where `source` was no longer a valid DMAP record.
     If `mode` is `strict` or `metadata`, returns `list[dict]` which is the parsed records.
-    If `mode` is `sniff`, returns `dict`, which is the first record.
+    If `mode` is `sniff` or `sniff_last`, returns `dict`, which is the first or last record.
     """
     return read_dispatcher(source, "snd", mode)
 

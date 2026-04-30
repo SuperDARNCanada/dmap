@@ -1,13 +1,11 @@
 //! Defines the [`Record`] trait, which contains the shared behaviour that all DMAP records must have.
 
-use crate::compression::detect_bz2;
 use crate::error::DmapError;
 use crate::io;
 use crate::types::{
     parse_scalar, parse_vector, parse_vector_header, read_data, DmapField, DmapType, DmapVec,
     Fields,
 };
-use bzip2::read::BzDecoder;
 use indexmap::IndexMap;
 use itertools::izip;
 use rayon::iter::Either;
@@ -41,7 +39,7 @@ pub trait Record<'a>:
     /// Returns whether `name` is a metadata field of the record.
     fn is_metadata_field(name: &str) -> bool;
 
-    /// Reads from `dmap_data` and parses into `Vec<Self>`.
+    /// Reads from the beginning of `dmap_data` and parses into the first instance of `Self`.
     ///
     /// Returns `DmapError` if `dmap_data` cannot be read or contains invalid data.
     fn read_first_record(mut dmap_data: impl Read) -> Result<Self, DmapError>
@@ -49,13 +47,7 @@ pub trait Record<'a>:
         Self: Sized,
         Self: Send,
     {
-        let mut stream: Box<dyn Read>;
-        let (is_bz2, chunk) = detect_bz2(&mut dmap_data)?;
-        if is_bz2 {
-            stream = Box::new(BzDecoder::new(chunk));
-        } else {
-            stream = Box::new(chunk);
-        }
+        let mut stream = create_stream(&mut dmap_data)?;
 
         let mut buffer = [0; 8]; // record size should be an i32 of the data
         stream
@@ -78,53 +70,30 @@ pub trait Record<'a>:
         Ok(first_rec)
     }
 
-    /// Reads from `dmap_data` and parses into `Vec<Self>`.
+    /// Reads from the end of `dmap_data` and parses into the first instance of `Self`.
     ///
     /// Returns `DmapError` if `dmap_data` cannot be read or contains invalid data.
-    fn read_records(mut dmap_data: impl Read) -> Result<Vec<Self>, DmapError>
+    fn read_last_record(dmap_data: impl Read) -> Result<Self, DmapError>
     where
         Self: Sized,
         Self: Send,
     {
-        let mut buffer: Vec<u8> = vec![];
-        let (is_bz2, mut chunk) = detect_bz2(&mut dmap_data)?;
-        if is_bz2 {
-            let mut stream = BzDecoder::new(chunk);
-            stream.read_to_end(&mut buffer)?;
-        } else {
-            chunk.read_to_end(&mut buffer)?;
-        }
+        let mut slices = split_into_slices(dmap_data)?;
+        let last_slice = slices
+            .last_mut()
+            .ok_or_else(|| DmapError::InvalidRecord("No records to read from".to_string()))?;
+        Self::parse_record(last_slice)
+    }
 
-        let mut slices: Vec<_> = vec![];
-        let mut rec_start: usize = 0;
-        let mut rec_size: usize;
-        let mut rec_end: usize;
-
-        while ((rec_start + 2 * i32::size()) as u64) < buffer.len() as u64 {
-            rec_size = i32::from_le_bytes(buffer[rec_start + 4..rec_start + 8].try_into().unwrap())
-                as usize; // advance 4 bytes, skipping the "code" field
-            rec_end = rec_start + rec_size; // error-checking the size is conducted in Self::parse_record()
-            if rec_end > buffer.len() {
-                return Err(DmapError::InvalidRecord(format!("Record {} starting at byte {} has size greater than remaining length of buffer ({} > {})", slices.len(), rec_start, rec_size, buffer.len() - rec_start)));
-            } else if rec_size == 0 {
-                return Err(DmapError::InvalidRecord(format!(
-                    "Record {} starting at byte {} has non-positive size {} <= 0",
-                    slices.len(),
-                    rec_start,
-                    rec_size
-                )));
-            }
-            slices.push(Cursor::new(buffer[rec_start..rec_end].to_vec()));
-            rec_start = rec_end;
-        }
-        if rec_start != buffer.len() {
-            return Err(DmapError::InvalidRecord(format!(
-                "Record {} starting at byte {} incomplete; has size of {} bytes",
-                slices.len() + 1,
-                rec_start,
-                buffer.len() - rec_start
-            )));
-        }
+    /// Reads from `dmap_data` and parses into `Vec<Self>`.
+    ///
+    /// Returns `DmapError` if `dmap_data` cannot be read or contains invalid data.
+    fn read_records(dmap_data: impl Read) -> Result<Vec<Self>, DmapError>
+    where
+        Self: Sized,
+        Self: Send,
+    {
+        let mut slices = split_into_slices(dmap_data)?;
         let mut dmap_results: Vec<Result<Self, DmapError>> = vec![];
         dmap_results.par_extend(
             slices
@@ -153,52 +122,12 @@ pub trait Record<'a>:
     /// Reads metadata of records from `dmap_data` and parses into `Vec<Self>`.
     ///
     /// Returns `DmapError` if `dmap_data` cannot be read or contains invalid data.
-    fn read_metadata(
-        mut dmap_data: impl Read,
-    ) -> Result<Vec<IndexMap<String, DmapField>>, DmapError>
+    fn read_metadata(dmap_data: impl Read) -> Result<Vec<IndexMap<String, DmapField>>, DmapError>
     where
         Self: Sized,
         Self: Send,
     {
-        let mut buffer: Vec<u8> = vec![];
-        let (is_bz2, mut chunk) = detect_bz2(&mut dmap_data)?;
-        if is_bz2 {
-            let mut stream = BzDecoder::new(chunk);
-            stream.read_to_end(&mut buffer)?;
-        } else {
-            chunk.read_to_end(&mut buffer)?;
-        }
-
-        let mut slices: Vec<_> = vec![];
-        let mut rec_start: usize = 0;
-        let mut rec_size: usize;
-        let mut rec_end: usize;
-
-        while ((rec_start + 2 * i32::size()) as u64) < buffer.len() as u64 {
-            rec_size = i32::from_le_bytes(buffer[rec_start + 4..rec_start + 8].try_into().unwrap())
-                as usize; // advance 4 bytes, skipping the "code" field
-            rec_end = rec_start + rec_size; // error-checking the size is conducted in Self::parse_record()
-            if rec_end > buffer.len() {
-                return Err(DmapError::InvalidRecord(format!("Record {} starting at byte {} has size greater than remaining length of buffer ({} > {})", slices.len(), rec_start, rec_size, buffer.len() - rec_start)));
-            } else if rec_size == 0 {
-                return Err(DmapError::InvalidRecord(format!(
-                    "Record {} starting at byte {} has non-positive size {} <= 0",
-                    slices.len(),
-                    rec_start,
-                    rec_size
-                )));
-            }
-            slices.push(Cursor::new(buffer[rec_start..rec_end].to_vec()));
-            rec_start = rec_end;
-        }
-        if rec_start != buffer.len() {
-            return Err(DmapError::InvalidRecord(format!(
-                "Record {} starting at byte {} incomplete; has size of {} bytes",
-                slices.len() + 1,
-                rec_start,
-                buffer.len() - rec_start
-            )));
-        }
+        let mut slices = split_into_slices(dmap_data)?;
         let mut dmap_results: Vec<Result<IndexMap<String, DmapField>, DmapError>> = vec![];
         dmap_results.par_extend(
             slices
@@ -235,13 +164,7 @@ pub trait Record<'a>:
         Self: Send,
     {
         let mut buffer: Vec<u8> = vec![];
-        let (is_bz2, mut chunk) = detect_bz2(&mut dmap_data)?;
-        if is_bz2 {
-            let mut stream = BzDecoder::new(chunk);
-            stream.read_to_end(&mut buffer)?;
-        } else {
-            chunk.read_to_end(&mut buffer)?;
-        }
+        create_stream(&mut dmap_data)?.read_to_end(&mut buffer)?;
 
         let mut dmap_records: Vec<Self> = vec![];
         let mut bad_byte: Option<usize> = None;
@@ -259,7 +182,6 @@ pub trait Record<'a>:
             if rec_end > buffer.len() || rec_size == 0 {
                 bad_byte = Some(rec_start);
                 break;
-                // rec_start = buffer.len(); // break from loop
             } else {
                 rec_starts.push(rec_start);
                 slices.push(Cursor::new(buffer[rec_start..rec_end].to_vec()));
@@ -318,6 +240,16 @@ pub trait Record<'a>:
     {
         let file = File::open(infile)?;
         Self::read_first_record(file)
+    }
+
+    /// Reads the last record of a DMAP file of type `Self`.
+    fn sniff_last_file<P: AsRef<Path>>(infile: P) -> Result<Self, DmapError>
+    where
+        Self: Sized,
+        Self: Send,
+    {
+        let file = File::open(infile)?;
+        Self::read_last_record(file)
     }
 
     /// Read the metadata from a DMAP file of type `Self`
@@ -1070,4 +1002,5 @@ macro_rules! create_record_type {
     }
 }
 
+use crate::io::{create_stream, split_into_slices};
 pub(crate) use create_record_type;
