@@ -39,50 +39,32 @@ pub trait Record<'a>:
     /// Returns whether `name` is a metadata field of the record.
     fn is_metadata_field(name: &str) -> bool;
 
-    /// Reads from the beginning of `dmap_data` and parses into the first instance of `Self`.
+    /// Reads the nth records from `dmap_data` and parse into instances of `Self`.
     ///
     /// Returns `DmapError` if `dmap_data` cannot be read or contains invalid data.
-    fn read_first_record(mut dmap_data: impl Read) -> Result<Self, DmapError>
-    where
-        Self: Sized,
-        Self: Send,
-    {
-        let mut stream = create_stream(&mut dmap_data)?;
-
-        let mut buffer = [0; 8]; // record size should be an i32 of the data
-        stream
-            .read_exact(&mut buffer)
-            .map_err(|_| DmapError::CorruptStream("Unable to read size of first record"))?;
-
-        let rec_size = i32::from_le_bytes(buffer[4..8].try_into().unwrap()) as usize; // advance 4 bytes, skipping the "code" field
-        if rec_size == 0 {
-            return Err(DmapError::InvalidRecord(format!(
-                "Record 0 starting at byte 0 has non-positive size {} <= 0",
-                rec_size
-            )));
-        }
-
-        let mut rec = vec![0; rec_size];
-        rec[0..8].clone_from_slice(&buffer[..]);
-        stream.read_exact(&mut rec[8..])?;
-        let first_rec = Self::parse_record(&mut Cursor::new(rec))?;
-
-        Ok(first_rec)
-    }
-
-    /// Reads from the end of `dmap_data` and parses into the first instance of `Self`.
-    ///
-    /// Returns `DmapError` if `dmap_data` cannot be read or contains invalid data.
-    fn read_last_record(dmap_data: impl Read) -> Result<Self, DmapError>
+    fn read_nth_records(dmap_data: impl Read, indices: &[i32]) -> Result<Vec<Self>, DmapError>
     where
         Self: Sized,
         Self: Send,
     {
         let mut slices = split_into_slices(dmap_data)?;
-        let last_slice = slices
-            .last_mut()
-            .ok_or_else(|| DmapError::InvalidRecord("No records to read from".to_string()))?;
-        Self::parse_record(last_slice)
+        let num_recs = slices.len();
+        let mut records_read = vec![];
+        for idx in indices.iter() {
+            if *idx >= num_recs as i32 || *idx <= -1 * num_recs as i32 {
+                return Err(DmapError::InvalidIndex(*idx));
+            }
+            let i = {
+                if *idx < 0 {
+                    num_recs - idx.abs() as usize
+                } else {
+                    *idx as usize
+                }
+            };
+            records_read.push(Self::parse_record(&mut slices[i])
+                .map_err(|e| DmapError::InvalidRecord(format!("Record {idx}: {}", e.to_string())))?);
+        }
+        Ok(records_read)
     }
 
     /// Reads from `dmap_data` and parses into `Vec<Self>`.
@@ -232,24 +214,14 @@ pub trait Record<'a>:
         Self::read_records_lax(file)
     }
 
-    /// Reads the first record of a DMAP file of type `Self`.
-    fn sniff_file<P: AsRef<Path>>(infile: P) -> Result<Self, DmapError>
+    /// Reads the `nth` record(s) of a DMAP file of type `Self`.
+    fn sniff_file<P: AsRef<Path>>(infile: P, indices: &[i32]) -> Result<Vec<Self>, DmapError>
     where
         Self: Sized,
         Self: Send,
     {
         let file = File::open(infile)?;
-        Self::read_first_record(file)
-    }
-
-    /// Reads the last record of a DMAP file of type `Self`.
-    fn sniff_last_file<P: AsRef<Path>>(infile: P) -> Result<Self, DmapError>
-    where
-        Self: Sized,
-        Self: Send,
-    {
-        let file = File::open(infile)?;
-        Self::read_last_record(file)
+        Self::read_nth_records(file, indices)
     }
 
     /// Read the metadata from a DMAP file of type `Self`
@@ -429,6 +401,8 @@ pub trait Record<'a>:
                 size
             )));
         }
+
+        cursor.set_position(0);  // reset the cursor to the start
 
         Self::new(&mut fields)
     }
@@ -970,8 +944,8 @@ macro_rules! create_record_type {
                 #[test]
                 fn test_missing_optional_fields() -> Result<(), DmapError> {
                     let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($format)));
-                    let data = [< $format:camel Record >]::sniff_file(&filename).expect("Unable to sniff file");
-                    let recs = data.inner();
+                    let data = [< $format:camel Record >]::sniff_file(&filename, &[0]).expect("Unable to sniff file");
+                    let recs = data[0].clone().inner();
 
                     for field in $fields.scalars_optional.iter().chain($fields.vectors_optional.iter()) {
                         let mut cloned_rec = recs.clone();
@@ -986,8 +960,8 @@ macro_rules! create_record_type {
                 #[test]
                 fn test_missing_required_fields() -> Result<(), DmapError> {
                     let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($format)));
-                    let data = [< $format:camel Record >]::sniff_file(&filename).expect("Unable to sniff file");
-                    let recs = data.inner();
+                    let data = [< $format:camel Record >]::sniff_file(&filename, &[0]).expect("Unable to sniff file");
+                    let recs = data[0].clone().inner();
 
                     for field in $fields.scalars_required.iter().chain($fields.vectors_required.iter()) {
                         let mut cloned_rec = recs.clone();

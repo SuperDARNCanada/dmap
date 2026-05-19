@@ -145,8 +145,7 @@ write_rust!(dmap);
 /// * `read_[name]_lax` - reads a file, returning the records and the byte where corruption starts, if corrupted.
 /// * `read_[name]_bytes` - reads from bytes, similar to `read_[name]`.
 /// * `read_[name]_bytes_lax` - reads from bytes, similar to `read_[name]_lax`.
-/// * `sniff_[name]` - reads only the first record from file.
-/// * `sniff_last_[name]` - reads only the last record from file.
+/// * `sniff_[name]` - reads only the nth record(s) from file.
 /// * `read_[name]_metadata` - reads only the metadata from records in a file.
 /// reading, respectively.
 macro_rules! read_py {
@@ -157,7 +156,6 @@ macro_rules! read_py {
         $bytes_name:literal,
         $lax_bytes_name:literal,
         $sniff_name:literal,
-        $sniff_last_name:literal,
         $metadata_name:literal
     ) => {
         paste! {
@@ -216,25 +214,16 @@ macro_rules! read_py {
                 ))
             }
 
-            #[doc = "Reads a `" $name:upper "` file, returning the first record." ]
+            #[doc = "Reads a `" $name:upper "` file, returning the `nth` record(s)." ]
             #[pyfunction]
             #[pyo3(name = $sniff_name)]
-            #[pyo3(text_signature = "(infile: str, /)")]
-            fn [< sniff_ $name _py >](infile: PathBuf) -> PyResult<IndexMap<String, DmapField>> {
-                Ok([< $name:camel Record >]::sniff_file(&infile)
+            #[pyo3(text_signature = "(infile: str, indices: tuple[int], /)")]
+            fn [< sniff_ $name _py >](infile: PathBuf, indices: Vec<i32>) -> PyResult<Vec<IndexMap<String, DmapField>>> {
+                Ok([< $name:camel Record >]::sniff_file(&infile, &indices)
                     .map_err(PyErr::from)?
-                    .inner()
-                )
-            }
-
-            #[doc = "Reads a `" $name:upper "` file, returning the last record." ]
-            #[pyfunction]
-            #[pyo3(name = $sniff_last_name)]
-            #[pyo3(text_signature = "(infile: str, /)")]
-            fn [< sniff_last_ $name _py >](infile: PathBuf) -> PyResult<IndexMap<String, DmapField>> {
-                Ok([< $name:camel Record >]::sniff_last_file(&infile)
-                    .map_err(PyErr::from)?
-                    .inner()
+                    .into_iter()
+                    .map(|rec| rec.inner())
+                    .collect()
                 )
             }
 
@@ -258,7 +247,6 @@ read_py!(
     "read_iqdat_bytes",
     "read_iqdat_bytes_lax",
     "sniff_iqdat",
-    "sniff_last_iqdat",
     "read_iqdat_metadata"
 );
 read_py!(
@@ -268,7 +256,6 @@ read_py!(
     "read_rawacf_bytes",
     "read_rawacf_bytes_lax",
     "sniff_rawacf",
-    "sniff_last_rawacf",
     "read_rawacf_metadata"
 );
 read_py!(
@@ -278,7 +265,6 @@ read_py!(
     "read_fitacf_bytes",
     "read_fitacf_bytes_lax",
     "sniff_fitacf",
-    "sniff_last_fitacf",
     "read_fitacf_metadata"
 );
 read_py!(
@@ -288,7 +274,6 @@ read_py!(
     "read_grid_bytes",
     "read_grid_bytes_lax",
     "sniff_grid",
-    "sniff_last_grid",
     "read_grid_metadata"
 );
 read_py!(
@@ -298,7 +283,6 @@ read_py!(
     "read_map_bytes",
     "read_map_bytes_lax",
     "sniff_map",
-    "sniff_last_map",
     "read_map_metadata"
 );
 read_py!(
@@ -308,7 +292,6 @@ read_py!(
     "read_snd_bytes",
     "read_snd_bytes_lax",
     "sniff_snd",
-    "sniff_last_snd",
     "read_snd_metadata"
 );
 read_py!(
@@ -318,7 +301,6 @@ read_py!(
     "read_dmap_bytes",
     "read_dmap_bytes_lax",
     "sniff_dmap",
-    "sniff_last_dmap",
     "read_dmap_metadata"
 );
 
@@ -456,7 +438,7 @@ fn dmap_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(write_grid_bytes_py, m)?)?;
     m.add_function(wrap_pyfunction!(write_map_bytes_py, m)?)?;
 
-    // Sniff the first record
+    // Sniff records by index
     m.add_function(wrap_pyfunction!(sniff_dmap_py, m)?)?;
     m.add_function(wrap_pyfunction!(sniff_iqdat_py, m)?)?;
     m.add_function(wrap_pyfunction!(sniff_rawacf_py, m)?)?;
@@ -464,15 +446,6 @@ fn dmap_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sniff_snd_py, m)?)?;
     m.add_function(wrap_pyfunction!(sniff_grid_py, m)?)?;
     m.add_function(wrap_pyfunction!(sniff_map_py, m)?)?;
-
-    // Sniff the last record
-    m.add_function(wrap_pyfunction!(sniff_last_dmap_py, m)?)?;
-    m.add_function(wrap_pyfunction!(sniff_last_iqdat_py, m)?)?;
-    m.add_function(wrap_pyfunction!(sniff_last_rawacf_py, m)?)?;
-    m.add_function(wrap_pyfunction!(sniff_last_fitacf_py, m)?)?;
-    m.add_function(wrap_pyfunction!(sniff_last_snd_py, m)?)?;
-    m.add_function(wrap_pyfunction!(sniff_last_grid_py, m)?)?;
-    m.add_function(wrap_pyfunction!(sniff_last_map_py, m)?)?;
 
     // Read only the metadata from files
     m.add_function(wrap_pyfunction!(read_dmap_metadata_py, m)?)?;

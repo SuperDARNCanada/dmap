@@ -137,7 +137,9 @@ def test_dmap_bz2_lax(fmt):
 @pytest.mark.parametrize("fmt", FORMATS)
 def test_dmap_sniff(fmt):
     data = dmap.read_dmap(f"{HERE}/test_files/test.{fmt}", mode="sniff")
-    assert isinstance(data, dict)
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert isinstance(data[0], dict)
 
 
 @pytest.mark.parametrize("fmt", FORMATS)
@@ -158,25 +160,36 @@ def test_sniff_against_specific_strict(fmt):
 
 @pytest.mark.parametrize("fmt", FORMATS)
 def test_dmap_sniff_last(fmt):
-    data = dmap.read_dmap(f"{HERE}/test_files/test.{fmt}", mode="sniff_last")
-    assert isinstance(data, dict)
+    data = dmap.read_dmap(f"{HERE}/test_files/test.{fmt}", mode="sniff", indices=(-1,))
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert isinstance(data[0], dict)
 
 
 @pytest.mark.parametrize("fmt", FORMATS)
 def test_sniff_against_specific(fmt):
     infile = f"{HERE}/test_files/test.{fmt}"
-    data = dmap.read_dmap(infile, mode="sniff_last")
-    data2 = getattr(dmap, f"read_{fmt}")(infile, mode="sniff_last")
-    assert compare_recs([data], [data2])
+    data = dmap.read_dmap(infile, mode="sniff", indices=(-1,))
+    data2 = getattr(dmap, f"read_{fmt}")(infile, mode="sniff", indices=(-1,))
+    assert compare_recs(data, data2)
 
 
 @pytest.mark.parametrize("fmt", FORMATS)
 def test_sniff_against_specific_strict(fmt):
     infile = f"{HERE}/test_files/test.{fmt}"
     data1 = getattr(dmap, f"read_{fmt}")(infile, mode="strict")[-1]
-    data2 = getattr(dmap, f"read_{fmt}")(infile, mode="sniff_last")
-    assert compare_recs([data1], [data2])
+    data2 = getattr(dmap, f"read_{fmt}")(infile, mode="sniff", indices=(-1,))
+    assert compare_recs([data1], data2)
 
+
+@pytest.mark.parametrize("fmt", FORMATS)
+def test_sniff_outofbounds(fmt):
+    infile = f"{HERE}/test_files/test.{fmt}"
+    data = getattr(dmap, f"read_{fmt}")(infile, mode="strict")
+    with pytest.raises(ValueError):
+        _ = getattr(dmap, f"read_{fmt}")(infile, mode="sniff", indices=(len(data),))
+    with pytest.raises(ValueError):
+        _ = getattr(dmap, f"read_{fmt}")(infile, mode="sniff", indices=(-len(data)-1,))
 
 @pytest.mark.parametrize("fmt", FORMATS)
 def test_file_vs_bytes_read(fmt):

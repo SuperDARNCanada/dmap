@@ -88,17 +88,39 @@ macro_rules! make_test {
             #[test]
             fn [< test_ $record_type _sniff >] () {
                 let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($record_type)));
-                let data = [< $record_type:camel Record >]::sniff_file(&filename).expect("Unable to sniff file");
+                let data = [< $record_type:camel Record >]::sniff_file(&filename, &[0]).expect("Unable to sniff file");
                 let all_recs = [< $record_type:camel Record >]::read_file(&filename).expect("Unable to read file");
-                assert_eq!(data, all_recs[0])
+                assert_eq!(data[0], all_recs[0]);
             }
 
             #[test]
             fn [< test_ $record_type _sniff_last >] () {
                 let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($record_type)));
-                let data = [< $record_type:camel Record >]::sniff_last_file(&filename).expect("Unable to sniff file");
+                let data = [< $record_type:camel Record >]::sniff_file(&filename, &[-1]).expect("Unable to sniff file");
                 let all_recs = [< $record_type:camel Record >]::read_file(&filename).expect("Unable to read file");
-                assert_eq!(data, all_recs[all_recs.len()-1])
+                assert_eq!(data[0], all_recs[all_recs.len()-1]);
+            }
+
+            #[test]
+            fn [< test_ $record_type _sniff_oob >] () {
+                let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($record_type)));
+                let all_recs = [< $record_type:camel Record >]::read_file(&filename).expect("Unable to read file");
+                let num_recs = all_recs.len();
+                assert!([< $record_type:camel Record >]::sniff_file(&filename, &[num_recs as i32]).is_err());
+                assert!([< $record_type:camel Record >]::sniff_file(&filename, &[-(num_recs as i32)]).is_err());
+                assert!([< $record_type:camel Record >]::sniff_file(&filename, &[-(num_recs as i32 + 1_i32)]).is_err());
+                let data = [< $record_type:camel Record >]::sniff_file(&filename, &[-1, num_recs as i32 - 1_i32]).expect("Can't sniff last rec");
+                assert_eq!(data[0], data[1]);
+                assert_eq!(data[0], all_recs[all_recs.len()-1]);
+            }
+
+            #[test]
+            fn [< test_ $record_type _sniff_first_and_last >] () {
+                let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($record_type)));
+                let data = [< $record_type:camel Record >]::sniff_file(&filename, &[0, -1]).expect("Unable to sniff file");
+                let all_recs = [< $record_type:camel Record >]::read_file(&filename).expect("Unable to read file");
+                assert_eq!(data[0], all_recs[0]);
+                assert_eq!(data[1], all_recs[all_recs.len()-1]);
             }
 
             #[test]
