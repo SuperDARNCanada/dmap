@@ -2,7 +2,7 @@
 name = "darn-dmap"
 version = "0.8.0"
 edition = "2021"
-rust-version = "1.63.0"
+rust-version = "1.85.1"
 authors = ["Remington Rohel"]
 description = "SuperDARN DMAP file format I/O"
 repository = "https://github.com/SuperDARNCanada/dmap"
@@ -19,9 +19,14 @@ name = "dmap"
 # "cdylib" is necessary to produce a shared library for Python to import from.
 crate-type = ["cdylib", "rlib"]
 
+[features]
+default = []
+python = ["dep:pyo3", "dep:numpy"]
+
 [dependencies]
-pyo3 = { version = "0.26.0", features = ["extension-module", "indexmap", "abi3-py38"] }
-numpy = "0.26.0"
+ndarray = "0.16"
+pyo3 = { version = "0.26.0", optional = true, features = ["extension-module", "indexmap", "abi3-py38"] }
+numpy = { version = "0.26.0", optional = true }
 indexmap = "2.3.0"
 itertools = "0.13.0"
 rayon = "1.10.0"

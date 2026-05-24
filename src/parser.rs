@@ -1,8 +1,8 @@
-use std::io::Cursor;
-use numpy::ndarray::ArrayD;
-use indexmap::IndexMap;
-use crate::{DmapError, Record};
 use crate::types::{DmapField, DmapScalar, DmapType, DmapVec, Type};
+use crate::{DmapError, Record};
+use indexmap::IndexMap;
+use ndarray::ArrayD;
+use std::io::Cursor;
 
 /// DMAP record header information
 pub(crate) struct Header {
@@ -19,9 +19,7 @@ pub(crate) struct Parser {
 
 impl From<Cursor<Vec<u8>>> for Parser {
     fn from(cursor: Cursor<Vec<u8>>) -> Self {
-        Self {
-            cursor,
-        }
+        Self { cursor }
     }
 }
 
@@ -67,7 +65,8 @@ impl Parser {
         })?;
 
         // adding 8 bytes because code and size are part of the record.
-        if size as u64 > self.cursor.get_ref().len() as u64 - self.position() + 2 * i32::size() as u64
+        if size as u64
+            > self.cursor.get_ref().len() as u64 - self.position() + 2 * i32::size() as u64
         {
             return Err(DmapError::InvalidRecord(format!(
                 "Record size {size} at byte {} bigger than remaining buffer {}",
@@ -104,7 +103,12 @@ impl Parser {
             Err(DmapError::InvalidRecord(format!(
                 "Number of scalars {num_scalars} plus vectors {num_vectors} greater than size '{size}'")))
         } else {
-            Ok(Header {size, _code, num_scalars, num_vectors })
+            Ok(Header {
+                size,
+                _code,
+                num_scalars,
+                num_vectors,
+            })
         }
     }
 
@@ -222,7 +226,8 @@ impl Parser {
         record_size: i32,
     ) -> Result<(String, DmapField), DmapError> {
         let start_position = self.position();
-        let (name, data_type, dimensions, total_elements) = self.parse_vector_header(record_size)?;
+        let (name, data_type, dimensions, total_elements) =
+            self.parse_vector_header(record_size)?;
 
         macro_rules! dmapvec_from_cursor {
             ($type:ty, $enum_var:path, $dims:ident, $parser:ident, $num_elements:ident, $name:ident) => {
@@ -242,14 +247,9 @@ impl Parser {
             Type::Char => {
                 dmapvec_from_cursor!(i8, DmapVec::Char, dimensions, self, total_elements, name)
             }
-            Type::Short => dmapvec_from_cursor!(
-                i16,
-                DmapVec::Short,
-                dimensions,
-                self,
-                total_elements,
-                name
-            ),
+            Type::Short => {
+                dmapvec_from_cursor!(i16, DmapVec::Short, dimensions, self, total_elements, name)
+            }
             Type::Int => {
                 dmapvec_from_cursor!(i32, DmapVec::Int, dimensions, self, total_elements, name)
             }
@@ -259,41 +259,21 @@ impl Parser {
             Type::Uchar => {
                 dmapvec_from_cursor!(u8, DmapVec::Uchar, dimensions, self, total_elements, name)
             }
-            Type::Ushort => dmapvec_from_cursor!(
-                u16,
-                DmapVec::Ushort,
-                dimensions,
-                self,
-                total_elements,
-                name
-            ),
+            Type::Ushort => {
+                dmapvec_from_cursor!(u16, DmapVec::Ushort, dimensions, self, total_elements, name)
+            }
             Type::Uint => {
                 dmapvec_from_cursor!(u32, DmapVec::Uint, dimensions, self, total_elements, name)
             }
-            Type::Ulong => dmapvec_from_cursor!(
-                u64,
-                DmapVec::Ulong,
-                dimensions,
-                self,
-                total_elements,
-                name
-            ),
-            Type::Float => dmapvec_from_cursor!(
-                f32,
-                DmapVec::Float,
-                dimensions,
-                self,
-                total_elements,
-                name
-            ),
-            Type::Double => dmapvec_from_cursor!(
-                f64,
-                DmapVec::Double,
-                dimensions,
-                self,
-                total_elements,
-                name
-            ),
+            Type::Ulong => {
+                dmapvec_from_cursor!(u64, DmapVec::Ulong, dimensions, self, total_elements, name)
+            }
+            Type::Float => {
+                dmapvec_from_cursor!(f32, DmapVec::Float, dimensions, self, total_elements, name)
+            }
+            Type::Double => {
+                dmapvec_from_cursor!(f64, DmapVec::Double, dimensions, self, total_elements, name)
+            }
             Type::String => {
                 return Err(DmapError::InvalidVector(format!(
                     "Invalid type {data_type} for DMAP vector {name}"
@@ -382,13 +362,15 @@ impl Parser {
             )));
         }
 
-        self.set_position(0);  // reset the cursor to the start
+        self.set_position(0); // reset the cursor to the start
 
         T::new(&mut fields)
     }
 
     /// Reads a record from `self`, only keeping the metadata fields.
-    pub(crate) fn parse_metadata<'a, T: Record<'a>>(&mut self) -> Result<IndexMap<String, DmapField>, DmapError>
+    pub(crate) fn parse_metadata<'a, T: Record<'a>>(
+        &mut self,
+    ) -> Result<IndexMap<String, DmapField>, DmapError>
     where
         Self: Sized,
     {
@@ -427,12 +409,11 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
-    use numpy::array;
     use super::*;
+    use ndarray::array;
 
     #[test]
     fn test_read_vec() {
-
         let bytes: Vec<u8> = vec![1, 0, 1, 0];
         let mut parser = Parser::new(bytes.clone());
         let data = parser.read_vector::<u8>(4);
