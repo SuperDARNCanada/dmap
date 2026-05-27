@@ -6,8 +6,9 @@ use crate::DmapError;
 use bzip2::read::BzDecoder;
 use std::ffi::OsStr;
 use std::fs::{File, OpenOptions};
-use std::io::{Cursor, Read, Write};
+use std::io::{Read, Write};
 use std::path::Path;
+use crate::parser::Parser;
 
 /// Write bytes to file.
 ///
@@ -58,7 +59,7 @@ pub(crate) fn create_stream<'b>(dmap_data: &'b mut impl Read) -> Result<Box<dyn 
 /// Parses `dmap_data` into discrete chunks, each corresponding to a DMAP record.  
 pub(crate) fn split_into_slices(
     mut dmap_data: impl Read,
-) -> Result<Vec<Cursor<Vec<u8>>>, DmapError> {
+) -> Result<Vec<Parser>, DmapError> {
     let mut buffer: Vec<u8> = vec![];
     create_stream(&mut dmap_data)?.read_to_end(&mut buffer)?;
 
@@ -81,7 +82,7 @@ pub(crate) fn split_into_slices(
                 rec_size
             )));
         }
-        slices.push(Cursor::new(buffer[rec_start..rec_end].to_vec()));
+        slices.push(Parser::new(buffer[rec_start..rec_end].to_vec()));
         rec_start = rec_end;
     }
     if rec_start != buffer.len() {
@@ -93,4 +94,34 @@ pub(crate) fn split_into_slices(
         )));
     }
     Ok(slices)
+}
+
+/// Slice the stream into independent `Cursor`s for each record, based on the metadata headers of the
+/// records.
+pub(crate) fn slice_stream_lax(buffer: Vec<u8>) -> (Vec<Parser>, Vec<usize>, Option<usize>) {
+    let mut rec_start: usize = 0;
+    let mut rec_size: usize;
+    let mut rec_end: usize;
+    let mut slices: Vec<_> = vec![];
+    let mut bad_byte: Option<usize> = None;
+
+    let mut rec_starts = vec![];
+    while ((rec_start + 2 * i32::size()) as u64) < buffer.len() as u64 {
+        rec_size = i32::from_le_bytes(buffer[rec_start + 4..rec_start + 8].try_into().unwrap())
+            as usize; // advance 4 bytes, skipping the "code" field
+        rec_end = rec_start + rec_size; // error-checking the size is conducted in Self::parse_record()
+        if rec_end > buffer.len() || rec_size == 0 {
+            bad_byte = Some(rec_start);
+            break;
+        } else {
+            rec_starts.push(rec_start);
+            slices.push(Parser::new(buffer[rec_start..rec_end].to_vec()));
+            rec_start = rec_end;
+        }
+    }
+    if rec_start != buffer.len() {
+        bad_byte = Some(rec_start);
+    }
+
+    (slices, rec_starts, bad_byte)
 }

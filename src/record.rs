@@ -2,17 +2,16 @@
 
 use crate::error::DmapError;
 use crate::io;
-use crate::types::{
-    parse_scalar, parse_vector, parse_vector_header, read_data, DmapField, DmapType, DmapVec,
-    Fields,
-};
+use crate::types::{DmapField, DmapType, DmapVec, Fields};
+use crate::io::{create_stream, slice_stream_lax, split_into_slices};
+use crate::convenience::split_results;
 use indexmap::IndexMap;
 use itertools::izip;
 use rayon::iter::Either;
 use rayon::prelude::*;
 use std::fmt::Debug;
 use std::fs::File;
-use std::io::{Cursor, Read};
+use std::io::Read;
 use std::path::Path;
 
 /// DMAP record template.
@@ -61,10 +60,49 @@ pub trait Record<'a>:
                     *idx as usize
                 }
             };
-            records_read.push(Self::parse_record(&mut slices[i])
+            records_read.push(slices[i].parse_record::<Self>()
                 .map_err(|e| DmapError::InvalidRecord(format!("Record {idx}: {}", e.to_string())))?);
         }
         Ok(records_read)
+    }
+
+    /// Reads the nth records from `dmap_data` and parse into instances of `Self`, if possible.
+    ///
+    /// Returns a 2-tuple, where the first entry is the good records from the front of the buffer,
+    /// and the second entry is the byte where the first corrupted record starts, if applicable.
+    fn read_nth_records_lax(mut dmap_data: impl Read, indices: &[i32]) -> Result<(Vec<Self>, Option<usize>), DmapError>
+    where
+        Self: Sized,
+        Self: Send,
+    {
+        let mut buffer: Vec<u8> = vec![];
+        let mut dmap_records: Vec<Self> = vec![];
+
+        create_stream(&mut dmap_data)?.read_to_end(&mut buffer)?;
+        let (mut slices, rec_starts, mut bad_byte) = slice_stream_lax(buffer);
+
+        let num_recs = slices.len();
+        for idx in indices.iter() {
+            if *idx >= num_recs as i32 || *idx <= -1 * num_recs as i32 {
+                return Err(DmapError::InvalidIndex(*idx));
+            }
+            let i = {
+                if *idx < 0 {
+                    num_recs - idx.abs() as usize
+                } else {
+                    *idx as usize
+                }
+            };
+            let parse_result = slices[i].parse_record::<Self>();
+            if let Ok(x) = parse_result {
+                dmap_records.push(x);
+            } else {
+                bad_byte = Some(rec_starts[i]);
+                break;
+            }
+        }
+
+        Ok((dmap_records, bad_byte))
     }
 
     /// Reads from `dmap_data` and parses into `Vec<Self>`.
@@ -80,28 +118,17 @@ pub trait Record<'a>:
         dmap_results.par_extend(
             slices
                 .par_iter_mut()
-                .map(|cursor| Self::parse_record(cursor)),
+                .map(|parser| parser.parse_record::<Self>()),
         );
 
-        let mut dmap_records: Vec<Self> = vec![];
-        let mut bad_recs: Vec<usize> = vec![];
-        let mut dmap_errors: Vec<DmapError> = vec![];
-        for (i, rec) in dmap_results.into_iter().enumerate() {
-            match rec {
-                Ok(x) => dmap_records.push(x),
-                Err(e) => {
-                    dmap_errors.push(e);
-                    bad_recs.push(i);
-                }
-            }
-        }
+        let (dmap_records, dmap_errors, bad_recs) = split_results(dmap_results);
         if !dmap_errors.is_empty() {
             return Err(DmapError::BadRecords(bad_recs, dmap_errors[0].to_string()));
         }
         Ok(dmap_records)
     }
 
-    /// Reads metadata of records from `dmap_data` and parses into `Vec<Self>`.
+    /// Reads metadata of records from `dmap_data` and parses into `Vec<IndexMap<String, DmapField>>`.
     ///
     /// Returns `DmapError` if `dmap_data` cannot be read or contains invalid data.
     fn read_metadata(dmap_data: impl Read) -> Result<Vec<IndexMap<String, DmapField>>, DmapError>
@@ -114,26 +141,44 @@ pub trait Record<'a>:
         dmap_results.par_extend(
             slices
                 .par_iter_mut()
-                .map(|cursor| Self::parse_metadata(cursor)),
+                .map(|parser| parser.parse_metadata::<Self>()),
         );
 
-        let mut dmap_records: Vec<IndexMap<String, DmapField>> = vec![];
-        let mut bad_recs: Vec<usize> = vec![];
-        let mut dmap_errors: Vec<DmapError> = vec![];
-        for (i, rec) in dmap_results.into_iter().enumerate() {
-            match rec {
-                Ok(x) => dmap_records.push(x),
-                Err(e) => {
-                    dmap_errors.push(e);
-                    bad_recs.push(i);
-                }
-            }
-        }
+        let (dmap_records, dmap_errors, bad_recs) = split_results(dmap_results);
         if !dmap_errors.is_empty() {
             return Err(DmapError::BadRecords(bad_recs, dmap_errors[0].to_string()));
         }
 
         Ok(dmap_records)
+    }
+
+    /// Reads metadata of the nth records from `dmap_data` and parses into `Vec<IndexMap<String, DmapField>>`.
+    ///
+    /// Returns `DmapError` if `dmap_data` cannot be read or contains invalid data.
+    fn read_metadata_by_indices(dmap_data: impl Read, indices: &[i32]) -> Result<Vec<IndexMap<String, DmapField>>, DmapError>
+    where
+        Self: Sized,
+        Self: Send,
+    {
+        let mut slices = split_into_slices(dmap_data)?;
+        let mut dmap_results: Vec<IndexMap<String, DmapField>> = vec![];
+
+        let num_recs = slices.len();
+        for idx in indices.iter() {
+            if *idx >= num_recs as i32 || *idx <= -1 * num_recs as i32 {
+                return Err(DmapError::InvalidIndex(*idx));
+            }
+            let i = {
+                if *idx < 0 {
+                    num_recs - idx.abs() as usize
+                } else {
+                    *idx as usize
+                }
+            };
+            dmap_results.push(slices[i].parse_metadata::<Self>()
+                .map_err(|e| DmapError::InvalidRecord(format!("Record {idx}: {}", e.to_string())))?);
+        }
+        Ok(dmap_results)
     }
 
     /// Reads from `dmap_data` and parses into `Vec<Self>`.
@@ -146,38 +191,16 @@ pub trait Record<'a>:
         Self: Send,
     {
         let mut buffer: Vec<u8> = vec![];
-        create_stream(&mut dmap_data)?.read_to_end(&mut buffer)?;
-
         let mut dmap_records: Vec<Self> = vec![];
-        let mut bad_byte: Option<usize> = None;
 
-        let mut slices: Vec<_> = vec![];
-        let mut rec_start: usize = 0;
-        let mut rec_size: usize;
-        let mut rec_end: usize;
+        create_stream(&mut dmap_data)?.read_to_end(&mut buffer)?;
+        let (mut slices, rec_starts, mut bad_byte) = slice_stream_lax(buffer);
 
-        let mut rec_starts = vec![];
-        while ((rec_start + 2 * i32::size()) as u64) < buffer.len() as u64 {
-            rec_size = i32::from_le_bytes(buffer[rec_start + 4..rec_start + 8].try_into().unwrap())
-                as usize; // advance 4 bytes, skipping the "code" field
-            rec_end = rec_start + rec_size; // error-checking the size is conducted in Self::parse_record()
-            if rec_end > buffer.len() || rec_size == 0 {
-                bad_byte = Some(rec_start);
-                break;
-            } else {
-                rec_starts.push(rec_start);
-                slices.push(Cursor::new(buffer[rec_start..rec_end].to_vec()));
-                rec_start = rec_end;
-            }
-        }
-        if rec_start != buffer.len() {
-            bad_byte = Some(rec_start);
-        }
         let mut dmap_results: Vec<Result<Self, DmapError>> = vec![];
         dmap_results.par_extend(
             slices
                 .par_iter_mut()
-                .map(|cursor| Self::parse_record(cursor)),
+                .map(|parser| parser.parse_record::<Self>()),
         );
 
         for (i, rec) in dmap_results.into_iter().enumerate() {
@@ -215,13 +238,26 @@ pub trait Record<'a>:
     }
 
     /// Reads the `nth` record(s) of a DMAP file of type `Self`.
-    fn sniff_file<P: AsRef<Path>>(infile: P, indices: &[i32]) -> Result<Vec<Self>, DmapError>
+    fn read_file_by_indices<P: AsRef<Path>>(infile: P, indices: &[i32]) -> Result<Vec<Self>, DmapError>
     where
         Self: Sized,
         Self: Send,
     {
         let file = File::open(infile)?;
         Self::read_nth_records(file, indices)
+    }
+
+    /// Reads the `nth` record(s) of a DMAP file of type `Self`.
+    ///
+    /// Does not fail on corrupted records; rather, returns `(recs, Option<usize>)` where
+    /// the second value is the byte where record corruption begins, if applicable.
+    fn read_file_by_indices_lax<P: AsRef<Path>>(infile: P, indices: &[i32]) -> Result<(Vec<Self>, Option<usize>), DmapError>
+    where
+        Self: Sized,
+        Self: Send,
+    {
+        let file = File::open(infile)?;
+        Self::read_nth_records_lax(file, indices)
     }
 
     /// Read the metadata from a DMAP file of type `Self`
@@ -236,177 +272,16 @@ pub trait Record<'a>:
         Self::read_metadata(file)
     }
 
-    /// Reads a record from `cursor`, only keeping the metadata fields.
-    fn parse_metadata(
-        cursor: &mut Cursor<Vec<u8>>,
-    ) -> Result<IndexMap<String, DmapField>, DmapError>
+    /// Reads the `nth` records' metadata of a DMAP file of type `Self`.
+    fn read_file_metadata_by_indices<P: AsRef<Path>>(infile: P, indices: &[i32]) -> Result<Vec<IndexMap<String, DmapField>>, DmapError>
     where
         Self: Sized,
+        Self: Send,
     {
-        let bytes_already_read = cursor.position();
-        let _code = read_data::<i32>(cursor).map_err(|e| {
-            DmapError::InvalidRecord(format!(
-                "Cannot interpret code at byte {}: {e}",
-                bytes_already_read
-            ))
-        })?;
-        let size = read_data::<i32>(cursor).map_err(|e| {
-            DmapError::InvalidRecord(format!(
-                "Cannot interpret size at byte {}: {e}",
-                bytes_already_read + i32::size() as u64
-            ))
-        })?;
-
-        // adding 8 bytes because code and size are part of the record.
-        if size as u64 > cursor.get_ref().len() as u64 - cursor.position() + 2 * i32::size() as u64
-        {
-            return Err(DmapError::InvalidRecord(format!(
-                "Record size {size} at byte {} bigger than remaining buffer {}",
-                cursor.position() - i32::size() as u64,
-                cursor.get_ref().len() as u64 - cursor.position() + 2 * i32::size() as u64
-            )));
-        } else if size <= 0 {
-            return Err(DmapError::InvalidRecord(format!("Record size {size} <= 0")));
-        }
-
-        let num_scalars = read_data::<i32>(cursor).map_err(|e| {
-            DmapError::InvalidRecord(format!(
-                "Cannot interpret number of scalars at byte {}: {e}",
-                cursor.position() - i32::size() as u64
-            ))
-        })?;
-        let num_vectors = read_data::<i32>(cursor).map_err(|e| {
-            DmapError::InvalidRecord(format!(
-                "Cannot interpret number of vectors at byte {}: {e}",
-                cursor.position() - i32::size() as u64
-            ))
-        })?;
-        if num_scalars <= 0 {
-            return Err(DmapError::InvalidRecord(format!(
-                "Number of scalars {num_scalars} at byte {} <= 0",
-                cursor.position() - 2 * i32::size() as u64
-            )));
-        } else if num_vectors <= 0 {
-            return Err(DmapError::InvalidRecord(format!(
-                "Number of vectors {num_vectors} at byte {} <= 0",
-                cursor.position() - i32::size() as u64
-            )));
-        } else if num_scalars + num_vectors > size {
-            return Err(DmapError::InvalidRecord(format!(
-                "Number of scalars {num_scalars} plus vectors {num_vectors} greater than size '{size}'")));
-        }
-
-        let mut fields: IndexMap<String, DmapField> = IndexMap::new();
-        for _ in 0..num_scalars {
-            let (name, val) = parse_scalar(cursor)?;
-            fields.insert(name, val);
-        }
-        for _ in 0..num_vectors {
-            let here = cursor.position();
-            let (name, dtype, _dims, num_elements) = parse_vector_header(cursor, size)?;
-            if Self::is_metadata_field(&name) {
-                cursor.set_position(here);
-                let (_, val) = parse_vector(cursor, size)?;
-                fields.insert(name.to_string(), val);
-            } else {
-                let vec_data_size = dtype.size() as u64 * num_elements as u64;
-                let here = cursor.position();
-                cursor.set_position(here + vec_data_size);
-            }
-        }
-
-        if cursor.position() - bytes_already_read != size as u64 {
-            return Err(DmapError::InvalidRecord(format!(
-                "Bytes read {} does not match the records size field {}",
-                cursor.position() - bytes_already_read,
-                size
-            )));
-        }
-
-        Ok(fields)
+        let file = File::open(infile)?;
+        Self::read_metadata_by_indices(file, indices)
     }
-
-    /// Reads a record from `cursor`.
-    fn parse_record(cursor: &mut Cursor<Vec<u8>>) -> Result<Self, DmapError>
-    where
-        Self: Sized,
-    {
-        let bytes_already_read = cursor.position();
-        let _code = read_data::<i32>(cursor).map_err(|e| {
-            DmapError::InvalidRecord(format!(
-                "Cannot interpret code at byte {}: {e}",
-                bytes_already_read
-            ))
-        })?;
-        let size = read_data::<i32>(cursor).map_err(|e| {
-            DmapError::InvalidRecord(format!(
-                "Cannot interpret size at byte {}: {e}",
-                bytes_already_read + i32::size() as u64
-            ))
-        })?;
-
-        // adding 8 bytes because code and size are part of the record.
-        if size as u64 > cursor.get_ref().len() as u64 - cursor.position() + 2 * i32::size() as u64
-        {
-            return Err(DmapError::InvalidRecord(format!(
-                "Record size {size} at byte {} bigger than remaining buffer {}",
-                cursor.position() - i32::size() as u64,
-                cursor.get_ref().len() as u64 - cursor.position() + 2 * i32::size() as u64
-            )));
-        } else if size <= 0 {
-            return Err(DmapError::InvalidRecord(format!("Record size {size} <= 0")));
-        }
-
-        let num_scalars = read_data::<i32>(cursor).map_err(|e| {
-            DmapError::InvalidRecord(format!(
-                "Cannot interpret number of scalars at byte {}: {e}",
-                cursor.position() - i32::size() as u64
-            ))
-        })?;
-        let num_vectors = read_data::<i32>(cursor).map_err(|e| {
-            DmapError::InvalidRecord(format!(
-                "Cannot interpret number of vectors at byte {}: {e}",
-                cursor.position() - i32::size() as u64
-            ))
-        })?;
-        if num_scalars <= 0 {
-            return Err(DmapError::InvalidRecord(format!(
-                "Number of scalars {num_scalars} at byte {} <= 0",
-                cursor.position() - 2 * i32::size() as u64
-            )));
-        } else if num_vectors <= 0 {
-            return Err(DmapError::InvalidRecord(format!(
-                "Number of vectors {num_vectors} at byte {} <= 0",
-                cursor.position() - i32::size() as u64
-            )));
-        } else if num_scalars + num_vectors > size {
-            return Err(DmapError::InvalidRecord(format!(
-                "Number of scalars {num_scalars} plus vectors {num_vectors} greater than size '{size}'")));
-        }
-
-        let mut fields: IndexMap<String, DmapField> = IndexMap::new();
-        for _ in 0..num_scalars {
-            let (name, val) = parse_scalar(cursor)?;
-            fields.insert(name, val);
-        }
-        for _ in 0..num_vectors {
-            let (name, val) = parse_vector(cursor, size)?;
-            fields.insert(name, val);
-        }
-
-        if cursor.position() - bytes_already_read != size as u64 {
-            return Err(DmapError::InvalidRecord(format!(
-                "Bytes read {} does not match the records size field {}",
-                cursor.position() - bytes_already_read,
-                size
-            )));
-        }
-
-        cursor.set_position(0);  // reset the cursor to the start
-
-        Self::new(&mut fields)
-    }
-
+    
     /// Checks the validity of an `IndexMap` as a representation of a DMAP record.
     ///
     /// Validity checks include ensuring that no unfamiliar entries exist, that all required
@@ -808,10 +683,10 @@ pub trait Record<'a>:
         Ok(field_info)
     }
 
-    /// Creates the byte represenation of a collection of [`Record`]s.
+    /// Creates the byte representation of a collection of [`Record`]s.
     ///
     /// Ordering of the members is preserved.
-    fn into_bytes(recs: &Vec<Self>) -> Result<Vec<u8>, DmapError> {
+    fn par_to_bytes(recs: &[Self]) -> Result<Vec<u8>, DmapError> {
         let mut bytes: Vec<u8> = vec![];
         let (errors, rec_bytes): (Vec<_>, Vec<_>) =
             recs.par_iter()
@@ -861,7 +736,7 @@ pub trait Record<'a>:
         outfile: P,
         bz2: bool,
     ) -> Result<(), DmapError> {
-        let bytes: Vec<u8> = Self::into_bytes(recs)?;
+        let bytes: Vec<u8> = Self::par_to_bytes(recs)?;
         io::bytes_to_file(bytes, outfile, bz2)?;
         Ok(())
     }
@@ -944,7 +819,7 @@ macro_rules! create_record_type {
                 #[test]
                 fn test_missing_optional_fields() -> Result<(), DmapError> {
                     let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($format)));
-                    let data = [< $format:camel Record >]::sniff_file(&filename, &[0]).expect("Unable to sniff file");
+                    let data = [< $format:camel Record >]::read_file_by_indices(&filename, &[0]).expect("Unable to sniff file");
                     let recs = data[0].clone().inner();
 
                     for field in $fields.scalars_optional.iter().chain($fields.vectors_optional.iter()) {
@@ -960,7 +835,7 @@ macro_rules! create_record_type {
                 #[test]
                 fn test_missing_required_fields() -> Result<(), DmapError> {
                     let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($format)));
-                    let data = [< $format:camel Record >]::sniff_file(&filename, &[0]).expect("Unable to sniff file");
+                    let data = [< $format:camel Record >]::read_file_by_indices(&filename, &[0]).expect("Unable to sniff file");
                     let recs = data[0].clone().inner();
 
                     for field in $fields.scalars_required.iter().chain($fields.vectors_required.iter()) {
@@ -976,5 +851,4 @@ macro_rules! create_record_type {
     }
 }
 
-use crate::io::{create_stream, split_into_slices};
 pub(crate) use create_record_type;
