@@ -15,17 +15,12 @@ pub(crate) struct Header {
 /// Parser for interpreting byte streams as DMAP records.
 pub(crate) struct Parser {
     cursor: Cursor<Vec<u8>>,
-    start_byte: u64,
-    is_corrupt: bool,
 }
 
 impl From<Cursor<Vec<u8>>> for Parser {
     fn from(cursor: Cursor<Vec<u8>>) -> Self {
-        let start_byte = cursor.position();
         Self {
             cursor,
-            start_byte,
-            is_corrupt: false,
         }
     }
 }
@@ -35,16 +30,13 @@ impl Parser {
     pub(crate) fn new(buf: Vec<u8>) -> Self {
         Self {
             cursor: Cursor::new(buf),
-            start_byte: 0,
-            is_corrupt: false
         }
     }
 
     /// Resets to the beginning of the stream.
-    pub(crate) fn reset(&mut self) -> &mut Parser {
+    #[allow(dead_code)]
+    fn reset(&mut self) -> &mut Parser {
         self.cursor.set_position(0);
-        self.start_byte = 0;
-        self.is_corrupt = false;
         self
     }
 
