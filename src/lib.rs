@@ -88,11 +88,13 @@
 //! ```
 
 pub(crate) mod compression;
+pub(crate) mod convenience;
 pub mod error;
 pub mod formats;
 pub(crate) mod io;
 pub mod record;
 pub mod types;
+mod parser;
 
 pub use crate::error::DmapError;
 pub use crate::formats::dmap::DmapRecord;
@@ -141,11 +143,12 @@ write_rust!(dmap);
 /// Creates functions for reading DMAP files for the Python API.
 ///
 /// Generates six functions:
-/// * `read_[name]` - reads a file, raising an error on a corrupted file
+/// * `read_[name]` - reads a file, raising an error on a corrupted file.
 /// * `read_[name]_lax` - reads a file, returning the records and the byte where corruption starts, if corrupted.
-/// * `read_[name]_bytes` - reads from bytes, similar to `read_[name]`
-/// * `read_[name]_bytes_lax` - reads from bytes, similar to `read_[name]_lax`
-/// * `sniff_[name]` - reads only the first record from file.
+/// * `read_[name]_bytes` - reads from bytes, similar to `read_[name]`.
+/// * `read_[name]_bytes_lax` - reads from bytes, similar to `read_[name]_lax`.
+/// * `read_[name]_by_index` - reads only the nth record(s) from file.
+/// * `read_[name]_by_index_lax` - reads only the nth record(s) from file in the same manner as `read_[name]_lax`.
 /// * `read_[name]_metadata` - reads only the metadata from records in a file.
 /// reading, respectively.
 macro_rules! read_py {
@@ -156,7 +159,11 @@ macro_rules! read_py {
         $bytes_name:literal,
         $lax_bytes_name:literal,
         $sniff_name:literal,
-        $metadata_name:literal
+        $sniff_name_lax:literal,
+        $sniff_bytes:literal,
+        $sniff_bytes_lax:literal,
+        $metadata_name:literal,
+        $sniff_metadata:literal
     ) => {
         paste! {
             #[doc = "Reads a `" $name:upper "` file, returning a list of dictionaries containing the fields." ]
@@ -214,15 +221,58 @@ macro_rules! read_py {
                 ))
             }
 
-            #[doc = "Reads a `" $name:upper "` file, returning the first record." ]
+            #[doc = "Reads a `" $name:upper "` file, returning the `nth` record(s)." ]
             #[pyfunction]
             #[pyo3(name = $sniff_name)]
-            #[pyo3(text_signature = "(infile: str, /)")]
-            fn [< sniff_ $name _py >](infile: PathBuf) -> PyResult<IndexMap<String, DmapField>> {
-                Ok([< $name:camel Record >]::sniff_file(&infile)
+            #[pyo3(text_signature = "(infile: str, indices: tuple[int], /)")]
+            fn [< read_ $name _by_indices_py >](infile: PathBuf, indices: Vec<i32>) -> PyResult<Vec<IndexMap<String, DmapField>>> {
+                Ok([< $name:camel Record >]::read_file_by_indices(&infile, &indices)
                     .map_err(PyErr::from)?
-                    .inner()
+                    .into_iter()
+                    .map(|rec| rec.inner())
+                    .collect()
                 )
+            }
+
+            #[doc = "Reads a `" $name:upper "` file, returning the `nth` record(s), and the byte index where corruption starts, if applicable" ]
+            #[pyfunction]
+            #[pyo3(name = $sniff_name_lax)]
+            #[pyo3(text_signature = "(infile: str, indices: tuple[int], /)")]
+            fn [< read_ $name _by_indices_lax_py >](
+                infile: PathBuf, indices: Vec<i32>
+            ) -> PyResult<(Vec<IndexMap<String, DmapField>>, Option<usize>)> {
+                let result = [< $name:camel Record >]::read_file_by_indices_lax(infile, &indices).map_err(PyErr::from)?;
+                Ok((
+                    result.0.into_iter().map(|rec| rec.inner()).collect(),
+                    result.1,
+                ))
+            }
+
+            #[doc = "Reads a `" $name:upper "` buffer, returning the `nth` record(s)." ]
+            #[pyfunction]
+            #[pyo3(name = $sniff_bytes)]
+            #[pyo3(text_signature = "(buf: bytes, indices: tuple[int], /)")]
+            fn [< read_ $name _bytes_by_indices_py >](buf: &[u8], indices: Vec<i32>) -> PyResult<Vec<IndexMap<String, DmapField>>> {
+                Ok([< $name:camel Record >]::read_nth_records(buf, &indices)
+                    .map_err(PyErr::from)?
+                    .into_iter()
+                    .map(|rec| rec.inner())
+                    .collect()
+                )
+            }
+
+            #[doc = "Reads a `" $name:upper "` buffer, returning the `nth` record(s) and the byte index where record corruption starts, if applicable." ]
+            #[pyfunction]
+            #[pyo3(name = $sniff_bytes_lax)]
+            #[pyo3(text_signature = "(buf: bytes, indices: tuple[int], /)")]
+            fn [< read_ $name _bytes_by_indices_lax_py >](
+                buf: &[u8], indices: Vec<i32>
+            ) -> PyResult<(Vec<IndexMap<String, DmapField>>, Option<usize>)> {
+                let result = [< $name:camel Record >]::read_nth_records_lax(buf, &indices).map_err(PyErr::from)?;
+                Ok((
+                    result.0.into_iter().map(|rec| rec.inner()).collect(),
+                    result.1,
+                ))
             }
 
             #[doc = "Reads a `" $name:upper "` file, returning a list of dictionaries containing the only the metadata fields." ]
@@ -231,6 +281,16 @@ macro_rules! read_py {
             #[pyo3(text_signature = "(infile: str, /)")]
             fn [< read_ $name _metadata_py >](infile: PathBuf) -> PyResult<Vec<IndexMap<String, DmapField>>> {
                 Ok([< $name:camel Record >]::read_file_metadata(&infile)
+                    .map_err(PyErr::from)?
+                )
+            }
+
+            #[doc = "Reads a `" $name:upper "` file, returning the `nth` records' metadata fields." ]
+            #[pyfunction]
+            #[pyo3(name = $sniff_metadata)]
+            #[pyo3(text_signature = "(infile: str, indices: tuple[int], /)")]
+            fn [< read_ $name _metadata_by_indices_py >](infile: PathBuf, indices: Vec<i32>) -> PyResult<Vec<IndexMap<String, DmapField>>> {
+                Ok([< $name:camel Record >]::read_file_metadata_by_indices(&infile, &indices)
                     .map_err(PyErr::from)?
                 )
             }
@@ -244,8 +304,12 @@ read_py!(
     "read_iqdat_lax",
     "read_iqdat_bytes",
     "read_iqdat_bytes_lax",
-    "sniff_iqdat",
-    "read_iqdat_metadata"
+    "read_iqdat_by_indices",
+    "read_iqdat_by_indices_lax",
+    "read_iqdat_by_indices_bytes",
+    "read_iqdat_by_indices_bytes_lax",
+    "read_iqdat_metadata",
+    "read_iqdat_metadata_by_indices"
 );
 read_py!(
     rawacf,
@@ -253,8 +317,12 @@ read_py!(
     "read_rawacf_lax",
     "read_rawacf_bytes",
     "read_rawacf_bytes_lax",
-    "sniff_rawacf",
-    "read_rawacf_metadata"
+    "read_rawacf_by_indices",
+    "read_rawacf_by_indices_lax",
+    "read_rawacf_by_indices_bytes",
+    "read_rawacf_by_indices_bytes_lax",
+    "read_rawacf_metadata",
+    "read_rawacf_metadata_by_indices"
 );
 read_py!(
     fitacf,
@@ -262,8 +330,12 @@ read_py!(
     "read_fitacf_lax",
     "read_fitacf_bytes",
     "read_fitacf_bytes_lax",
-    "sniff_fitacf",
-    "read_fitacf_metadata"
+    "read_fitacf_by_indices",
+    "read_fitacf_by_indices_lax",
+    "read_fitacf_by_indices_bytes",
+    "read_fitacf_by_indices_bytes_lax",
+    "read_fitacf_metadata",
+    "read_fitacf_metadata_by_indices"
 );
 read_py!(
     grid,
@@ -271,8 +343,12 @@ read_py!(
     "read_grid_lax",
     "read_grid_bytes",
     "read_grid_bytes_lax",
-    "sniff_grid",
-    "read_grid_metadata"
+    "read_grid_by_indices",
+    "read_grid_by_indices_lax",
+    "read_grid_by_indices_bytes",
+    "read_grid_by_indices_bytes_lax",
+    "read_grid_metadata",
+    "read_grid_metadata_by_indices"
 );
 read_py!(
     map,
@@ -280,8 +356,12 @@ read_py!(
     "read_map_lax",
     "read_map_bytes",
     "read_map_bytes_lax",
-    "sniff_map",
-    "read_map_metadata"
+    "read_map_by_indices",
+    "read_map_by_indices_lax",
+    "read_map_by_indices_bytes",
+    "read_map_by_indices_bytes_lax",
+    "read_map_metadata",
+    "read_map_metadata_by_indices"
 );
 read_py!(
     snd,
@@ -289,8 +369,12 @@ read_py!(
     "read_snd_lax",
     "read_snd_bytes",
     "read_snd_bytes_lax",
-    "sniff_snd",
-    "read_snd_metadata"
+    "read_snd_by_indices",
+    "read_snd_by_indices_lax",
+    "read_snd_by_indices_bytes",
+    "read_snd_by_indices_bytes_lax",
+    "read_snd_metadata",
+    "read_snd_metadata_by_indices"
 );
 read_py!(
     dmap,
@@ -298,8 +382,12 @@ read_py!(
     "read_dmap_lax",
     "read_dmap_bytes",
     "read_dmap_bytes_lax",
-    "sniff_dmap",
-    "read_dmap_metadata"
+    "read_dmap_by_indices",
+    "read_dmap_by_indices_lax",
+    "read_dmap_by_indices_bytes",
+    "read_dmap_by_indices_bytes_lax",
+    "read_dmap_metadata",
+    "read_dmap_metadata_by_indices"
 );
 
 /// Checks that a list of dictionaries contains DMAP records, then appends to outfile.
@@ -409,6 +497,24 @@ fn dmap_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(read_grid_bytes_py, m)?)?;
     m.add_function(wrap_pyfunction!(read_map_bytes_py, m)?)?;
 
+    // Read select records from byte buffer
+    m.add_function(wrap_pyfunction!(read_dmap_bytes_by_indices_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_iqdat_bytes_by_indices_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_rawacf_bytes_by_indices_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_fitacf_bytes_by_indices_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_snd_bytes_by_indices_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_grid_bytes_by_indices_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_map_bytes_by_indices_py, m)?)?;
+
+    // Read select records from byte buffer, without raising error
+    m.add_function(wrap_pyfunction!(read_dmap_bytes_by_indices_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_iqdat_bytes_by_indices_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_rawacf_bytes_by_indices_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_fitacf_bytes_by_indices_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_snd_bytes_by_indices_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_grid_bytes_by_indices_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_map_bytes_by_indices_lax_py, m)?)?;
+
     // Lax read functions from byte buffer
     m.add_function(wrap_pyfunction!(read_dmap_bytes_lax_py, m)?)?;
     m.add_function(wrap_pyfunction!(read_iqdat_bytes_lax_py, m)?)?;
@@ -436,14 +542,23 @@ fn dmap_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(write_grid_bytes_py, m)?)?;
     m.add_function(wrap_pyfunction!(write_map_bytes_py, m)?)?;
 
-    // Sniff the first record
-    m.add_function(wrap_pyfunction!(sniff_dmap_py, m)?)?;
-    m.add_function(wrap_pyfunction!(sniff_iqdat_py, m)?)?;
-    m.add_function(wrap_pyfunction!(sniff_rawacf_py, m)?)?;
-    m.add_function(wrap_pyfunction!(sniff_fitacf_py, m)?)?;
-    m.add_function(wrap_pyfunction!(sniff_snd_py, m)?)?;
-    m.add_function(wrap_pyfunction!(sniff_grid_py, m)?)?;
-    m.add_function(wrap_pyfunction!(sniff_map_py, m)?)?;
+    // Sniff records by index
+    m.add_function(wrap_pyfunction!(read_dmap_by_indices_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_iqdat_by_indices_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_rawacf_by_indices_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_fitacf_by_indices_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_snd_by_indices_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_grid_by_indices_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_map_by_indices_py, m)?)?;
+
+    // Sniff records by index, but report corrupt records
+    m.add_function(wrap_pyfunction!(read_dmap_by_indices_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_iqdat_by_indices_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_rawacf_by_indices_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_fitacf_by_indices_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_snd_by_indices_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_grid_by_indices_lax_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_map_by_indices_lax_py, m)?)?;
 
     // Read only the metadata from files
     m.add_function(wrap_pyfunction!(read_dmap_metadata_py, m)?)?;
@@ -453,6 +568,15 @@ fn dmap_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(read_snd_metadata_py, m)?)?;
     m.add_function(wrap_pyfunction!(read_grid_metadata_py, m)?)?;
     m.add_function(wrap_pyfunction!(read_map_metadata_py, m)?)?;
+
+    // Read only the metadata of select records from files
+    m.add_function(wrap_pyfunction!(read_dmap_metadata_by_indices_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_iqdat_metadata_by_indices_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_rawacf_metadata_by_indices_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_fitacf_metadata_by_indices_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_snd_metadata_by_indices_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_grid_metadata_by_indices_py, m)?)?;
+    m.add_function(wrap_pyfunction!(read_map_metadata_by_indices_py, m)?)?;
 
     Ok(())
 }
