@@ -10,8 +10,8 @@ from . import dmap_rs
 
 
 def read_dispatcher(
-    source: Union[str, bytes], fmt: str, mode: str
-) -> Union[dict, list[dict], tuple[list[dict], Optional[int]]]:
+    source: Union[str, bytes], fmt: str, mode: str, indices: Optional[Union[tuple[int], list[int]]] = None
+) -> Union[list[dict], tuple[list[dict], Optional[int]]]:
     """
     Reads in DMAP data from `source`.
 
@@ -23,29 +23,36 @@ def read_dispatcher(
     fmt: str
         DMAP format being read. One of `["dmap", "iqdat", "rawacf", "fitacf", "grid", "map", "snd"]`.
     mode: str
-        Mode in which to read the data, one of `["strict", "lax", "sniff", "metadata"]`. In `strict` mode, any corruption
+        Mode in which to read the data, one of `["strict", "lax", "metadata"]`. In `strict` mode, any corruption
         in the data will raise an error. In `lax` mode, all valid records will be returned in a tuple along with
-        the byte index of `source` where the corruption starts. In `sniff` mode, `source` must be a `str`, and
-        only the first record will be read. In `metadata` mode, only the metadata fields of the records are returned.
+        the byte index of `source` where the corruption starts. In `metadata` mode, `source` must be a `str`,
+        and only the metadata fields of the records are returned.
+    indices: tuple
+        Collection of indices to read. Supports negative indexing.
 
     Returns
     -------
     If `mode` is `strict` or `metadata`, returns `list[dict]` which is the parsed records.
     If `mode` is `lax`, returns `tuple[list[dict], Optional[int]]`, where the first element is the records which were parsed,
-    and the second is the byte index where `source` was no longer a valid record of type `fmt`.
-    If `mode` is `sniff`, returns `dict` of the first record.
+        and the second is the byte index where `source` was no longer a valid record of type `fmt`.
+    If `mode` is `metadata`, returns `list[dict]` of the metadata from the records.
     """
     if fmt not in ["dmap", "iqdat", "rawacf", "fitacf", "grid", "map", "snd"]:
         raise ValueError(
             f"invalid fmt `{fmt}`: expected one of ['dmap', 'iqdat', 'rawacf', 'fitacf', 'grid', 'map', 'snd']"
         )
 
-    if mode not in ["strict", "lax", "sniff", "metadata"]:
-        raise ValueError(f"invalid mode `{mode}`: expected `strict`, `lax`, or `sniff`")
+    if mode not in ["strict", "lax", "metadata"]:
+        raise ValueError(f"invalid mode `{mode}`: expected `strict`, `lax`, or `metadata`")
 
-    if mode in ["sniff", "metadata"] and not isinstance(source, str):
+    if mode == "metadata" and not isinstance(source, str):
         raise TypeError(
-            f"invalid type for `source` {type(source)} in `sniff` mode: expected `str`"
+            f"invalid type for `source` {type(source)} in `metadata` mode: expected `str`"
+        )
+
+    if indices is not None and not isinstance(indices, tuple) and not isinstance(indices, list):
+        raise TypeError(
+            f"invalid type for `indices` {type(source)}: expected `tuple` or `list`"
         )
 
     if not isinstance(source, bytes) and not isinstance(source, str):
@@ -54,22 +61,34 @@ def read_dispatcher(
         )
 
     # Construct the darn-dmap function name dynamically based on parameters:
-    # fn_name = [sniff|read]_[fmt][_bytes][_lax]
+    # fn_name = read_[fmt][_metadata][_by_indices][_bytes][_lax]
     # All possibilites for, e.g., a FITACF file:
     #   read_fitacf
-    #   read_fitacf_bytes
     #   read_fitacf_lax
+    #   read_fitacf_bytes
     #   read_fitacf_bytes_lax
-    #   sniff_fitacf
+    #   read_fitacf_by_indices
+    #   read_fitacf_by_indices_lax
+    #   read_fitacf_by_indices_bytes
+    #   read_fitacf_by_indices_bytes_lax
+    #   read_fitacf_metadata
+    #   read_fitacf_metadata_by_indices
+    if indices is not None and len(indices) > 0:
+        indices_given = True
+        args = (source, indices)
+    else:
+        indices_given = False
+        args = (source,)
+
     fn_name = (
-        f"{'sniff' if mode == 'sniff' else 'read'}"
-        f"_{fmt}"
+        f"read_{fmt}"
+        f"{'_metadata' if mode == 'metadata' else ''}"
+        f"{'_by_indices' if indices_given else ''}"
         f"{'_bytes' if isinstance(source, bytes) else ''}"
         f"{'_lax' if mode == 'lax' else ''}"
-        f"{'_metadata' if mode == 'metadata' else ''}"
     )
 
-    return getattr(dmap_rs, fn_name)(source)
+    return getattr(dmap_rs, fn_name)(*args)
 
 
 def write_dispatcher(
@@ -106,8 +125,8 @@ def write_dispatcher(
 
 
 def read_dmap(
-    source: Union[str, bytes], mode: str = "lax"
-) -> Union[dict, list[dict], tuple[list[dict], Optional[int]]]:
+    source: Union[str, bytes], mode: str = "lax", indices: Optional[Union[tuple[int], list[int]]] = None
+) -> Union[list[dict], tuple[list[dict], Optional[int]]]:
     """
     Reads in DMAP data from `source`.
 
@@ -117,26 +136,27 @@ def read_dmap(
         Where to read data from. If input is of type `str`, this is interpreted as the path to a file.
         If input is of type `bytes`, this is interpreted as the raw data itself.
     mode: str
-        Mode in which to read the data, either "lax" (default), "strict", "sniff", or "metadata".
-        In "lax" mode, all valid records will be returned in a tuple along with the byte index of `source` where the
-        corruption starts.
-        In "strict" mode, any corruption in the data will raise an error.
-        In "sniff" mode, `source` must be a path, and only the first record will be read.
-        In "metadata" mode, `source` must be a path, and since this function is for generic DMAP records where there
-        is no information about which fields are metadata, the behaviour mirrors that of "strict" mode.
+        Mode in which to read the data, one of `["strict", "lax", "metadata"]`.
+        In `strict` mode, any corruption in the data will raise an error.
+        In `lax` mode, all valid records will be returned in a tuple along with the byte index of `source`
+            where the corruption starts.
+        In `metadata` mode, `source` must be a `str`, and only the metadata fields of the records are returned.
+    indices: Optional[Union[tuple[int], list[int]]]
+        Collection of indices to read. Supports negative indexing. If given, only records corresponding to the indices
+        are read.
 
     Returns
     -------
-    If `mode` is `lax`, returns `tuple[list[dict], Optional[int]]`, where the first element is the records which were parsed,
-    and the second is the byte index where `source` was no longer a valid DMAP record.
     If `mode` is `strict` or `metadata`, returns `list[dict]` which is the parsed records.
-    If `mode` is `sniff`, returns `dict`, which is the first record.
+    If `mode` is `lax`, returns `tuple[list[dict], Optional[int]]`, where the first element is the records which were parsed,
+        and the second is the byte index where `source` was no longer a valid record of type `fmt`.
+    If `mode` is `metadata`, returns `list[dict]` of the metadata from the records.
     """
-    return read_dispatcher(source, "dmap", mode)
+    return read_dispatcher(source, "dmap", mode, indices)
 
 
 def read_iqdat(
-    source: Union[str, bytes], mode: str = "lax"
+    source: Union[str, bytes], mode: str = "lax", indices: Optional[Union[tuple[int], list[int]]] = None
 ) -> Union[dict, list[dict], tuple[list[dict], Optional[int]]]:
     """ 
     Reads in IQDAT data from `source`.
@@ -147,25 +167,27 @@ def read_iqdat(
         Where to read data from. If input is of type `str`, this is interpreted as the path to a file.
         If input is of type `bytes`, this is interpreted as the raw data itself.
     mode: str
-        Mode in which to read the data, either "lax" (default), "strict", "sniff", or "metadata".
-        In "lax" mode, all valid records will be returned in a tuple along with the byte index of `source` where the
-        corruption starts.
-        In "strict" mode, any corruption in the data will raise an error.
-        In "sniff" mode, `source` must be a path, and only the first record will be read.
-        In "metadata" mode, `source` must be a path, and only the metadata fields of the records are returned.
+        Mode in which to read the data, one of `["strict", "lax", "metadata"]`.
+        In `strict` mode, any corruption in the data will raise an error.
+        In `lax` mode, all valid records will be returned in a tuple along with the byte index of `source`
+            where the corruption starts.
+        In `metadata` mode, `source` must be a `str`, and only the metadata fields of the records are returned.
+    indices: Optional[Union[tuple[int], list[int]]]
+        Collection of indices to read. Supports negative indexing. If given, only records corresponding to the indices
+        are read.
 
     Returns
     -------
-    If `mode` is `lax`, returns `tuple[list[dict], Optional[int]]`, where the first element is the records which were parsed,
-    and the second is the byte index where `source` was no longer a valid DMAP record.
     If `mode` is `strict` or `metadata`, returns `list[dict]` which is the parsed records.
-    If `mode` is `sniff`, returns `dict`, which is the first record.
+    If `mode` is `lax`, returns `tuple[list[dict], Optional[int]]`, where the first element is the records which were parsed,
+        and the second is the byte index where `source` was no longer a valid record of type `fmt`.
+    If `mode` is `metadata`, returns `list[dict]` of the metadata from the records.
     """
-    return read_dispatcher(source, "iqdat", mode)
+    return read_dispatcher(source, "iqdat", mode, indices)
 
 
 def read_rawacf(
-    source: Union[str, bytes], mode: str = "lax"
+    source: Union[str, bytes], mode: str = "lax", indices: Optional[Union[tuple[int], list[int]]] = None
 ) -> Union[dict, list[dict], tuple[list[dict], Optional[int]]]:
     """ 
     Reads in RAWACF data from `source`.
@@ -176,25 +198,27 @@ def read_rawacf(
         Where to read data from. If input is of type `str`, this is interpreted as the path to a file.
         If input is of type `bytes`, this is interpreted as the raw data itself.
     mode: str
-        Mode in which to read the data, either "lax" (default), "strict", "sniff", or "metadata".
-        In "lax" mode, all valid records will be returned in a tuple along with the byte index of `source` where the
-        corruption starts.
-        In "strict" mode, any corruption in the data will raise an error.
-        In "sniff" mode, `source` must be a path, and only the first record will be read.
-        In "metadata" mode, `source` must be a path, and only the metadata fields of the records are returned.
+        Mode in which to read the data, one of `["strict", "lax", "metadata"]`.
+        In `strict` mode, any corruption in the data will raise an error.
+        In `lax` mode, all valid records will be returned in a tuple along with the byte index of `source`
+            where the corruption starts.
+        In `metadata` mode, `source` must be a `str`, and only the metadata fields of the records are returned.
+    indices: Optional[Union[tuple[int], list[int]]]
+        Collection of indices to read. Supports negative indexing. If given, only records corresponding to the indices
+        are read.
 
     Returns
     -------
-    If `mode` is `lax`, returns `tuple[list[dict], Optional[int]]`, where the first element is the records which were parsed,
-    and the second is the byte index where `source` was no longer a valid DMAP record.
     If `mode` is `strict` or `metadata`, returns `list[dict]` which is the parsed records.
-    If `mode` is `sniff`, returns `dict`, which is the first record.
+    If `mode` is `lax`, returns `tuple[list[dict], Optional[int]]`, where the first element is the records which were parsed,
+        and the second is the byte index where `source` was no longer a valid record of type `fmt`.
+    If `mode` is `metadata`, returns `list[dict]` of the metadata from the records.
     """
-    return read_dispatcher(source, "rawacf", mode)
+    return read_dispatcher(source, "rawacf", mode, indices)
 
 
 def read_fitacf(
-    source: Union[str, bytes], mode: str = "lax"
+    source: Union[str, bytes], mode: str = "lax", indices: Optional[Union[tuple[int], list[int]]] = None
 ) -> Union[dict, list[dict], tuple[list[dict], Optional[int]]]:
     """ 
     Reads in FITACF data from `source`.
@@ -205,25 +229,27 @@ def read_fitacf(
         Where to read data from. If input is of type `str`, this is interpreted as the path to a file.
         If input is of type `bytes`, this is interpreted as the raw data itself.
     mode: str
-        Mode in which to read the data, either "lax" (default), "strict", "sniff", or "metadata".
-        In "lax" mode, all valid records will be returned in a tuple along with the byte index of `source` where the
-        corruption starts.
-        In "strict" mode, any corruption in the data will raise an error.
-        In "sniff" mode, `source` must be a path, and only the first record will be read.
-        In "metadata" mode, `source` must be a path, and only the metadata fields of the records are returned.
+        Mode in which to read the data, one of `["strict", "lax", "metadata"]`.
+        In `strict` mode, any corruption in the data will raise an error.
+        In `lax` mode, all valid records will be returned in a tuple along with the byte index of `source`
+            where the corruption starts.
+        In `metadata` mode, `source` must be a `str`, and only the metadata fields of the records are returned.
+    indices: Optional[Union[tuple[int], list[int]]]
+        Collection of indices to read. Supports negative indexing. If given, only records corresponding to the indices
+        are read.
 
     Returns
     -------
-    If `mode` is `lax`, returns `tuple[list[dict], Optional[int]]`, where the first element is the records which were parsed,
-    and the second is the byte index where `source` was no longer a valid DMAP record.
     If `mode` is `strict` or `metadata`, returns `list[dict]` which is the parsed records.
-    If `mode` is `sniff`, returns `dict`, which is the first record.
+    If `mode` is `lax`, returns `tuple[list[dict], Optional[int]]`, where the first element is the records which were parsed,
+        and the second is the byte index where `source` was no longer a valid record of type `fmt`.
+    If `mode` is `metadata`, returns `list[dict]` of the metadata from the records.
     """
-    return read_dispatcher(source, "fitacf", mode)
+    return read_dispatcher(source, "fitacf", mode, indices)
 
 
 def read_grid(
-    source: Union[str, bytes], mode: str = "lax"
+    source: Union[str, bytes], mode: str = "lax", indices: Optional[Union[tuple[int], list[int]]] = None
 ) -> Union[dict, list[dict], tuple[list[dict], Optional[int]]]:
     """ 
     Reads in GRID data from `source`.
@@ -234,25 +260,27 @@ def read_grid(
         Where to read data from. If input is of type `str`, this is interpreted as the path to a file.
         If input is of type `bytes`, this is interpreted as the raw data itself.
     mode: str
-        Mode in which to read the data, either "lax" (default), "strict", "sniff", or "metadata".
-        In "lax" mode, all valid records will be returned in a tuple along with the byte index of `source` where the
-        corruption starts.
-        In "strict" mode, any corruption in the data will raise an error.
-        In "sniff" mode, `source` must be a path, and only the first record will be read.
-        In "metadata" mode, `source` must be a path, and only the metadata fields of the records are returned.
+        Mode in which to read the data, one of `["strict", "lax", "metadata"]`.
+        In `strict` mode, any corruption in the data will raise an error.
+        In `lax` mode, all valid records will be returned in a tuple along with the byte index of `source`
+            where the corruption starts.
+        In `metadata` mode, `source` must be a `str`, and only the metadata fields of the records are returned.
+    indices: Optional[Union[tuple[int], list[int]]]
+        Collection of indices to read. Supports negative indexing. If given, only records corresponding to the indices
+        are read.
 
     Returns
     -------
-    If `mode` is `lax`, returns `tuple[list[dict], Optional[int]]`, where the first element is the records which were parsed,
-    and the second is the byte index where `source` was no longer a valid DMAP record.
     If `mode` is `strict` or `metadata`, returns `list[dict]` which is the parsed records.
-    If `mode` is `sniff`, returns `dict`, which is the first record.
+    If `mode` is `lax`, returns `tuple[list[dict], Optional[int]]`, where the first element is the records which were parsed,
+        and the second is the byte index where `source` was no longer a valid record of type `fmt`.
+    If `mode` is `metadata`, returns `list[dict]` of the metadata from the records.
     """
-    return read_dispatcher(source, "grid", mode)
+    return read_dispatcher(source, "grid", mode, indices)
 
 
 def read_map(
-    source: Union[str, bytes], mode: str = "lax"
+    source: Union[str, bytes], mode: str = "lax", indices: Optional[Union[tuple[int], list[int]]] = None
 ) -> Union[dict, list[dict], tuple[list[dict], Optional[int]]]:
     """ 
     Reads in MAP data from `source`.
@@ -263,25 +291,27 @@ def read_map(
         Where to read data from. If input is of type `str`, this is interpreted as the path to a file.
         If input is of type `bytes`, this is interpreted as the raw data itself.
     mode: str
-        Mode in which to read the data, either "lax" (default), "strict", "sniff", or "metadata".
-        In "lax" mode, all valid records will be returned in a tuple along with the byte index of `source` where the
-        corruption starts.
-        In "strict" mode, any corruption in the data will raise an error.
-        In "sniff" mode, `source` must be a path, and only the first record will be read.
-        In "metadata" mode, `source` must be a path, and only the metadata fields of the records are returned.
+        Mode in which to read the data, one of `["strict", "lax", "metadata"]`.
+        In `strict` mode, any corruption in the data will raise an error.
+        In `lax` mode, all valid records will be returned in a tuple along with the byte index of `source`
+            where the corruption starts.
+        In `metadata` mode, `source` must be a `str`, and only the metadata fields of the records are returned.
+    indices: Optional[Union[tuple[int], list[int]]]
+        Collection of indices to read. Supports negative indexing. If given, only records corresponding to the indices
+        are read.
 
     Returns
     -------
-    If `mode` is `lax`, returns `tuple[list[dict], Optional[int]]`, where the first element is the records which were parsed,
-    and the second is the byte index where `source` was no longer a valid DMAP record.
     If `mode` is `strict` or `metadata`, returns `list[dict]` which is the parsed records.
-    If `mode` is `sniff`, returns `dict`, which is the first record.
+    If `mode` is `lax`, returns `tuple[list[dict], Optional[int]]`, where the first element is the records which were parsed,
+        and the second is the byte index where `source` was no longer a valid record of type `fmt`.
+    If `mode` is `metadata`, returns `list[dict]` of the metadata from the records.
     """
-    return read_dispatcher(source, "map", mode)
+    return read_dispatcher(source, "map", mode, indices)
 
 
 def read_snd(
-    source: Union[str, bytes], mode: str = "lax"
+    source: Union[str, bytes], mode: str = "lax", indices: Optional[Union[tuple[int], list[int]]] = None
 ) -> Union[dict, list[dict], tuple[list[dict], Optional[int]]]:
     """ 
     Reads in SND data from `source`.
@@ -292,21 +322,23 @@ def read_snd(
         Where to read data from. If input is of type `str`, this is interpreted as the path to a file.
         If input is of type `bytes`, this is interpreted as the raw data itself.
     mode: str
-        Mode in which to read the data, either "lax" (default), "strict", "sniff", or "metadata".
-        In "lax" mode, all valid records will be returned in a tuple along with the byte index of `source` where the
-        corruption starts.
-        In "strict" mode, any corruption in the data will raise an error.
-        In "sniff" mode, `source` must be a path, and only the first record will be read.
-        In "metadata" mode, `source` must be a path, and only the metadata fields of the records are returned.
+        Mode in which to read the data, one of `["strict", "lax", "metadata"]`.
+        In `strict` mode, any corruption in the data will raise an error.
+        In `lax` mode, all valid records will be returned in a tuple along with the byte index of `source`
+            where the corruption starts.
+        In `metadata` mode, `source` must be a `str`, and only the metadata fields of the records are returned.
+    indices: Optional[Union[tuple[int], list[int]]]
+        Collection of indices to read. Supports negative indexing. If given, only records corresponding to the indices
+        are read.
 
     Returns
     -------
-    If `mode` is `lax`, returns `tuple[list[dict], Optional[int]]`, where the first element is the records which were parsed,
-    and the second is the byte index where `source` was no longer a valid DMAP record.
     If `mode` is `strict` or `metadata`, returns `list[dict]` which is the parsed records.
-    If `mode` is `sniff`, returns `dict`, which is the first record.
+    If `mode` is `lax`, returns `tuple[list[dict], Optional[int]]`, where the first element is the records which were parsed,
+        and the second is the byte index where `source` was no longer a valid record of type `fmt`.
+    If `mode` is `metadata`, returns `list[dict]` of the metadata from the records.
     """
-    return read_dispatcher(source, "snd", mode)
+    return read_dispatcher(source, "snd", mode, indices)
 
 
 def write_dmap(

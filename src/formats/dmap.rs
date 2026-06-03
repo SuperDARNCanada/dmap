@@ -15,6 +15,11 @@ pub struct DmapRecord {
 }
 
 impl Record<'_> for DmapRecord {
+    fn new(fields: &mut IndexMap<String, DmapField>) -> Result<DmapRecord, DmapError> {
+        Ok(DmapRecord {
+            data: fields.to_owned(),
+        })
+    }
     fn inner(self) -> IndexMap<String, DmapField> {
         self.data
     }
@@ -23,11 +28,6 @@ impl Record<'_> for DmapRecord {
     }
     fn keys(&self) -> Vec<&String> {
         self.data.keys().collect()
-    }
-    fn new(fields: &mut IndexMap<String, DmapField>) -> Result<DmapRecord, DmapError> {
-        Ok(DmapRecord {
-            data: fields.to_owned(),
-        })
     }
     fn is_metadata_field(_name: &str) -> bool {
         true
@@ -56,7 +56,7 @@ impl Record<'_> for DmapRecord {
             }
         }
         let mut bytes: Vec<u8> = vec![];
-        bytes.extend((65537_i32).as_bytes()); // No idea why this is what it is, copied from backscatter
+        bytes.extend(65537_i32.as_bytes()); // No idea why this is what it is, copied from backscatter
         bytes.extend((data_bytes.len() as i32 + 16).as_bytes()); // +16 for code, length, num_scalars, num_vectors
         bytes.extend(num_scalars.as_bytes());
         bytes.extend(num_vectors.as_bytes());

@@ -38,6 +38,10 @@ pub enum DmapError {
     /// Bytes cannot be interpreted as a DMAP field.
     #[error("{0}")]
     InvalidField(String),
+    
+    /// Index out of bounds.
+    #[error("{0}")]
+    InvalidIndex(i32),
 
     /// Errors when reading in multiple records
     #[error("First error: {1}\nRecords with errors: {0:?}")]

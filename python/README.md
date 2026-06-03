@@ -166,17 +166,19 @@ can compress with bzip2 by passing `bz2=True` as an argument.
 
 ### File "sniffing"
 If you only want to inspect a file, without actually needing access to all the data, you can use the `read_[type]`
-functions in `"sniff"` mode. This will only read in the first record from a file, and works on both compressed and 
-non-compressed files. Note that this mode does not work with bytes objects directly.
+functions in with the optional `indices` argument. This will only read in the specified records from a file, and works 
+in all modes.
 
 ```python
 import dmap
 path = "path/to/file"
-first_rec = dmap.read_dmap(path, mode="sniff")
+recs = dmap.read_dmap(path, mode="...", indices=[0, 1, -2, -1])
 ```
 
 ### Reading only metadata fields
 Each DMAP format consists of metadata and data fields. You can read only the metadata fields by passing `mode="metadata"`
 to any of the writing functions. Note that the generic read function `read_dmap` will return all fields, as it by nature
 has no knowledge of the underlying fields. Note also that the read functions operating on a file still read the entire
-file into memory first, so reading metadata only does not largely decrease read times.
+file into memory first, so reading metadata only may not significantly decrease read times. Also, bzipped files are
+fully decompressed before reading begins, so again read times may not be significantly quicker in this mode under certain
+circumstances.
