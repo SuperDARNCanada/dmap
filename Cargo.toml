@@ -16,7 +16,7 @@ include = ["src/**/*.rs"]
 [lib]
 name = "dmap"
 
-# "cdylib" is necessary to produce a shared library for Python to import from.
+# cdylib is needed when building the optional Python extension module.
 crate-type = ["cdylib", "rlib"]
 
 [features]
