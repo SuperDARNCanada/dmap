@@ -1,5 +1,7 @@
 //! Error type for `dmap`.
+#[cfg(feature = "python")]
 use pyo3::exceptions::{PyIOError, PyValueError};
+#[cfg(feature = "python")]
 use pyo3::PyErr;
 use thiserror::Error;
 
@@ -38,7 +40,7 @@ pub enum DmapError {
     /// Bytes cannot be interpreted as a DMAP field.
     #[error("{0}")]
     InvalidField(String),
-    
+
     /// Index out of bounds.
     #[error("{0}")]
     InvalidIndex(i32),
@@ -48,6 +50,7 @@ pub enum DmapError {
     BadRecords(Vec<usize>, String),
 }
 
+#[cfg(feature = "python")]
 impl From<DmapError> for PyErr {
     fn from(value: DmapError) -> Self {
         let msg = value.to_string();

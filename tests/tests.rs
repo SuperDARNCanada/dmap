@@ -133,6 +133,126 @@ macro_rules! make_test {
                     assert!(mdata_rec.keys().len() < ref_rec.keys().len())
                 }
             }
+
+            #[test]
+            fn [< test_ $record_type _read_api >] () {
+                let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($record_type)));
+                let via_record = [< $record_type:camel Record >]::read_file(&filename).expect("Unable to read file");
+                let via_api = [< read_ $record_type >](&filename).expect("Unable to read file through Rust API");
+                assert_eq!(via_api, via_record);
+            }
+
+            #[test]
+            fn [< test_ $record_type _read_bytes_api >] () {
+                let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($record_type)));
+                let bytes = std::fs::read(&filename).expect("Unable to read file as bytes");
+                let via_record = [< $record_type:camel Record >]::read_records(bytes.as_slice())
+                    .expect("Unable to read records from bytes");
+                let via_api = [< read_ $record_type _bytes >](bytes.as_slice())
+                    .expect("Unable to read bytes through Rust API");
+                assert_eq!(via_api, via_record);
+            }
+
+            #[test]
+            fn [< test_ $record_type _read_by_indices_api >] () {
+                let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($record_type)));
+                let via_record = [< $record_type:camel Record >]::read_file_by_indices(&filename, &[0]).expect("Unable to sniff file");
+                let via_api = [< read_ $record_type _by_indices >](&filename, &[0]).expect("Unable to sniff file through Rust API");
+                assert_eq!(via_api, via_record);
+            }
+
+            #[test]
+            fn [< test_ $record_type _read_by_indices_lax_api >]() {
+                let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($record_type)));
+                let mut tempfile: PathBuf = filename.clone();
+                tempfile.set_file_name(format!("tmp.{}.read_by_indices_lax_api.corrupt", stringify!($record_type)));
+                let _ = std::fs::copy(filename.clone(), tempfile.clone()).expect("Could not copy to tempfile");
+                let mut file = File::options().append(true).open(tempfile.clone()).unwrap();
+                writeln!(&mut file, "not a valid record").expect("Could not write to tempfile");
+                let via_record = [< $record_type:camel Record >]::read_file_by_indices_lax(&tempfile, &[0])
+                    .expect("Unable to read indexed tempfile lax");
+                let via_api = [< read_ $record_type _by_indices_lax >](&tempfile, &[0])
+                    .expect("Unable to read indexed tempfile lax through Rust API");
+                assert_eq!(via_api, via_record);
+                remove_file(&tempfile).expect("Unable to delete tempfile");
+            }
+
+            #[test]
+            fn [< test_ $record_type _read_bytes_by_indices_api >]() {
+                let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($record_type)));
+                let bytes = std::fs::read(&filename).expect("Unable to read test file");
+                let via_record = [< $record_type:camel Record >]::read_nth_records(bytes.as_slice(), &[0])
+                    .expect("Unable to read indexed records from bytes");
+                let via_api = [< read_ $record_type _bytes_by_indices >](bytes.as_slice(), &[0])
+                    .expect("Unable to read indexed records from bytes through Rust API");
+                assert_eq!(via_api, via_record);
+            }
+
+            #[test]
+            fn [< test_ $record_type _read_bytes_by_indices_lax_api >]() {
+                let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($record_type)));
+                let mut bytes = std::fs::read(&filename).expect("Unable to read test file");
+                bytes.extend_from_slice(b"not a valid record\n");
+                let via_record = [< $record_type:camel Record >]::read_nth_records_lax(bytes.as_slice(), &[0])
+                    .expect("Unable to read indexed records from bytes lax");
+                let via_api = [< read_ $record_type _bytes_by_indices_lax >](bytes.as_slice(), &[0])
+                    .expect("Unable to read indexed records from bytes lax through Rust API");
+                assert_eq!(via_api, via_record);
+            }
+
+            #[test]
+            fn [< test_ $record_type _metadata_api >] () {
+                let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($record_type)));
+                let via_record = [< $record_type:camel Record >]::read_file_metadata(&filename)
+                    .expect("Unable to read metadata");
+                let via_api = [< read_ $record_type _metadata >](&filename).expect("Unable to read metadata through Rust API");
+                assert_eq!(via_api, via_record);
+            }
+
+            #[test]
+            fn [< test_ $record_type _metadata_by_indices_api >]() {
+                let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($record_type)));
+                let via_record = [< $record_type:camel Record >]::read_file_metadata_by_indices(&filename, &[0])
+                    .expect("Unable to read indexed metadata");
+                let via_api = [< read_ $record_type _metadata_by_indices >](&filename, &[0])
+                    .expect("Unable to read indexed metadata through Rust API");
+                assert_eq!(via_api, via_record);
+            }
+
+            #[test]
+            fn [< test_ $record_type _read_lax_api >] () {
+                let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($record_type)));
+                let mut tempfile: PathBuf = filename.clone();
+                tempfile.set_file_name(format!("tmp.{}.read_api.corrupt", stringify!($record_type)));
+                let _ = std::fs::copy(filename.clone(), tempfile.clone()).expect("Could not copy to tempfile");
+                let mut file = File::options().append(true).open(tempfile.clone()).unwrap();
+                writeln!(&mut file, "not a valid record").expect("Could not write to tempfile");
+                let via_record = [< $record_type:camel Record >]::read_file_lax(&tempfile)
+                    .expect("Unable to read tempfile lax");
+                let via_api = [< read_ $record_type _lax >](&tempfile).expect("Unable to read tempfile lax through Rust API");
+                assert_eq!(via_api, via_record);
+                remove_file(&tempfile).expect("Unable to delete tempfile");
+            }
+
+            #[test]
+            fn [< test_ $record_type _read_bytes_lax_api >] () {
+                let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($record_type)));
+                let mut bytes = std::fs::read(&filename).expect("Unable to read file as bytes");
+                bytes.extend_from_slice(b"not a valid record\n");
+                let via_record = [< $record_type:camel Record >]::read_records_lax(bytes.as_slice())
+                        .expect("Unable to read bytes lax");
+                let via_api = [< read_ $record_type _bytes_lax >](bytes.as_slice())
+                        .expect("Unable to read bytes lax through Rust API");
+                assert_eq!(via_api, via_record);
+            }
+
+            #[test]
+            fn [< test_ $record_type _dmap_read_api >] () {
+                let filename: PathBuf = PathBuf::from(format!("tests/test_files/test.{}", stringify!($record_type)));
+                let via_record = DmapRecord::read_file(&filename).expect("Unable to read file");
+                let via_api = read_dmap(&filename).expect("Unable to read through Rust API");
+                assert_eq!(via_api, via_record);
+            }
         }
     };
 }

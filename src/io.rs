@@ -1,6 +1,7 @@
 //! Utility functions for file operations.
 
 use crate::compression::{compress_bz2, detect_bz2};
+use crate::parser::Parser;
 use crate::types::DmapType;
 use crate::DmapError;
 use bzip2::read::BzDecoder;
@@ -8,7 +9,6 @@ use std::ffi::OsStr;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::Path;
-use crate::parser::Parser;
 
 /// Write bytes to file.
 ///
@@ -47,7 +47,9 @@ pub(crate) fn write_bytes_bz2<W: Write>(
 }
 
 /// Set up the stream for reading. Autodetects and decompresses BZ2.
-pub(crate) fn create_stream<'b>(dmap_data: &'b mut impl Read) -> Result<Box<dyn Read + 'b>, DmapError> {
+pub(crate) fn create_stream<'b>(
+    dmap_data: &'b mut impl Read,
+) -> Result<Box<dyn Read + 'b>, DmapError> {
     let (is_bz2, chunk) = detect_bz2(dmap_data)?;
     if is_bz2 {
         Ok(Box::new(BzDecoder::new(chunk)))
@@ -57,9 +59,7 @@ pub(crate) fn create_stream<'b>(dmap_data: &'b mut impl Read) -> Result<Box<dyn 
 }
 
 /// Parses `dmap_data` into discrete chunks, each corresponding to a DMAP record.  
-pub(crate) fn split_into_slices(
-    mut dmap_data: impl Read,
-) -> Result<Vec<Parser>, DmapError> {
+pub(crate) fn split_into_slices(mut dmap_data: impl Read) -> Result<Vec<Parser>, DmapError> {
     let mut buffer: Vec<u8> = vec![];
     create_stream(&mut dmap_data)?.read_to_end(&mut buffer)?;
 
@@ -107,8 +107,8 @@ pub(crate) fn slice_stream_lax(buffer: Vec<u8>) -> (Vec<Parser>, Vec<usize>, Opt
 
     let mut rec_starts = vec![];
     while ((rec_start + 2 * i32::size()) as u64) < buffer.len() as u64 {
-        rec_size = i32::from_le_bytes(buffer[rec_start + 4..rec_start + 8].try_into().unwrap())
-            as usize; // advance 4 bytes, skipping the "code" field
+        rec_size =
+            i32::from_le_bytes(buffer[rec_start + 4..rec_start + 8].try_into().unwrap()) as usize; // advance 4 bytes, skipping the "code" field
         rec_end = rec_start + rec_size; // error-checking the size is conducted in Self::parse_record()
         if rec_end > buffer.len() || rec_size == 0 {
             bad_byte = Some(rec_start);

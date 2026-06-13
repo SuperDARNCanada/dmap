@@ -18,5 +18,3 @@ pub(crate) fn split_results<T, E>(dmap_results: Vec<Result<T, E>>) -> (Vec<T>, V
 
     (ok_inners, error_inners, bad_indices)
 }
-
-
