@@ -60,7 +60,8 @@ static SCALAR_FIELDS: [(&str, Type); 50] = [
 static SCALAR_FIELDS_OPT: [(&str, Type); 3] = [
     ("mplgexs", Type::Short),
     ("ifmode", Type::Short),
-    ("widetx", Type::Short)];
+    ("widetx", Type::Short),
+];
 
 static VECTOR_FIELDS: [(&str, Type); 9] = [
     ("ptab", Type::Short),
