@@ -2,7 +2,7 @@
 
 use crate::convenience::split_results;
 use crate::error::DmapError;
-use crate::io;
+use crate::io::{self};
 use crate::io::{create_stream, slice_stream_lax, split_into_slices};
 use crate::types::{DmapField, DmapType, DmapVec, Fields};
 use indexmap::IndexMap;
@@ -746,14 +746,36 @@ pub trait Record<'a>:
 
     /// Writes a collection of `Record`s to `outfile`.
     ///
-    /// Prefer using the specific functions, e.g. `write_dmap`, `write_rawacf`, etc. for their
-    /// specific field checks.
+    /// See also [`Record::try_write_to_file`] for writing generic
+    /// `IndexMap<String, DmapField>` records that must first be validated
+    /// against `Self`.
     fn write_to_file<P: AsRef<Path>>(
         recs: &Vec<Self>,
         outfile: P,
         bz2: bool,
     ) -> Result<(), DmapError> {
         let bytes: Vec<u8> = Self::par_to_bytes(recs)?;
+        io::bytes_to_file(bytes, outfile, bz2)?;
+        Ok(())
+    }
+
+    /// Attempts to convert a collection of generic DMAP records to `Self` and
+    /// write them to `outfile`.
+    ///
+    /// This is useful when the records are represented as
+    /// `IndexMap<String, DmapField>` values and need to be validated against the
+    /// requirements of a specific DMAP format before being written.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any record cannot be converted to `Self`, or if
+    /// writing to `outfile` fails.
+    fn try_write_to_file<P: AsRef<Path>>(
+        recs: Vec<IndexMap<String, DmapField>>,
+        outfile: P,
+        bz2: bool,
+    ) -> Result<(), DmapError> {
+        let bytes = Self::try_into_bytes(recs)?;
         io::bytes_to_file(bytes, outfile, bz2)?;
         Ok(())
     }

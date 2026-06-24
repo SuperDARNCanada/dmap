@@ -8,10 +8,6 @@ use crate::formats::rawacf::RawacfRecord;
 use crate::formats::snd::SndRecord;
 use crate::record::Record;
 use crate::types::DmapField;
-use crate::{
-    try_write_dmap, try_write_fitacf, try_write_grid, try_write_iqdat, try_write_map,
-    try_write_rawacf, try_write_snd,
-};
 use indexmap::IndexMap;
 use paste::paste;
 use pyo3::prelude::*;
@@ -288,11 +284,11 @@ fn write_dmap_py(
     outfile: PathBuf,
     bz2: bool,
 ) -> PyResult<()> {
-    try_write_dmap(recs, &outfile, bz2).map_err(PyErr::from)
+    DmapRecord::try_write_to_file(recs, &outfile, bz2).map_err(PyErr::from)
 }
 
 /// Checks that a list of dictionaries contains valid DMAP records, then converts them to bytes.
-/// Returns `list[bytes]`, one entry per record.
+/// Returns a `bytes` object containing the serialized records.
 ///
 /// **NOTE:** No type checking is done, so the fields may not be written as the expected
 /// DMAP type, e.g. `stid` might be written one byte instead of two as this function
@@ -323,11 +319,11 @@ macro_rules! write_py {
             #[pyo3(signature = (recs, outfile, /, bz2))]
             #[pyo3(text_signature = "(recs: list[dict], outfile: str, /, bz2: bool = False)")]
             fn [< write_ $name _py >](recs: Vec<IndexMap<String, DmapField>>, outfile: PathBuf, bz2: bool) -> PyResult<()> {
-                [< try_write_ $name >](recs, &outfile, bz2).map_err(PyErr::from)
+                [< $name:camel Record >]::try_write_to_file(recs, &outfile, bz2).map_err(PyErr::from)
             }
 
             #[doc = "Checks that a list of dictionaries contains valid `" $name:upper "` records, then converts them to bytes." ]
-            #[doc = "Returns `list[bytes]`, one entry per record." ]
+            #[doc = "Returns a `bytes` object containing the serialized records." ]
             #[pyfunction]
             #[pyo3(name = $bytes_name)]
             #[pyo3(signature = (recs, /, bz2))]

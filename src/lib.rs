@@ -111,35 +111,3 @@ pub use crate::formats::map::MapRecord;
 pub use crate::formats::rawacf::RawacfRecord;
 pub use crate::formats::snd::SndRecord;
 pub use crate::record::Record;
-use crate::types::DmapField;
-use indexmap::IndexMap;
-use paste::paste;
-use std::path::Path;
-
-/// This macro generates a function for attempting to convert `Vec<IndexMap>` to `Vec<$type>` and write it to file.
-macro_rules! write_rust {
-    ($type:ident) => {
-        paste! {
-            #[doc = "Attempts to convert `recs` to `" $type:camel Record "` then append to `outfile`."]
-            #[doc = ""]
-            #[doc = "# Errors"]
-            #[doc = "if any of the `IndexMap`s are unable to be interpreted as a `" $type:camel Record "`, or there is an issue writing to file."]
-            pub fn [< try_write_ $type >]<P: AsRef<Path>>(
-                recs: Vec<IndexMap<String, DmapField>>,
-                outfile: P,
-                bz2: bool,
-            ) -> Result<(), DmapError> {
-                let bytes = [< $type:camel Record >]::try_into_bytes(recs)?;
-                crate::io::bytes_to_file(bytes, outfile, bz2).map_err(DmapError::from)
-            }
-        }
-    }
-}
-
-write_rust!(iqdat);
-write_rust!(rawacf);
-write_rust!(fitacf);
-write_rust!(grid);
-write_rust!(map);
-write_rust!(snd);
-write_rust!(dmap);
