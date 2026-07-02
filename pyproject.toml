@@ -26,6 +26,7 @@ python-source = "python"
 module-name = "dmap.dmap_rs"
 bindings = "pyo3"
 profile = "release"
+features = ["python"]
 compatibility = "manylinux2014"
 auditwheel = "repair"
 strip = true

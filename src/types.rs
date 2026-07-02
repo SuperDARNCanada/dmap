@@ -1,13 +1,8 @@
 //! Low-level data types within DMAP records.
 use crate::error::DmapError;
 use indexmap::IndexMap;
-use numpy::array::PyArray;
-use numpy::ndarray::ArrayD;
-use numpy::PyArrayMethods;
+use ndarray::ArrayD;
 use paste::paste;
-use pyo3::exceptions::PyValueError;
-use pyo3::prelude::*;
-use pyo3::{Bound, FromPyObject, PyAny, PyResult, Python};
 use std::cmp::PartialEq;
 use std::fmt::{Display, Formatter};
 use zerocopy::{AsBytes, ByteOrder, FromBytes, LittleEndian};
@@ -121,7 +116,8 @@ impl Type {
 }
 
 /// A scalar field in a DMAP record.
-#[derive(Debug, Clone, PartialEq, FromPyObject, IntoPyObject)]
+//#[derive(Debug, Clone, PartialEq, FromPyObject, IntoPyObject)]
+#[derive(Debug, Clone, PartialEq)]
 #[repr(C)]
 pub enum DmapScalar {
     Char(i8),
@@ -209,23 +205,6 @@ impl Display for DmapScalar {
         }
     }
 }
-// impl IntoPy<PyObject> for DmapScalar {
-//     fn into_py(self, py: Python<'_>) -> PyObject {
-//         match self {
-//             Self::Char(x) => x.into_py(py),
-//             Self::Short(x) => x.into_py(py),
-//             Self::Int(x) => x.into_py(py),
-//             Self::Long(x) => x.into_py(py),
-//             Self::Uchar(x) => x.into_py(py),
-//             Self::Ushort(x) => x.into_py(py),
-//             Self::Uint(x) => x.into_py(py),
-//             Self::Ulong(x) => x.into_py(py),
-//             Self::Float(x) => x.into_py(py),
-//             Self::Double(x) => x.into_py(py),
-//             Self::String(x) => x.into_py(py),
-//         }
-//     }
-// }
 
 macro_rules! vec_to_bytes {
     ($bytes:ident, $x:ident) => {{
@@ -292,7 +271,7 @@ impl DmapVec {
     /// Gets the dimensions of the vector, in row-major order.
     /// ## Example
     /// ```
-    /// use numpy::ndarray::array;
+    /// use ndarray::array;
     /// use dmap::types::DmapVec;
     ///
     /// let arr = DmapVec::Char(array![0, 1, 2, 3, 4].into_dyn());
@@ -314,53 +293,6 @@ impl DmapVec {
             DmapVec::Ulong(x) => x.shape(),
             DmapVec::Float(x) => x.shape(),
             DmapVec::Double(x) => x.shape(),
-        }
-    }
-}
-impl<'py> IntoPyObject<'py> for DmapVec {
-    type Target = PyAny;
-    type Output = Bound<'py, Self::Target>;
-    type Error = std::convert::Infallible;
-
-    fn into_pyobject(self, py: Python<'py>) -> std::result::Result<Self::Output, Self::Error> {
-        Ok(match self {
-            DmapVec::Char(x) => PyArray::from_owned_array(py, x).into_any(),
-            DmapVec::Short(x) => PyArray::from_owned_array(py, x).into_any(),
-            DmapVec::Int(x) => PyArray::from_owned_array(py, x).into_any(),
-            DmapVec::Long(x) => PyArray::from_owned_array(py, x).into_any(),
-            DmapVec::Uchar(x) => PyArray::from_owned_array(py, x).into_any(),
-            DmapVec::Ushort(x) => PyArray::from_owned_array(py, x).into_any(),
-            DmapVec::Uint(x) => PyArray::from_owned_array(py, x).into_any(),
-            DmapVec::Ulong(x) => PyArray::from_owned_array(py, x).into_any(),
-            DmapVec::Float(x) => PyArray::from_owned_array(py, x).into_any(),
-            DmapVec::Double(x) => PyArray::from_owned_array(py, x).into_any(),
-        })
-    }
-}
-impl<'py> FromPyObject<'py> for DmapVec {
-    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
-        if let Ok(x) = ob.downcast::<PyArray<u8, _>>() {
-            Ok(DmapVec::Uchar(x.to_owned_array()))
-        } else if let Ok(x) = ob.downcast::<PyArray<u16, _>>() {
-            Ok(DmapVec::Ushort(x.to_owned_array()))
-        } else if let Ok(x) = ob.downcast::<PyArray<u32, _>>() {
-            Ok(DmapVec::Uint(x.to_owned_array()))
-        } else if let Ok(x) = ob.downcast::<PyArray<u64, _>>() {
-            Ok(DmapVec::Ulong(x.to_owned_array()))
-        } else if let Ok(x) = ob.downcast::<PyArray<i8, _>>() {
-            Ok(DmapVec::Char(x.to_owned_array()))
-        } else if let Ok(x) = ob.downcast::<PyArray<i16, _>>() {
-            Ok(DmapVec::Short(x.to_owned_array()))
-        } else if let Ok(x) = ob.downcast::<PyArray<i32, _>>() {
-            Ok(DmapVec::Int(x.to_owned_array()))
-        } else if let Ok(x) = ob.downcast::<PyArray<i64, _>>() {
-            Ok(DmapVec::Long(x.to_owned_array()))
-        } else if let Ok(x) = ob.downcast::<PyArray<f32, _>>() {
-            Ok(DmapVec::Float(x.to_owned_array()))
-        } else if let Ok(x) = ob.downcast::<PyArray<f64, _>>() {
-            Ok(DmapVec::Double(x.to_owned_array()))
-        } else {
-            Err(PyValueError::new_err("Could not extract vector"))
         }
     }
 }
@@ -432,7 +364,7 @@ vec_impls!(ArrayD<f64>, DmapVec::Double);
 ///
 /// This is the type that is stored in a DMAP record, representing either a scalar or
 /// vector field.
-#[derive(Debug, Clone, PartialEq, FromPyObject, IntoPyObject)]
+#[derive(Debug, Clone, PartialEq)]
 #[repr(C)]
 pub enum DmapField {
     Vector(DmapVec),
@@ -449,14 +381,6 @@ impl DmapField {
         }
     }
 }
-// impl IntoPyObject for DmapField {
-//     fn into_py(self, py: Python<'_>) -> PyObject {
-//         match self {
-//             DmapField::Scalar(x) => x.into_py(py),
-//             DmapField::Vector(x) => x.into_py(py),
-//         }
-//     }
-// }
 
 /// Macro for implementing conversion traits between primitives and [`DmapField`], [`DmapScalar`]
 /// types.
@@ -957,7 +881,7 @@ pub fn check_vector_opt(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use numpy::ndarray::array;
+    use ndarray::array;
 
     #[test]
     fn dmaptype() -> Result<()> {
@@ -1191,7 +1115,7 @@ mod tests {
 
     #[test]
     fn check_fields_in_indexmap() -> Result<()> {
-        use numpy::ndarray::array;
+        use ndarray::array;
 
         let mut rec = IndexMap::<String, DmapField>::new();
         let res = check_scalar(&rec, "test", &Type::Char);
