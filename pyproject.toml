@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "darn-dmap"
-version = "0.8.0"
+version = "0.8.1"
 requires-python = ">=3.8"
 authors = [
     { name = "Remington Rohel" }
@@ -26,6 +26,7 @@ python-source = "python"
 module-name = "dmap.dmap_rs"
 bindings = "pyo3"
 profile = "release"
+features = ["python"]
 compatibility = "manylinux2014"
 auditwheel = "repair"
 strip = true

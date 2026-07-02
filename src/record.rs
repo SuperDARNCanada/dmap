@@ -1,10 +1,10 @@
 //! Defines the [`Record`] trait, which contains the shared behaviour that all DMAP records must have.
 
-use crate::error::DmapError;
-use crate::io;
-use crate::types::{DmapField, DmapType, DmapVec, Fields};
-use crate::io::{create_stream, slice_stream_lax, split_into_slices};
 use crate::convenience::split_results;
+use crate::error::DmapError;
+use crate::io::{self};
+use crate::io::{create_stream, slice_stream_lax, split_into_slices};
+use crate::types::{DmapField, DmapType, DmapVec, Fields};
 use indexmap::IndexMap;
 use itertools::izip;
 use rayon::iter::Either;
@@ -60,8 +60,9 @@ pub trait Record<'a>:
                     *idx as usize
                 }
             };
-            records_read.push(slices[i].parse_record::<Self>()
-                .map_err(|e| DmapError::InvalidRecord(format!("Record {idx}: {}", e.to_string())))?);
+            records_read.push(slices[i].parse_record::<Self>().map_err(|e| {
+                DmapError::InvalidRecord(format!("Record {idx}: {}", e.to_string()))
+            })?);
         }
         Ok(records_read)
     }
@@ -70,7 +71,10 @@ pub trait Record<'a>:
     ///
     /// Returns a 2-tuple, where the first entry is the good records from the front of the buffer,
     /// and the second entry is the byte where the first corrupted record starts, if applicable.
-    fn read_nth_records_lax(mut dmap_data: impl Read, indices: &[i32]) -> Result<(Vec<Self>, Option<usize>), DmapError>
+    fn read_nth_records_lax(
+        mut dmap_data: impl Read,
+        indices: &[i32],
+    ) -> Result<(Vec<Self>, Option<usize>), DmapError>
     where
         Self: Sized,
         Self: Send,
@@ -155,7 +159,10 @@ pub trait Record<'a>:
     /// Reads metadata of the nth records from `dmap_data` and parses into `Vec<IndexMap<String, DmapField>>`.
     ///
     /// Returns `DmapError` if `dmap_data` cannot be read or contains invalid data.
-    fn read_metadata_by_indices(dmap_data: impl Read, indices: &[i32]) -> Result<Vec<IndexMap<String, DmapField>>, DmapError>
+    fn read_metadata_by_indices(
+        dmap_data: impl Read,
+        indices: &[i32],
+    ) -> Result<Vec<IndexMap<String, DmapField>>, DmapError>
     where
         Self: Sized,
         Self: Send,
@@ -175,8 +182,9 @@ pub trait Record<'a>:
                     *idx as usize
                 }
             };
-            dmap_results.push(slices[i].parse_metadata::<Self>()
-                .map_err(|e| DmapError::InvalidRecord(format!("Record {idx}: {}", e.to_string())))?);
+            dmap_results.push(slices[i].parse_metadata::<Self>().map_err(|e| {
+                DmapError::InvalidRecord(format!("Record {idx}: {}", e.to_string()))
+            })?);
         }
         Ok(dmap_results)
     }
@@ -238,7 +246,10 @@ pub trait Record<'a>:
     }
 
     /// Reads the `nth` record(s) of a DMAP file of type `Self`.
-    fn read_file_by_indices<P: AsRef<Path>>(infile: P, indices: &[i32]) -> Result<Vec<Self>, DmapError>
+    fn read_file_by_indices<P: AsRef<Path>>(
+        infile: P,
+        indices: &[i32],
+    ) -> Result<Vec<Self>, DmapError>
     where
         Self: Sized,
         Self: Send,
@@ -251,7 +262,10 @@ pub trait Record<'a>:
     ///
     /// Does not fail on corrupted records; rather, returns `(recs, Option<usize>)` where
     /// the second value is the byte where record corruption begins, if applicable.
-    fn read_file_by_indices_lax<P: AsRef<Path>>(infile: P, indices: &[i32]) -> Result<(Vec<Self>, Option<usize>), DmapError>
+    fn read_file_by_indices_lax<P: AsRef<Path>>(
+        infile: P,
+        indices: &[i32],
+    ) -> Result<(Vec<Self>, Option<usize>), DmapError>
     where
         Self: Sized,
         Self: Send,
@@ -273,7 +287,10 @@ pub trait Record<'a>:
     }
 
     /// Reads the `nth` records' metadata of a DMAP file of type `Self`.
-    fn read_file_metadata_by_indices<P: AsRef<Path>>(infile: P, indices: &[i32]) -> Result<Vec<IndexMap<String, DmapField>>, DmapError>
+    fn read_file_metadata_by_indices<P: AsRef<Path>>(
+        infile: P,
+        indices: &[i32],
+    ) -> Result<Vec<IndexMap<String, DmapField>>, DmapError>
     where
         Self: Sized,
         Self: Send,
@@ -281,7 +298,7 @@ pub trait Record<'a>:
         let file = File::open(infile)?;
         Self::read_metadata_by_indices(file, indices)
     }
-    
+
     /// Checks the validity of an `IndexMap` as a representation of a DMAP record.
     ///
     /// Validity checks include ensuring that no unfamiliar entries exist, that all required
@@ -729,14 +746,36 @@ pub trait Record<'a>:
 
     /// Writes a collection of `Record`s to `outfile`.
     ///
-    /// Prefer using the specific functions, e.g. `write_dmap`, `write_rawacf`, etc. for their
-    /// specific field checks.
+    /// See also [`Record::try_write_to_file`] for writing generic
+    /// `IndexMap<String, DmapField>` records that must first be validated
+    /// against `Self`.
     fn write_to_file<P: AsRef<Path>>(
         recs: &Vec<Self>,
         outfile: P,
         bz2: bool,
     ) -> Result<(), DmapError> {
         let bytes: Vec<u8> = Self::par_to_bytes(recs)?;
+        io::bytes_to_file(bytes, outfile, bz2)?;
+        Ok(())
+    }
+
+    /// Attempts to convert a collection of generic DMAP records to `Self` and
+    /// write them to `outfile`.
+    ///
+    /// This is useful when the records are represented as
+    /// `IndexMap<String, DmapField>` values and need to be validated against the
+    /// requirements of a specific DMAP format before being written.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any record cannot be converted to `Self`, or if
+    /// writing to `outfile` fails.
+    fn try_write_to_file<P: AsRef<Path>>(
+        recs: Vec<IndexMap<String, DmapField>>,
+        outfile: P,
+        bz2: bool,
+    ) -> Result<(), DmapError> {
+        let bytes = Self::try_into_bytes(recs)?;
         io::bytes_to_file(bytes, outfile, bz2)?;
         Ok(())
     }
