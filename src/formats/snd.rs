@@ -44,7 +44,7 @@ static SCALAR_FIELDS: [(&str, Type); 37] = [
     ("snd.revision.minor", Type::Short),
 ];
 
-static SCALAR_FIELDS_OPT: [(&str, Type); 0] = [];
+static SCALAR_FIELDS_OPT: [(&str, Type); 1] = [("widetx", Type::Short)];
 
 static VECTOR_FIELDS: [(&str, Type); 0] = [];
 

@@ -56,9 +56,10 @@ static SCALAR_FIELDS: [(&str, Type); 49] = [
     ("noise.vel", Type::Float),
 ];
 
-static SCALAR_FIELDS_OPT: [(&str, Type); 4] = [
+static SCALAR_FIELDS_OPT: [(&str, Type); 5] = [
     ("mplgexs", Type::Short),
     ("ifmode", Type::Short),
+    ("widetx", Type::Short),
     ("algorithm", Type::String),
     ("tdiff", Type::Float),
 ];
