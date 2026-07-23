@@ -3,7 +3,7 @@
 use crate::convenience::split_results;
 use crate::error::DmapError;
 use crate::io::{self};
-use crate::io::{create_stream, slice_stream_lax, split_into_slices};
+use crate::io::{create_stream, grab_first_record, slice_stream_lax, split_into_slices};
 use crate::types::{DmapField, DmapType, DmapVec, Fields};
 use indexmap::IndexMap;
 use itertools::izip;
@@ -46,6 +46,16 @@ pub trait Record<'a>:
         Self: Sized,
         Self: Send,
     {
+        // Special case, handle differently so the whole stream does need to be decompressed if bz2
+        // compression is detected.
+        if indices.len() == 1 && indices[0] == 0 {
+            let mut parser = grab_first_record(dmap_data)?;
+            let rec = parser.parse_record::<Self>().map_err(|e| {
+                DmapError::InvalidRecord(format!("Record 0: {}", e.to_string()))
+            })?;
+            return Ok(vec![rec])
+        }
+
         let mut slices = split_into_slices(dmap_data)?;
         let num_recs = slices.len();
         let mut records_read = vec![];
@@ -79,6 +89,16 @@ pub trait Record<'a>:
         Self: Sized,
         Self: Send,
     {
+        // Special case, handle differently so the whole stream does need to be decompressed if bz2
+        // compression is detected.
+        if indices.len() == 1 && indices[0] == 0 {
+            let mut parser = grab_first_record(dmap_data)?;
+            match parser.parse_record::<Self>() {
+                Ok(x) => { return Ok((vec![x], None)) },
+                Err(_) => { return Ok((vec![], Some(0))) }
+            }
+        }
+
         let mut buffer: Vec<u8> = vec![];
         let mut dmap_records: Vec<Self> = vec![];
 
@@ -167,6 +187,16 @@ pub trait Record<'a>:
         Self: Sized,
         Self: Send,
     {
+        // Special case, handle differently so the whole stream does need to be decompressed if bz2
+        // compression is detected.
+        if indices.len() == 1 && indices[0] == 0 {
+            let mut parser = grab_first_record(dmap_data)?;
+            let rec = parser.parse_metadata::<Self>().map_err(|e| {
+                DmapError::InvalidRecord(format!("Record 0: {}", e.to_string()))
+            })?;
+            return Ok(vec![rec])
+        }
+
         let mut slices = split_into_slices(dmap_data)?;
         let mut dmap_results: Vec<IndexMap<String, DmapField>> = vec![];
 
