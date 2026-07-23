@@ -58,6 +58,36 @@ pub(crate) fn create_stream<'b>(
     }
 }
 
+/// Read the first record from a stream.
+///
+/// Will only decompress the first chunks of a bzip2-compressed stream, until a full record
+/// is decompressed.
+pub(crate) fn grab_first_record(mut dmap_data: impl Read) -> Result<Parser, DmapError> {
+    let mut stream = create_stream(&mut dmap_data)?;
+    let mut bytes = [0u8; 100000];  // arbitrarily chosen size
+    let chunk_size = bytes.len();
+    let mut rec_bytes = vec![];
+    let mut rec_size: Option<usize> = None;
+    loop {
+        let bytes_read = stream.read(&mut bytes)?;
+        if bytes_read == 0 {
+            return Err(DmapError::InvalidRecord("Could not extract the first record".to_string()))
+        }
+        if bytes_read <= chunk_size {
+            rec_bytes.extend(bytes[0..bytes_read].iter());
+        }
+        if rec_bytes.len() >= 8 {
+            rec_size = Some(i32::from_le_bytes(rec_bytes[4..8].try_into().unwrap()) as usize); // advance 4 bytes, skipping the "code" field
+        }
+        if let Some(x) = rec_size {
+            if rec_bytes.len() >= x {
+                let parser = Parser::new(rec_bytes[0..x].to_vec());
+                return Ok(parser)
+            }
+        }
+    }
+}
+
 /// Parses `dmap_data` into discrete chunks, each corresponding to a DMAP record.  
 pub(crate) fn split_into_slices(mut dmap_data: impl Read) -> Result<Vec<Parser>, DmapError> {
     let mut buffer: Vec<u8> = vec![];
